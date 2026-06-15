@@ -1,0 +1,235 @@
+AI ENGINE SYSTEM SPECIFICATION & PLAN
+BRGYALERT PLATFORM
+
+1. AI DESIGN PHILOSOPHY
+BrgyAlert operates under a strict ₱0 operational infrastructure model. Standard
+cloud-based AI architectures (such as OpenAI GPT APIs, Python-based PyTorch 
+servers on AWS/Heroku, or paid NLP pipelines) introduce recurring monthly bills 
+that are impractical for student capstones and small local barangays.
+
+Therefore, the BrgyAlert AI Engine is designed as a native JavaScript NLP 
+module running on the client side of the unified React Native mobile application.
+
+Advantages of Client-Side JS AI:
+*   Zero hosting/inference API fees (runs on the client mobile device).
+*   Sub-millisecond processing speeds (no network latency).
+*   Offline capability: If the mobile app is running, the AI can still process and 
+    evaluate incident reports prior to submission.
+*   Simplicity: Easily auditability for capstone defense panels.
+
+--------------------------------------------------------------------------------
+2. AI FEATURE 1: TAGALOG NLP TEXT CLASSIFIER
+This feature automatically reads the text description of a submitted report and
+assigns a category (e.g., Fire, Flooding, Medical, Crime, Accident).
+
+Step 1: Preprocessing & Tokenization
+- Input text is converted to lowercase.
+- Punctuations, special characters, and digits are stripped.
+- Filipino grammar "stop-words" and particles are removed to extract pure action
+  tokens.
+  *Stop-word list:* "mga", "ang", "sa", "ng", "na", "po", "opo", "ni", "si", "kay",
+  "at", "dahil", "may", "doon", "rito", "namin", "nila", "ko", "ako", "kami", "yo".
+
+Step 2: Dictionary-Based Category Scoring
+The engine compares remaining tokens against pre-defined keyword dictionaries:
+*   FIRE (Sunog) Dictionary:
+    - Keywords: "sunog", "apoy", "usok", "spark", "kuryente", "nasusunog", "gasul"
+*   FLOODING (Baha) Dictionary:
+    - Keywords: "baha", "ulan", "bagyo", "tubig", "tuhod", "baha na", "umaapaw"
+*   MEDICAL (Medikal) Dictionary:
+    - Keywords: "sakit", "atake", "hilo", "himatay", "buntis", "dugo", "hika"
+*   CRIME (Krimen) Dictionary:
+    - Keywords: "saksak", "nakawan", "away", "gulo", "nakaw", "magnanakaw", "baril"
+*   ACCIDENT (Aksidente) Dictionary:
+    - Keywords: "aksidente", "semplang", "banggaan", "tumba", "nahulog", "gasgas"
+
+Step 3: Similarity Calculation (Jaccard Score)
+The engine calculates the Jaccard similarity index between the processed words (W)
+and each category dictionary (D):
+  Score(Category) = (Intersection of W and D) / (Union of W and D)
+
+The category with the highest similarity score above a threshold (e.g., 0.15) 
+is auto-assigned. If no score crosses the threshold, it defaults to "General Incident"
+for manual classification.
+
+--------------------------------------------------------------------------------
+3. AI FEATURE 2: URGENCY PRIORITIZATION MATRIX
+This feature scans reports for high-threat indicators and assigns an Urgency 
+Level ("Low", "Medium", "High", "Critical"). This dynamically pushes severe reports 
+to the top of the mobile admin queue and triggers visual warnings (bold red color) for responders.
+
+Priority Keywords & Urgency Mapping:
+  
+| Urgency Level | Criteria                                   | Priority Tagalog Keywords                     | Action Trigger                             |
+|---------------|--------------------------------------------|-----------------------------------------------|--------------------------------------------|
+| CRITICAL      | Life-threatening / active threat to life   | "patay", "baril", "saksak", "atake sa puso"   | Immediate sound notification + Top Queue   |
+| HIGH          | Large-scale hazards / structural emergency | "sunog", "baha", "bagyo", "gumuguho", "nakaw"  | Queue top priority + Red-alert tag         |
+| MEDIUM        | Medical issues without active threat / minor| "lagnat", "hilo", "sugat", "semplang", "gulo" | Standard sorting + Yellow-alert tag        |
+| LOW           | Administrative query / non-emergency       | "tanong", "hingi", "kuha", "clearance"         | Default sorting + Grey-alert tag           |
+
+--------------------------------------------------------------------------------
+4. AI FEATURE 3: FAKE & SPAM REPORT DETECTOR (OPTIONAL ADD-ON)
+To prevent dispatchers from routing responder teams to prank reports, an optional 
+local filter assesses text integrity and tags suspicious submissions.
+
+Spam & Prank Indicators:
+1.  Tagalog/English Profanity/Abuse: Submissions that contain curse words instead 
+    of emergency reports (e.g., "gago", "puta", "tarantado", "tangina", "fvck").
+2.  Prank/Joke Terminology: Keywords indicating a joke or test (e.g., "joke", 
+    "biro", "jowk", "trip lang", "test", "testing").
+3.  Gibberish/Pattern Detection: Very short text containing random keys, single letter 
+    repetitions, or meaningless words (e.g., "asdfghjkl", "qwertyuiop", "hahahaha", 
+    "hehehe", "hshshs").
+
+System Action:
+If a report matches a spam trigger, the category is updated to "Fake/Spam", 
+urgency set to "Low", and the report status mutated to "flagged_spam". These cases
+are pushed to a hidden spam tab on the mobile admin dashboard, bypassing active queues.
+
+--------------------------------------------------------------------------------
+5. CODE IMPLEMENTATION BLUEPRINT (aiEngine.js)
+This JavaScript helper will be located at:
+`BrgyAlert_Mobile/src/services/aiEngine.js`
+
+```javascript
+// Dictionary Collections
+const DICTIONARIES = {
+  Fire: ["sunog", "apoy", "usok", "spark", "kuryente", "nasusunog", "gasul", "liliyab"],
+  Flooding: ["baha", "ulan", "bagyo", "tubig", "tuhod", "leeg", "umaapaw", "alon"],
+  Medical: ["sakit", "atake", "hilo", "himatay", "buntis", "dugo", "hika", "lagnat"],
+  Crime: ["saksak", "nakawan", "away", "gulo", "nakaw", "magnanakaw", "baril", "patayan"],
+  Accident: ["aksidente", "semplang", "banggaan", "tumba", "nahulog", "gasgas"]
+};
+
+// Priority Keyword Mappers for Urgency
+const URGENCY_WORDS = {
+  critical: ["patay", "baril", "saksak", "atake", "barilan"],
+  high: ["sunog", "baha", "bagyo", "gumuguho", "nakaw", "magnanakaw", "nakawan"],
+  medium: ["hilo", "sugat", "semplang", "gulo", "lagnat", "hika"]
+};
+
+// Spam & Prank Keywords (Optional Filter)
+const PROFANITIES = ["gago", "puta", "tarantado", "tangina", "pakshet", "bwisit", "g@go", "p*ta"];
+const JOKE_WORDS = ["joke", "biro", "jowk", "trip lang", "testing", "asdfghjkl", "qwertyuiop"];
+const GIBBERISH_PATTERNS = [/^[a-z]\1{4,}$/i, /^(haha|hehe|hihi|hoho|hshs)+$/i]; // repeats like aaaaa or hahaha
+
+const STOP_WORDS = new Set([
+  "mga", "ang", "sa", "ng", "na", "po", "opo", "ni", "si", "kay", "at", 
+  "dahil", "may", "doon", "rito", "namin", "nila", "ko", "ako", "kami", "yo"
+]);
+
+function preprocess(text) {
+  if (!text) return [];
+  return text
+    .toLowerCase()
+    .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g, "") // remove punctuation
+    .split(/\s+/) // split by spaces
+    .filter(word => word && !STOP_WORDS.has(word));
+}
+
+/**
+ * Checks if a text submission is a suspected fake or prank report.
+ */
+function isSuspectedSpam(text) {
+  if (!text || text.trim().length < 5) return true; // Too short is flagged as spam
+  
+  const cleanText = text.toLowerCase().trim();
+  const words = cleanText.split(/\s+/);
+  
+  // 1. Check for Profanities
+  const containsBadWord = words.some(w => PROFANITIES.includes(w));
+  if (containsBadWord) return true;
+
+  // 2. Check for Joke Keywords
+  const containsJokeWord = JOKE_WORDS.some(w => cleanText.includes(w));
+  if (containsJokeWord) return true;
+
+  // 3. Check for Gibberish Patterns (e.g. repeated keys, laughing strings)
+  const isGibberish = GIBBERISH_PATTERNS.some(regex => regex.test(cleanText));
+  if (isGibberish) return true;
+
+  return false;
+}
+
+/**
+ * Analyzes report text to determine Category, Urgency, and Spam flags.
+ */
+export function analyzeReport(detailsText) {
+  // 1. Optional Spam Verification step
+  if (isSuspectedSpam(detailsText)) {
+    return {
+      category: "Spam/Fake",
+      urgency: "low",
+      score: "1.000",
+      isSpam: true
+    };
+  }
+
+  const words = preprocess(detailsText);
+  if (words.length === 0) {
+    return { category: "General", urgency: "low", isSpam: false };
+  }
+
+  // 2. Calculate Jaccard Similarity for Categories
+  let bestCategory = "General";
+  let maxScore = 0;
+
+  for (const [category, dictWords] of Object.entries(DICTIONARIES)) {
+    const intersection = words.filter(w => dictWords.includes(w));
+    const union = Array.from(new Set([...words, ...dictWords]));
+    const score = intersection.length / union.length;
+
+    if (score > maxScore) {
+      maxScore = score;
+      bestCategory = category;
+    }
+  }
+
+  if (maxScore < 0.05) {
+    bestCategory = "General";
+  }
+
+  // 3. Classify Urgency
+  let urgency = "low";
+  const flatWords = words.join(" ");
+
+  const hasWord = (list) => list.some(w => flatWords.includes(w));
+
+  if (hasWord(URGENCY_WORDS.critical)) {
+    urgency = "critical";
+  } else if (hasWord(URGENCY_WORDS.high)) {
+    urgency = "high";
+  } else if (hasWord(URGENCY_WORDS.medium)) {
+    urgency = "medium";
+  }
+
+  return {
+    category: bestCategory,
+    urgency: urgency,
+    score: maxScore.toFixed(3),
+    isSpam: false
+  };
+}
+```
+
+--------------------------------------------------------------------------------
+6. VALIDATION & TESTING DATASET FOR DEFENSE
+Students can present these Tagalog test sentences to prove the AI's accuracy to 
+the defense panel:
+
+1.  "Baha na po hanggang tuhod dito sa labas ng bahay namin dahil sa bagyo."
+    -> Preprocessed: ["baha", "tuhod", "labas", "bahay", "bagyo"]
+    -> AI Classification: **Flooding / High Urgency / isSpam: false**
+2.  "Tulong! May magnanakaw na may dalang baril sa tapat ng tindahan."
+    -> Preprocessed: ["tulong", "magnanakaw", "dalang", "baril", "tapat", "tindahan"]
+    -> AI Classification: **Crime / Critical Urgency / isSpam: false**
+3.  "Gago kayo mga bwisit trip ko lang mang pranks hahahaha"
+    -> Preprocessed: ["gago", "bwisit", "trip", "pranks", "hahahaha"] (flagged by spam triggers)
+    -> AI Classification: **Spam/Fake / Low Urgency / isSpam: true**
+4.  "asdfghjkl"
+    -> Preprocessed: ["asdfghjkl"] (flagged by gibberish patterns)
+    -> AI Classification: **Spam/Fake / Low Urgency / isSpam: true**
+5.  "Testing report lamang po ito para sa system demo."
+    -> Preprocessed: ["testing", "report", "lamang", "system", "demo"] (flagged by joke/test keywords)
+    -> AI Classification: **Spam/Fake / Low Urgency / isSpam: true**
+================================================================================

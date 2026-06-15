@@ -1,0 +1,409 @@
+FIRESTORE DATABASE DESIGN PLAN
+BRGYALERT PLATFORM
+
+1. ARCHITECTURE & PARADIGM
+BrgyAlert utilizes Google Cloud Firestore, a serverless, document-oriented NoSQL 
+database. Under NoSQL paradigms, relationships are managed through document references,
+embedded objects, and array fields to maximize read performance and database sync speed.
+
+Firestore Structure:
+- Flat collections for primary models.
+- Embedding maps/arrays for minor nested models (e.g., status logs, coordinates) 
+  to minimize secondary query reads.
+- Real-time WebSockets synchronization via the Firestore SDK.
+
+2. COLLECTION SCHEMAS
+
+A. COLLECTION: `users`
+Stores user profile information for administrative staff, dispatchers, and 
+registered citizens.
+- Document ID: Firebase Authentication User UID (`uid`)
+
+| Field Name    | Data Type  | Description / Constraints                     |
+|---------------|------------|-----------------------------------------------|
+| uid           | String     | Unique Firebase Auth UID (Acts as Document ID) |
+| fullName      | String     | First and Last Name                           |
+| email         | String     | Email address (for mobile login)              |
+| role          | String     | Role-Based Access: "admin", "citizen", etc.   |
+| phoneNumber   | String     | Mobile contact number                         |
+| createdAt     | Timestamp  | Date/time of registration                     |
+| updatedAt     | Timestamp  | Date/time of last profile modification         |
+
+*Sample Document JSON:*
+```json
+{
+  "uid": "usr_abc123XyZ789",
+  "fullName": "Maria Santos",
+  "email": "maria.santos@brgyalert.gov.ph",
+  "role": "dispatcher",
+  "phoneNumber": "+639171234567",
+  "createdAt": "2026-06-14T11:15:00Z",
+  "updatedAt": "2026-06-14T11:15:00Z"
+}
+```
+
+
+B. COLLECTION: `alerts`
+
+Stores emergency, hazard, and incident reports submitted by citizens or parsed
+from the SMS gateway.
+- Document ID: Auto-generated String
+
+| Field Name         | Data Type  | Description / Constraints                      |
+|--------------------|------------|------------------------------------------------|
+| alertId            | String     | Unique Identifier                              |
+| reporterName       | String     | Name of reporter (null if "Anonymous")         |
+| phoneNumber        | String     | Sender's mobile number (important for SMS gateway)|
+| category           | String     | "Fire", "Flooding", "Medical", "Crime", etc.   |
+| details            | String     | Long descriptions of the incident              |
+| location           | Map        | Embedded location coordinates & address:       |
+|  - latitude        | Number     | GPS Latitude coordinate                        |
+|  - longitude       | Number     | GPS Longitude coordinate                       |
+|  - addressText     | String     | Reference landmark or Zone/Purok               |
+| source             | String     | Submission channel: "online_app" or "sms_gate" |
+| status             | String     | "submitted", "under_review", "dispatched", "done"|
+| urgency            | String     | "low", "medium", "high", "critical"            |
+| mediaUrls          | Array      | Array of URLs to uploaded photos/videos        |
+| assignedResponders | Array      | Array of Responder IDs (references `responders`)|
+| createdAt          | Timestamp  | Submission time                                |
+| updatedAt          | Timestamp  | Last administrative action time                |
+| statusLogs         | Array[Map] | List of status changes for audit logs          |
+
+*Sample Document JSON:*
+```json
+{
+  "alertId": "alt_987654321xyz",
+  "reporterName": "Juan Dela Cruz",
+  "phoneNumber": "+639088765432",
+  "category": "Flooding",
+  "details": "Baha na po hanggang tuhod dito sa labas ng kapilya.",
+  "location": {
+    "latitude": 14.599512,
+    "longitude": 120.984222,
+    "addressText": "Purok 3, Near Brgy. Chapel"
+  },
+  "source": "online_app",
+  "status": "dispatched",
+  "urgency": "high",
+  "mediaUrls": [
+    "https://firebasestorage.googleapis.com/v0/b/brgyalert.appspot.com/o/evidences%2Fflood_img.jpg"
+  ],
+  "assignedResponders": ["res_tanod_01", "res_rescue_04"],
+  "createdAt": "2026-06-14T11:20:00Z",
+  "updatedAt": "2026-06-14T11:25:30Z",
+  "statusLogs": [
+    {
+      "status": "submitted",
+      "changedBy": "system",
+      "timestamp": "2026-06-14T11:20:00Z"
+    },
+    {
+      "status": "dispatched",
+      "changedBy": "usr_abc123XyZ789",
+      "timestamp": "2026-06-14T11:25:30Z"
+    }
+  ]
+}
+```
+
+
+C. COLLECTION: `responders`
+
+Tracks available dispatch assets inside the Barangay.
+- Document ID: Auto-generated String or Structured String (e.g. `res_tanod_01`)
+
+| Field Name    | Data Type  | Description / Constraints                     |
+|---------------|------------|-----------------------------------------------|
+| responderId   | String     | Unique Asset Identifier                       |
+| name          | String     | Name of responder or unit designation         |
+| type          | String     | "tanod", "medic", "rescue", "police"          |
+| status        | String     | "available", "on_dispatch", "off_duty"        |
+| contactNo     | String     | Mobile number for direct emergency dispatch   |
+| activeAlertId | String     | References active `alertId` (null if available)|
+
+*Sample Document JSON:*
+```json
+{
+  "responderId": "res_tanod_01",
+  "name": "Barangay Tanod Team Alpha",
+  "type": "tanod",
+  "status": "on_dispatch",
+  "contactNo": "+639159998888",
+  "activeAlertId": "alt_987654321xyz"
+}
+```
+
+
+D. COLLECTION: `audit_logs`
+
+Provides accountability by capturing every administrative action taken.
+- Document ID: Auto-generated String
+
+| Field Name    | Data Type  | Description / Constraints                     |
+|---------------|------------|-----------------------------------------------|
+| logId         | String     | Unique Log ID                                 |
+| userId        | String     | Admin UID who performed the action            |
+| userName      | String     | Name of the operator                          |
+| actionType    | String     | "UPDATE_STATUS", "DISPATCH_TEAM", "DELETE_LOG"|
+| alertId       | String     | Associated alert ID of target incident        |
+| description   | String     | Summary (e.g., 'Assigned Tanod Team to alert') |
+| timestamp     | Timestamp  | Action date & time                            |
+
+*Sample Document JSON:*
+```json
+{
+  "logId": "log_456789012asd",
+  "userId": "usr_abc123XyZ789",
+  "userName": "Maria Santos",
+  "actionType": "DISPATCH_TEAM",
+  "alertId": "alt_987654321xyz",
+  "description": "Dispatched Barangay Tanod Team Alpha to Flooding Incident.",
+  "timestamp": "2026-06-14T11:25:30Z"
+}
+```
+
+
+E. COLLECTION: `evacuation_centers` (NEW)
+
+Manages real-time shelter statuses, location mapping, and evacuee tracking.
+- Document ID: Auto-generated String
+
+| Field Name    | Data Type  | Description / Constraints                     |
+|---------------|------------|-----------------------------------------------|
+| centerId      | String     | Unique Shelter ID                             |
+| name          | String     | Shelter Name (e.g., "Brgy Gymnasium")         |
+| location      | Map        | Latitude/Longitude & address descriptors      |
+| capacityMax   | Number     | Total capacity of individuals                 |
+| capacityActive| Number     | Current number of active evacuees             |
+| status        | String     | "open", "full", "closed"                      |
+| contactPerson | String     | Name of center administrator / health officer |
+| contactNo     | String     | Contact number of center supervisor           |
+| updatedAt     | Timestamp  | Last status/count update timestamp            |
+
+*Sample Document JSON:*
+```json
+{
+  "centerId": "evac_gym_01",
+  "name": "Barangay Central Elementary School Gym",
+  "location": {
+    "latitude": 14.601200,
+    "longitude": 120.985600,
+    "addressText": "123 Mabini St., Zone 4"
+  },
+  "capacityMax": 500,
+  "capacityActive": 145,
+  "status": "open",
+  "contactPerson": " Kagawad Juan Cruz",
+  "contactNo": "+639167772211",
+  "updatedAt": "2026-06-14T11:28:00Z"
+}
+```
+
+
+F. COLLECTION: `broadcasts` (NEW)
+
+Logs emergency public warnings, localized safety bulletins, and weather alerts.
+- Document ID: Auto-generated String
+
+| Field Name    | Data Type  | Description / Constraints                     |
+|---------------|------------|-----------------------------------------------|
+| broadcastId   | String     | Unique Broadcast ID                           |
+| title         | String     | Subject of warning                            |
+| message       | String     | Message text body                             |
+| targetAudience| String     | Target zone ("all", "Zone 1", "Zone 2", etc.) |
+| channels      | Array      | Channels used: ["sms", "push_notification"]   |
+| senderId      | String     | UID of admin who authorized the broadcast     |
+| timestamp     | Timestamp  | Date and time broadcast was sent              |
+
+*Sample Document JSON:*
+```json
+{
+  "broadcastId": "brc_789123mnb",
+  "title": "Severe Flooding Alert",
+  "message": "BDRRMC Warning: Inaasahan ang pagtaas ng tubig sa Zone 2. Lumikas po sa pinakamalapit na Evacuation Center.",
+  "targetAudience": "Zone 2",
+  "channels": ["sms", "push_notification"],
+  "senderId": "usr_abc123XyZ789",
+  "timestamp": "2026-06-14T11:29:10Z"
+}
+```
+
+
+G. COLLECTION: `sms_logs` (NEW)
+
+Tracks inbound raw reports (offline SMS codes) and outbound citizen updates.
+- Document ID: Auto-generated String
+
+| Field Name    | Data Type  | Description / Constraints                     |
+|---------------|------------|-----------------------------------------------|
+| logId         | String     | Unique transaction ID                         |
+| type          | String     | Direction: "inbound" or "outbound"            |
+| phoneNumber   | String     | Destination or sender phone number            |
+| rawText       | String     | Actual text content (SMS string payload)      |
+| parsedAlertId | String     | References associated `alertId` (if inbound)  |
+| gatewayStatus | String     | Status from Semaphore/Twilio ("sent", "fail") |
+| timestamp     | Timestamp  | Action date & time                            |
+
+*Sample Document JSON:*
+```json
+{
+  "logId": "sms_log_8520741",
+  "type": "inbound",
+  "phoneNumber": "+639088765432",
+  "rawText": "BA!FC!Zone2!Knee-deep flooding",
+  "parsedAlertId": "alt_987654321xyz",
+  "gatewayStatus": "success",
+  "timestamp": "2026-06-14T11:20:00Z"
+}
+```
+
+
+H. COLLECTION: `emergency_contacts` (NEW)
+
+Provides a static directory of emergency hotlines available to citizens in-app.
+- Document ID: Auto-generated String
+
+| Field Name    | Data Type  | Description / Constraints                     |
+|---------------|------------|-----------------------------------------------|
+| contactId     | String     | Unique listing ID                             |
+| agencyName    | String     | Agency (e.g., "BFP Fire Station", "Red Cross")|
+| hotlineNo     | String     | Dialable telephone / mobile number            |
+| address       | String     | Local station address                         |
+| sequence      | Number     | Sort order for directory interface mapping   |
+
+*Sample Document JSON:*
+```json
+{
+  "contactId": "con_bfp_01",
+  "agencyName": "Bureau of Fire Protection (BFP) - Local Station",
+  "hotlineNo": "(02) 8924-5412",
+  "address": "Municipal Hall Compound, Plaza Rizal",
+  "sequence": 1
+}
+```
+
+
+3. OFFLINE SMS PAYLOAD TO FIRESTORE DATA MAPPING
+When offline, the mobile app sends a structured SMS to the cellular SMS gateway. 
+The gateway webhook receives a payload containing the SMS sender number and text:
+- Sender: `+639088765432`
+- Text: `BA!FC!Zone2!Knee-deep flooding`
+
+The Backend Webhook parses the string using a delimiter parser (`!`) and maps it:
+
+*   Prefix Check: `BA` -> Confirms it is a valid "BrgyAlert" string.
+*   Category Code Map: `FC` -> Mapped to Database String Value:
+    - `FC` -> "Flooding"
+    - `FE` -> "Fire"
+    - `ME` -> "Medical"
+    - `CR` -> "Crime"
+    - `AC` -> "Accident"
+*   Location Mapping: `Zone2` -> Set as `location.addressText`.
+*   Details Mapping: `Knee-deep flooding` -> Set as `details`.
+
+Firestore Injection Map:
+```json
+{
+  "reporterName": "Anonymous (SMS)",
+  "phoneNumber": "+639088765432",
+  "category": "Flooding",
+  "details": "Knee-deep flooding",
+  "location": {
+    "latitude": 0.0, // GPS unavailable via standard SMS
+    "longitude": 0.0,
+    "addressText": "Zone2"
+  },
+  "source": "sms_gateway",
+  "status": "submitted",
+  "urgency": "high", // Calculated on backend intake by keyword weights
+  "mediaUrls": [],   // No media via standard cellular SMS
+  "assignedResponders": [],
+  "createdAt": "[SERVER_TIMESTAMP]",
+  "updatedAt": "[SERVER_TIMESTAMP]",
+  "statusLogs": [
+    {
+      "status": "submitted",
+      "changedBy": "sms_gateway",
+      "timestamp": "[SERVER_TIMESTAMP]"
+    }
+  ]
+}
+```
+
+4. EXTERNAL SYSTEM INTEGRATIONS
+
+A. FIREBASE CLOUD MESSAGING (FCM) INTEGRATION (PUSH NOTIFICATIONS)
+To broadcast bulletins and trigger real-time dispatch alerts to mobile devices:
+1.  Registration Pipeline: When a user registers on the mobile app, the app 
+    requests push permission and receives an FCM Registration Token.
+2.  Token Storage: The token is written to Firestore in a subcollection under 
+    `/users/{userId}/fcm_tokens/{tokenId}`.
+3.  Trigger Rules:
+    - Status Update Trigger: A Firestore Cloud Function listens to updates in 
+      `/alerts/{alertId}`. When `status` changes, the Cloud Function queries the 
+      reporter's registered token and fires a structured push notification.
+    - Public Announcement Trigger: When a document is added to `/broadcasts/`, 
+      a Cloud Function grabs all active device tokens and broadcasts a high-priority 
+      FCM payload.
+
+B. SMS GATEWAY INTEGRATION (SEMAPHORE.CO / TWILIO API)
+
+For offline report intake and automated outbound SMS confirmation pipelines:
+1.  Inbound (Citizen Reporting):
+    - Webhook setup: The local SMS provider (Semaphore) forwards incoming SMS alerts
+      to a secure Firebase Cloud Function endpoint (`/api/sms-intake`).
+    - The webhook validates incoming payload header (`BA!`) and parses content.
+    - Creates a new record in `/alerts/` and logs the raw payload in `/sms_logs/`.
+2.  Outbound (Status Updates & Broadcasts):
+    - Cloud Functions catch mutations in `/alerts/{alertId}/status`.
+    - Automatically builds custom SMS: "BrgyAlert: Ang inyong ulat hinggil sa [category] 
+      ay nasa [status] na. Salamat po."
+    - Fires HTTP POST request to `https://api.semaphore.co/api/v4/messages` 
+      with auth token and recipient phone number, then logs to `/sms_logs/`.
+
+C. WEATHER ALERT INTEGRATION (PAGASA / OPENWEATHERMAP API)
+
+To display active local weather data on the admin dashboard and map:
+1.  Backend cron job runs every 30 minutes (Firebase Scheduled Function).
+2.  Calls the PAGASA API or OpenWeatherMap API for the barangay's specific GPS coordinates.
+3.  If an active storm signal, rainfall warning, or typhoon alert is active, it 
+    writes to a singular cache document in Firestore: `/weather_cache/current`.
+4.  The Mobile application listens to the `/weather_cache/current` snapshot, 
+    updating the weather widget and showing active warning banners immediately.
+
+5. COMPOSITE INDEXES INDEXING STRATEGY
+
+Firestore requires composite indexes for complex queries involving multiple filters 
+and sorting. To enable dashboard filtering and status sorting:
+
+*   Index 1: Collection `alerts`
+    - Fields: `status` (Ascending) + `urgency` (Descending) + `createdAt` (Descending)
+    - Purpose: Enables sorting the live command queue by most critical active cases.
+*   Index 2: Collection `alerts`
+    - Fields: `category` (Ascending) + `createdAt` (Descending)
+    - Purpose: Enables filtering reports by category (e.g., viewing all flood issues).
+
+6. SECURITY RULES OVERVIEW (FIRESTORE.RULES)
+
+*   `/alerts/{alertId}`:
+    - `allow create: if true;` (Allows anyone/SMS webhooks to submit emergencies).
+    - `allow read, write: if request.auth != null;` (Only signed-in admins/dispatchers
+      can browse queue, edit statuses, or dispatch teams).
+*   `/users/{userId}`:
+    - `allow read, write: if request.auth != null && request.auth.uid == userId;`
+      (Secures user profile settings so only the document owner can access it).
+*   `/responders/{responderId}`:
+    - `allow read: if true;` (Allows read availability checks).
+    - `allow write: if request.auth != null;` (Only dispatchers can mutate status).
+*   `/evacuation_centers/{centerId}`:
+    - `allow read: if true;` (Citizens can see shelter capacities).
+    - `allow write: if request.auth != null;` (Only admins/dispatchers can update capacity).
+*   `/broadcasts/{broadcastId}`:
+    - `allow read: if true;` (All users pull bulletins).
+    - `allow write: if request.auth != null;` (Only authorized admins write broadcasts).
+*   `/sms_logs/{logId}`:
+    - `allow read, write: if false;` (Completely disabled from client access. Only 
+      accessible via Firebase Admin SDK / Cloud Functions).
+*   `/emergency_contacts/{contactId}`:
+    - `allow read: if true;` (Publicly queryable directory).
+    - `allow write: if request.auth != null;` (Only admins can modify phone numbers).

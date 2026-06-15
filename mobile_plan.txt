@@ -1,0 +1,223 @@
+================================================================================
+                    MOBILE APPLICATIONS SPECIFICATION & PLAN
+                              BRGYALERT PLATFORM
+================================================================================
+
+This document details the functional specifications, page layouts, navigation flows,
+and technical designs for the Mobile Applications of the BrgyAlert platform. Both the
+Citizen (User) and Administrative/Responder (Admin) clients are integrated into 
+a single, cohesive React Native (Expo) app powered by Role-Based Access Control (RBAC).
+
+--------------------------------------------------------------------------------
+PART 1: MOBILE CLIENT NAVIGATION & SYSTEM ARCHITECTURE
+--------------------------------------------------------------------------------
+
+A. UNIFIED ROLE-BASED ACCESS CONTROL (RBAC) FLOW
+To avoid deploying and compiling separate binaries, the mobile app requires Firebase
+Authentication for all sessions and routes users based on their defined role:
+
+1. REGISTERED CITIZEN (MOBILE USER)
+   - Access: Full access to Citizen features: report with profile details, 
+     view history, track reports in real-time, communicate via incident chat,
+     view bulletins, and receive push notifications.
+   - Screen Flow: Auth check -> Citizen Dashboard.
+
+2. BARANGAY OFFICIAL / RESPONDER (MOBILE ADMIN)
+   - Access: Administrative dashboard, live report feed with urgency-prioritized
+     sorting, report status mutation controls, responder assignment, two-way
+     incident messaging, and public announcement broadcasts.
+   - Screen Flow: Auth check -> Role verification against "/users/{uid}/role" 
+     -> Mobile Admin Console.
+
+B. SYSTEM DIRECTORY LAYOUT
+The source code layout is organized as follows inside /BrgyAlert_Mobile/src/:
+
+/src
+ ├── /components       - Reusable UI elements (buttons, cards, inputs)
+ ├── /context          - AuthContext.js (Firebase session and RBAC hooks)
+ ├── /navigation       - AppNavigator.js (Routing switch for Auth/Citizen/Admin)
+ ├── /screens
+ │    ├── /common      - LoginScreen.js, RegisterScreen.js, ChatScreen.js
+ │    ├── /citizen     - Dashboard, ReportWizard, StatusTracker, Shelters, Hotlines
+ │    └── /admin       - AdminConsole, LiveQueue, IncidentDetail, ShelterEdit, Broadcast
+ ├── /services         - firebase.js, location.js (GPS), image.js (compression)
+ └── /utils            - smsGateway.js (delimiters parser), connection.js (NetInfo)
+
+--------------------------------------------------------------------------------
+PART 2: MOBILE CITIZEN (USER) FUNCTIONAL SPECIFICATIONS
+--------------------------------------------------------------------------------
+
+M1. CITIZEN DASHBOARD (HOME SCREEN)
+- Functional Description: The landing page for users. Focuses on public safety 
+  awareness and quick action inputs.
+- Visual Features:
+  * Current Weather Widget: Real-time weather data pulled from the centralized 
+    database's PAGASA/OpenWeatherMap cache document.
+  * Active Bulletins Carousel: Slides containing high-urgency notifications or
+    barangay news broadcasts.
+  * Quick-Report Button: Highly visible button to immediately launch the reporting form.
+
+M2. INCIDENT REPORTING WIZARD
+- Functional Description: A structured step-by-step form for submitting incident
+  reports. Designed to be easy to use under high-stress conditions.
+- Step Flow:
+  1. Category Picker: Touch icons representing Fire, Flooding, Medical, Crime, 
+     Accident, or General Incident.
+  2. Description Box: Details of the emergency (validated to ensure min. 5 chars).
+  3. Evidence Attachment: Integration with Expo Image Picker to capture/attach photos.
+  4. Location Lock: Pulls native GPS coordinates (Lat/Long) via Expo Location.
+  5. Privacy Selection: Toggle switch to report anonymously.
+- Submission Network Handling:
+  * Online Mode: Uploads image to Firebase Cloud Storage, then writes the report 
+    metadata directly to the `/alerts` collection in Cloud Firestore.
+  * Offline Mode (SMS Fallback): NetInfo intercepts the submit event when no 
+    internet connection is detected. Pre-formats a compressed delimited SMS string:
+    `BA![Cat]![Landmark]![Details]` (e.g. `BA!FE!Zone3!Gasul caught fire in kitchen`).
+    Opens the phone's native texting client with the message pre-filled to the
+    Barangay SMS Gateway number.
+
+M3. MY REPORTS & LIVE TRACKER TIMELINE
+- Functional Description: Gives citizens progress visibility on their reports, 
+  reducing duplication and anxiety.
+- Features:
+  * Incident Log: A historic list of reports filed by the logged-in citizen.
+  * Status Timeline: Visual indicator representing the database status:
+    `Submitted` ➔ `Under Review` ➔ `Dispatched` ➔ `Resolved`
+  * Real-Time Updates: Connects to the Firestore alert document using standard 
+    listeners to automatically animate progress bar changes.
+
+M4. COMMUNITY SAFETY DIRECTORY
+- Functional Description: Public resources directory accessible offline.
+- Features:
+  * Evacuation Centers: List of local shelters displaying real-time occupancy counts
+    (e.g., "150 / 500 active evacuees") and open/closed operational statuses.
+  * Emergency Hotlines: Click-to-dial contacts for Barangay Hall, Police, Fire, 
+    and Municipal Rescue Units.
+
+M5. INCIDENT-BASED MESSAGING (CHAT)
+- Functional Description: Direct, real-time message stream enabling the reporter
+  to communicate with the Barangay Command Center / assigned responders.
+- Features:
+  * Quick Launch: Accessible directly from the incident status tracker page.
+  * Message Thread: Standard chat UI rendering incoming and outgoing messages 
+    chronologically in text bubbles.
+  * Real-Time Sync: Employs standard Firebase SDK snapshot listeners to instantly 
+    render replies from dispatchers or tanods.
+  * Status Notifications: Receives system push notifications when the responder 
+    posts a new chat update.
+  * Offline Limitation: Chat updates are restricted to online mode; a fallback 
+    notice prompts users to call hotlines directly if internet drops.
+
+--------------------------------------------------------------------------------
+PART 3: MOBILE ADMIN (RESPONDER) FUNCTIONAL SPECIFICATIONS
+--------------------------------------------------------------------------------
+
+A1. ADMIN CONSOLE & METRICS
+- Functional Description: Overview page for administrative staff and active 
+  barangay tanods/responders in the field.
+- Features:
+  * Metrics Tiles: Counter cards showing Active Incidents, Critical alerts, and 
+    Unassigned cases.
+  * Duty Toggle: Quick switch to set responder availability status in database 
+    ("Active / On Duty" vs. "Off Duty").
+
+A2. LIVE INCIDENT QUEUE
+- Functional Description: Real-time feed of alerts submitted across the barangay.
+- Features:
+  * Prioritized Feed: Sorts and pins reports based on the calculated Urgency Index:
+    - Critical (red highlighted tags: gunshots, stabbings, cardiac arrest).
+    - High (orange tags: fire, major flood, collapsed structure).
+    - Medium/Low (yellow/grey tags).
+  * Filter Tabs: Quick toggle buttons to view: "Pending Triage", "Dispatched", 
+    "Resolved", and "Quarantined Spam".
+
+A3. INCIDENT TRIAGE & ACTION CONSOLE
+- Functional Description: The detailed action page for an individual report.
+- Interactive Controls:
+  * Map Navigation: Deep-link button to open the coordinates directly inside 
+    Google Maps or Apple Maps for path navigation.
+  * Photo Evidence Viewer: Full-screen display of uploaded verification images.
+  * Dispatch Board: Checklists to assign Tanod Teams, Medical Units, or BDRRMC squads.
+  * Status Controller: Dropdown selector mutating the report's Firestore state 
+    (`under_review`, `dispatched`, `done`), which automatically executes cloud 
+    functions to broadcast outbound SMS status updates to the citizen.
+  * Spam Quarantine: Action to mark a report as spam, immediately moving it to
+    the hidden spam collection to keep the main dispatcher queue clean.
+
+A4. FIELD SHELTER CONTROL
+- Functional Description: Allows administrators stationed at evacuation shelters
+  to update status information in real-time.
+- Features:
+  * Live Occupancy Counters: Easy "+" and "-" buttons to adjust current evacuee counts.
+  * Operational State Toggles: Quick toggle switches to set centers as:
+    - "Open" (welcoming evacuees)
+    - "Full" (divert citizens to other facilities)
+    - "Closed"
+
+A5. BROADCAST SYSTEM
+- Functional Description: Mobile utility for dispatchers to compose public warnings.
+- Features:
+  * Editor Form: Inputs for Title, Message body, and Target Zone (e.g. Zone 1, Zone 2).
+  * Execution: Writes to the `/broadcasts` collection, triggering Firebase Cloud 
+    Functions to send out push notifications to citizen devices and broadcast SMS
+    messages to registered contact logs.
+
+A6. INCIDENT-BASED RESPONDER MESSAGING (CHAT)
+- Functional Description: Live communication dashboard for active responders to 
+  coordinate with the citizen reporter.
+- Features:
+  * Chat Trigger: Access button on the Incident Action screen showing new message
+    count badges.
+  * Field Directives: Allows tanods/dispatchers to ask for specific landmarks,
+    request photos, give instruction (e.g., "apply pressure to the wound"),
+    or state exact arrival times.
+  * Integrated Push Alerts: Message submission auto-triggers an FCM push event
+    directed to the citizen's device token.
+
+--------------------------------------------------------------------------------
+PART 4: MOBILE DATA SCHEMAS & SYNCHRONIZATION RULES
+--------------------------------------------------------------------------------
+
+A. COLLECTION: `users` (RBAC additions)
+- Field `role`: "admin" | "dispatcher" | "responder" | "citizen"
+- Field `fcmToken`: String (For targeting push notifications)
+
+B. COLLECTION: `alerts`
+- Field `source`: "online_app" | "sms_gateway"
+- Field `status`: "submitted" | "under_review" | "dispatched" | "done"
+- Field `urgency`: "low" | "medium" | "high" | "critical"
+
+C. SUBCOLLECTION: `/alerts/{alertId}/messages` (NEW)
+Stores communication logs between reporter and responders.
+- Document ID: Auto-generated String (`messageId`)
+
+| Field Name    | Data Type  | Description / Constraints                     |
+|---------------|------------|-----------------------------------------------|
+| messageId     | String     | Unique message identifier                     |
+| senderId      | String     | UID of the message sender                    |
+| senderName    | String     | Full name of sender                           |
+| senderRole    | String     | "citizen" | "admin" | "responder"             |
+| text          | String     | Message content string                        |
+| createdAt     | Timestamp  | Date/time of message creation                 |
+
+*Sample Document JSON:*
+```json
+{
+  "messageId": "msg_09876xyz",
+  "senderId": "usr_abc123XyZ789",
+  "senderName": "Kagawad Maria",
+  "senderRole": "admin",
+  "text": "Papunta na po ang tanod team alpha. Manatili po sa ligtas na lugar.",
+  "createdAt": "2026-06-15T04:05:00Z"
+}
+```
+
+D. SECURITY RULES (firestore.rules additions)
+*   `/alerts/{alertId}`:
+    - `allow create: if request.auth != null;` (Ensures only registered users file reports online).
+    - `allow read: if request.auth != null && (resource.data.userId == request.auth.uid || request.auth.token.role in ['admin', 'dispatcher', 'responder']);`
+*   `/alerts/{alertId}/messages/{messageId}`:
+    - `allow read, write: if request.auth != null && (get(/databases/$(database)/documents/alerts/$(alertId)).data.userId == request.auth.uid || request.auth.token.role in ['admin', 'dispatcher', 'responder']);`
+      (Secures messages so only the reporter of the alert or authorized admins can view and write to the conversation).
+
+================================================================================

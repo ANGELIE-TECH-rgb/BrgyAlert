@@ -1,0 +1,189 @@
+================================================================================
+                    SYSTEM FEATURES & SPECIFICATION PLAN
+                              BRGYALERT PLATFORM
+================================================================================
+
+This document details the functional specifications and workflows for the unified 
+BrgyAlert mobile application (React Native / Expo), which serves both Citizens 
+(Users) and Barangay Administrators/Responders (Admins) using Role-Based Access 
+Control (RBAC) routing.
+
+--------------------------------------------------------------------------------
+PART 1: CITIZEN MOBILE PORTAL FEATURES (React Native / Expo)
+--------------------------------------------------------------------------------
+
+M1: NATIVE-FIRST REPORTING USER INTERFACE
+*   Functional Description: A clean, touch-friendly wizard interface for inputting 
+    emergency details. Optimised for speed and low-friction inputs under high-stress.
+*   Data Inputs: Incident category picker, text box for details, photo attachment 
+    button, location verification indicator, and submit buttons.
+*   Validation: Dynamic text checking (ensures details are longer than 5 characters 
+    if submitting online).
+
+M2: NATIVE GEOLOCATION INGESTION (GPS)
+*   Functional Description: Integrated GPS coordinates extraction utilizing Expo's 
+    `expo-location` module.
+*   Process Flow:
+    1.  Upon loading the reporting screen, the app requests native device location permissions.
+    2.  Pulls highly accurate GPS Coordinates (Latitude, Longitude) via mobile hardware.
+    3.  Pulls approximate accuracy radius.
+    4.  Displays coordinates or a simple "GPS Locked" check on the user's screen.
+    5.  Falls back to manual landmarks description if GPS sensors are unavailable or disabled.
+
+M3: ASYNCHRONOUS MEDIA PIPELINE (CAMERA/GALLERY)
+*   Functional Description: Enables citizens to attach photo evidence to validate their reporting.
+*   Process Flow:
+    1.  User clicks the attachment button, prompting options for "Camera" or "Photo Gallery".
+    2.  Uses Expo's `expo-image-picker` to capture a photo or select an existing image.
+    3.  Applies local, client-side photo resizing and quality compression (reduces 
+        raw image file size from ~5MB down to ~200KB) to conserve data usage.
+    4.  Saves the compressed asset to the device cache temporarily.
+    5.  If online, streams the compressed asset directly to Firebase Cloud Storage.
+
+M4: SMART SMS OFFLINE FALLBACK HANDSHAKE
+*   Functional Description: Critical resilience feature. If cellular internet 
+    (data/WiFi) fails, the app routes report data via the mobile operator's SMS network.
+*   Process Flow:
+    1.  Uses `@react-native-community/netinfo` to actively monitor cellular internet connection.
+    2.  If the user clicks "Submit" and internet is offline, the app intercepts submission.
+    3.  Formats a compressed 160-character SMS payload:
+        `[Prefix]![Category]![Landmark]![Incident Details]`
+        *Example:* `BA!FC!Zone 2 Chapel!Flooding is waist-deep inside homes`
+    4.  Triggers the React Native `Linking` API scheme: `sms:+639XXXXXXXXX?body=PAYLOAD` 
+        to open the phone's native texting app with the pre-filled code and the 
+        Barangay SMS Gateway phone number.
+    5.  The citizen only needs to press the send button in their default messaging client.
+
+M5: LIVE STATUS TRACKER TIMELINE
+*   Functional Description: Keeps citizens informed on their report's progress, 
+    reducing panic and duplicate submissions.
+*   Visual UI: Renders a graphical progress bar representing active document states:
+    `Submitted ──> Under Review ──> Dispatched ──> Resolved`
+*   Mechanism: Listens in real-time to the individual `/alerts/{alertId}` document 
+    via Firestore `onSnapshot` listeners. Animates changes instantly.
+
+M6: ANONYMOUS REPORTING TOGGLE
+*   Functional Description: Protects citizens wishing to report crimes or sensitive 
+    barangay activities anonymously.
+*   Mechanism: A simple boolean toggle on the reporting page. When enabled, the 
+    app deletes user identification metadata nodes (e.g. `userId`, `reporterName`, 
+    `phoneNumber`) from the payload database map before Firestore ingestion.
+
+M7: COMMUNITY SAFETY DIRECTORY
+*   Functional Description: Public resources directory accessible offline.
+*   Features:
+    -   Evacuation Centers: List of local shelters displaying real-time occupancy counts
+        (e.g., "150 / 500 active evacuees") and open/closed operational statuses.
+    -   Emergency Hotlines: Click-to-dial contacts for Barangay Hall, Police, Fire, 
+        and Municipal Rescue Units.
+
+M8: INCIDENT-BASED MESSAGING (CHAT)
+*   Functional Description: Direct, real-time message stream enabling the reporter
+    to communicate with the Barangay Command Center / assigned responders.
+*   Features:
+    -   Quick Launch: Accessible directly from the incident status tracker page.
+    -   Real-Time Sync: Employs standard Firebase SDK snapshot listeners to instantly 
+        render replies from dispatchers or tanods.
+    -   Push Alerts: Receives system push notifications when the responder posts a chat update.
+
+--------------------------------------------------------------------------------
+PART 2: MOBILE ADMIN CONSOLE FEATURES (React Native / Expo)
+--------------------------------------------------------------------------------
+
+A1: ADMIN CONSOLE & METRICS
+*   Functional Description: Overview page for administrative staff and active 
+    barangay tanods/responders in the field.
+*   Features:
+    -   Metrics Tiles: Counter cards showing Active Incidents, Critical alerts, and 
+        Unassigned cases.
+    -   Duty Toggle: Quick switch to set responder availability status in the database 
+        ("Active / On Duty" vs. "Off Duty").
+
+A2: LIVE PRIORITIZED INCIDENT QUEUE
+*   Functional Description: Real-time feed of alerts submitted across the barangay.
+*   Features:
+    -   Prioritized Feed: Sorts and pins reports based on the calculated Urgency Index:
+        - Critical (red highlighted tags: gunshots, stabbings, cardiac arrest).
+        - High (orange tags: fire, major flood, collapsed structure).
+        - Medium/Low (yellow/grey tags).
+    -   Filter Tabs: Quick toggle buttons to view: "Pending Triage", "Dispatched", 
+        "Resolved", and "Quarantined Spam".
+
+A3: INCIDENT TRIAGE & ACTION CONSOLE
+*   Functional Description: Detailed action page for individual reports.
+*   Interactive Controls:
+    -   Map Navigation: Deep-link button to open the coordinates directly inside 
+        Google Maps or Apple Maps for path navigation.
+    -   Photo Evidence Viewer: Full-screen display of uploaded verification images.
+    -   Dispatch Board: Checklists to assign Tanod Teams, Medical Units, or BDRRMC squads.
+    -   Status Controller: Dropdown selector mutating the report's Firestore state 
+        (`under_review`, `dispatched`, `done`), which automatically executes cloud 
+        functions to broadcast outbound SMS status updates to the citizen.
+    -   Spam Quarantine: Action to mark a report as spam, immediately moving it to
+        the hidden spam collection to keep the main dispatcher queue clean.
+
+A4: FIELD SHELTER CONTROL
+*   Functional Description: Allows administrators stationed at evacuation shelters
+    to update status information in real-time.
+*   Features:
+    -   Live Occupancy Counters: Easy "+" and "-" buttons to adjust current evacuee counts.
+    -   Operational State Toggles: Quick toggle switches to set centers as Open, Full, or Closed.
+
+A5: PUBLIC BROADCAST SYSTEM
+*   Functional Description: Mobile utility for dispatchers to compose public warnings.
+*   Features:
+    -   Editor Form: Inputs for Title, Message body, and Target Zone (e.g. Zone 1, Zone 2).
+    -   Execution: Writes to the `/broadcasts` collection, triggering Firebase Cloud 
+        Functions to send out push notifications to citizen devices and broadcast SMS
+        messages to registered contact logs.
+
+A6: INCIDENT-BASED RESPONDER MESSAGING (CHAT)
+*   Functional Description: Live communication dashboard for active responders to 
+    coordinate with the citizen reporter.
+*   Features:
+    -   Chat Trigger: Access button on the Incident Action screen showing new message counts.
+    -   Directives: Allows tanods/dispatchers to ask for specific landmarks, request photos,
+        give instructions, or state exact arrival times.
+
+A7: DIGITAL BLOTTER LEDGER
+*   Functional Description: Replacing paper notebooks with a secure digital database log view.
+*   Features:
+    -   Search & Filters: Search historic incident records by keyword, date, or category.
+    -   RBAC: Strictly limits writing and deleting records to Admins.
+    -   Audit Trail: Automatic logging recording every administrator modification.
+
+A8: COMPLIANCE PDF EXPORTER
+*   Functional Description: Automated generation of analytical compliance reports from the mobile device.
+*   Features:
+    -   Charts: Visual graphs displaying incident distribution mapped by time of day, 
+        weekday, and month.
+    -   Export: One-click export utility downloading clean report structures as 
+        presentation-ready **PDF** or **CSV** formats for city compliance audits.
+
+A9: OFFLINE SMS PARSING GATEWAY (BACKEND CLOUD FUNCTION)
+*   Functional Description: Receives parsed inputs from cellular SMS systems 
+    and injects them into the database queue.
+*   Mechanism: 
+    1.  A Firebase Cloud Function receives HTTP POST notifications from the cellular gateway service.
+    2.  Extracts the incoming message text and the sender's phone number.
+    3.  Parses the compressed delimited string `BA!FC!Landmark!Details`.
+    4.  Injects the parsed object into the Firestore `alerts` collection.
+
+--------------------------------------------------------------------------------
+PART 3: CORE DATA LIFE CYCLE & EVENT TIMELINE
+--------------------------------------------------------------------------------
+1.  SUBMISSION: A citizen submits a report. If online, the React Native app streams 
+    the details, GPS coordinates, and compressed photo to the Firestore database. If 
+    offline, the app switches to cellular SMS formatting.
+2.  INGESTION & PARSING: Firestore receives the document. If it arrived via SMS gateway,
+    Cloud Functions parse the payload strings and create standard Firestore alerts.
+3.  AI CLASSIFICATION: The Mobile Admin app detects the Firestore write event. The 
+    app pre-processes the text, scans for profanity/spam, auto-categorizes the 
+    incident, calculates threat index, and positions the card in the dispatch feed.
+4.  DISPATCH ACTUATION: The dispatcher reviews details and coordinates. Clicking 
+    "Dispatch" changes status, assigns responder units, and triggers automated SMS 
+    status update alerts to the reporter.
+5.  RESOLUTION: Once responder teams clear the situation, the administrator marks the
+    report as "Resolved" (Done), adding a closing dispatch entry. This updates the citizen's 
+    mobile timeline and logs the transaction in the historical Digital Blotter.
+================================================================================

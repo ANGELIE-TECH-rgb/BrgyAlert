@@ -1,0 +1,127 @@
+                         PROJECT OVERVIEW: BRGYALERT
+        (AI-Powered Barangay Incident Reporting & Analytics Platform)
+                         PILOT SITE: BARANGAY LEPA
+
+
+1. PROJECT DESCRIPTION
+BrgyAlert is an AI-powered, cloud-native, disaster-resilient incident reporting 
+and dispatch ecosystem engineered for local governments in the Philippines, with 
+its pilot implementation tailored for Barangay Lepa. The system runs at ₱0 
+operational infrastructure cost by utilizing a serverless model while providing 
+communication resilience during severe weather and network collapses.
+
+Rather than maintaining separate web and mobile codebases, BrgyAlert provides a 
+unified, cross-platform mobile application (React Native / Expo) that dynamically 
+routes users based on role-based access control (RBAC):
+* Mobile Citizen Client: Fast incident reporting with smart offline SMS fallback.
+* Mobile Admin/Responder Client: On-the-scene dashboard for dispatch triage, 
+  priority queuing, status tracking, evacuation tracking, and real-time citizen chat.
+
+Key Value Propositions:
+- ₱0 Infrastructure Cost: Leverages Firebase free-tiers (Auth, Firestore NoSQL, 
+  Cloud Storage, and Cloud Functions) to eliminate monthly server lease fees.
+- Disaster Resiliency: Automatically switches to compressed SMS data payloads 
+  when citizen devices lose mobile data/Wi-Fi coverage during emergencies.
+- Unified Codebase: Built entirely using React Native and Expo, meaning citizens 
+  and barangay responders access their respective portals within the same app binary.
+- Localized Utility: Built to mirror Philippine barangay protocols, including 
+  Incident Blotters, Tanod/Responder dispatches, and Evacuation Center tracking.
+
+
+2. PROJECT PROBLEM TO SOLVE
+* Internet Vulnerability: Emergency applications fail during typhoons and grid 
+  collapses when mobile data towers crash. BrgyAlert detects connection drops 
+  and launches pre-formatted SMS payloads to transmit essential incident reports.
+* Paper Blotter Bottlenecks: Manual logbooks delay dispatch and are highly 
+  prone to physical damage. BrgyAlert provides a secure, digital, role-restricted 
+  ledger accessible right from responders' mobile devices.
+* Responder Resource Drain (Spam/Pranks): Clutter from fake reports wastes local 
+  rescue resources. Automated validation filters filter Tagalog profanities and 
+  character gibberish prior to dispatch alerts.
+* Financial Constraints: Small municipalities lack funding for high server costs 
+  and proprietary APIs. BrgyAlert runs serverless, using free-tier databases and 
+  client-side device capabilities.
+
+
+3. SYSTEM ARCHITECTURE & DATA FLOW
+
+                 +---------------------------------------------+
+                 |          UNIFIED BRGYALERT MOBILE APP       |
+                 |             (React Native / Expo)           |
+                 |                                             |
+                 |  [Citizen Dashboard] <---> [Admin Console]  |
+                 +---------------------------------------------+
+                        | (Online Firestore SDK)    | (Offline SMS fallback)
+                        v                           v
+                 +--------------+         +-----------------------+
+                 |  Cloud Base  |         | SMS Gateway (webhook) |
+                 | (Firestore)  |<--------| (Semaphore.co API v4) |
+                 +--------------+         +-----------------------+
+
+1. Ingestion: Reports filed online sync to Firestore. Offline reports switch to a 
+   native SMS compression protocol, formatting fields into a compact delimited 
+   string sent to the gateway.
+2. Triage & Dispatch: Barangay administrators check incoming alerts in their 
+   Mobile Admin Console. The dashboard ranks reports by calculated urgency indexes.
+3. Actuation: Responders update incident statuses and assign crews, which triggers 
+   outbound status text broadcasts back to citizens.
+4. Coordination: Citizen and Responder chat directly using real-time Firebase-backed 
+   text channels associated with the report.
+
+
+4. MODULES & SYSTEM FEATURES
+A. Citizen Mobile Client Features (Mobile User)
+- Touch-Optimized Report Wizard: Quick category icons (Fire, Flood, Medical, Crime, 
+  Accident, General) for rapid input.
+- GPS Geolocation Lock: Pulls device coordinates via native Expo Location APIs.
+- Media Compression: Automatically compresses photos locally from 5MB to 200KB 
+  before streaming them to Cloud Storage, conserving data.
+- Offline SMS Handshake: Detects connection drops and opens the native device SMS 
+  pre-filled with a delimiter payload (e.g. `BA!Cat!Landmark!Details`).
+- Real-Time status Timeline: Visual progress tracker (Submitted -> Under Review -> 
+  Dispatched -> Resolved).
+- Privacy Settings: Optional toggle for submitting anonymous reports.
+- Community Safety Directory: Quick lookup of active Evacuation Centers and click-to-dial 
+  hotlines (Police, Fire, Barangay Hall).
+- Real-Time Incident Chat: Text thread with active responders assigned to their case.
+
+B. Mobile Admin Console Features (Mobile Admin)
+- Admin Metrics Dashboard: Real-time counter tiles showing active, critical, and 
+  unassigned incidents, plus a responder "On-Duty" status switch.
+- Live Priority Incident Queue: Sorts and highlights alerts based on urgency keyword 
+  indexing (Critical, High, Medium, Low).
+- Incident Triage Console: Full-screen incident views showing GPS coordinates, photo 
+  evidence, and status controls.
+- External Navigation Link: Instant deep-linking into Google/Apple Maps for route routing 
+  to the exact incident coordinates.
+- Field Shelter Control: Live updater allowing shelter leads to modify center operational 
+  states (Open, Full, Closed) and adjust current occupant capacities.
+- Broadcast System: Allows dispatchers to compose public alerts, writing to Firestore 
+  to fire push notifications and SMS broadcasts to local zone registries.
+- Real-Time Responder Chat: Two-way chat interface with citizen reporters to direct on-site 
+  actions (e.g., first aid guidance, navigation details).
+
+
+5. TECHNICAL STACK SPECIFICATION
+* Mobile Client App: React Native (Expo SDK), React Navigation, Hermes Engine
+* Native Device API Hooks: Expo Location, NetInfo, Expo Image Picker, Native Linking API
+* Authentication & RBAC: Firebase Authentication
+* Database Engine: Firebase Cloud Firestore (NoSQL Document DB)
+* Cloud Storage: Firebase Cloud Storage (Photo evidence)
+* Push Messaging: Firebase Cloud Messaging (FCM) & Expo Notification Service
+* External SMS Integrations: Semaphore.co SMS API (gateway intake/outbound status updates)
+
+
+6. DEVELOPMENT METHODOLOGY
+To accommodate a 1-month development window managed by a two-developer team, 
+the project is built using an adapted Agile-Scrum Methodology structured 
+into four (4) consecutive single-week sprints:
+
+* Sprint 1 (Week 1) - Firebase & Foundation: Bind Mobile app clients in Firebase Console. 
+  Construct Firestore security collection rules, RBAC document schemas, and login/register screens.
+* Sprint 2 (Week 2) - Mobile Citizen Portal & SMS: Build the reporting forms, geolocation 
+  capturing, photo compression triggers, connectivity monitoring, and SMS string output scripts.
+* Sprint 3 (Week 3) - Mobile Admin Dashboard & Queue: Develop the admin-restricted console. 
+  Build the priority queues, triage action overlays, map routing hooks, and shelter capacity controls.
+* Sprint 4 (Week 4) - Chat & Push Broadcast integration: Integrate live text chat features, 
+  configure push notifications, and seed the Firestore database with 50+ alerts for final system simulations.
