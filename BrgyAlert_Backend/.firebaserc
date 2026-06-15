@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "brgyalert-placeholder-id"
-  }
+    "default": "brgyalert-placeholder-id",
+    "BrgyAlert": "brgyalert-74b2f"
+  },
+  "targets": {},
+  "etags": {}
 }

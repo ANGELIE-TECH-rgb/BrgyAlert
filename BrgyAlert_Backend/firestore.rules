@@ -8,9 +8,7 @@ service cloud.firestore {
 
     // Rules for citizen reports/alerts
     match /alerts/{alertId} {
-      // Allow any user (or authenticated user) to submit an alert
       allow create: if true;
-      // Allow read/write to authenticated users (e.g., admin staff)
       allow read, update, delete: if isAuthenticated();
     }
 
@@ -18,5 +16,35 @@ service cloud.firestore {
     match /users/{userId} {
       allow read, write: if isAuthenticated() && request.auth.uid == userId;
     }
+
+    // Rules for responders
+    match /responders/{responderId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    // Rules for evacuation centers
+    match /evacuation_centers/{centerId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    // Rules for broadcasts
+    match /broadcasts/{broadcastId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    // Rules for SMS logs (Only backend/admin SDK, block client access)
+    match /sms_logs/{logId} {
+      allow read, write: if false;
+    }
+
+    // Rules for emergency contacts
+    match /emergency_contacts/{contactId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
   }
 }
+

@@ -1,0 +1,15 @@
+# Dependency directories
+node_modules/
+**/node_modules/
+
+# Firebase Cache/Logs
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# Build/Dist outputs
+dist/
+**/dist/
+web-build/
+**/web-build/
