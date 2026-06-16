@@ -32,6 +32,11 @@ service cloud.firestore {
 
       // Read / update / delete: owner only
       allow read, update, delete: if isOwner(userId);
+
+      // Rules for user notifications
+      match /notifications/{notificationId} {
+        allow read, write: if isOwner(userId);
+      }
     }
 
     // Rules for responders

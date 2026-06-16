@@ -219,15 +219,6 @@ export default function AdminQueue({ navigation }) {
             {loading ? 'Loading incidents...' : `${filteredAlerts.length} report${filteredAlerts.length !== 1 ? 's' : ''}`}
           </Text>
         </View>
-        <TouchableOpacity
-          style={styles.bellButton}
-          onPress={() => alert('Notifications screen')}
-        >
-          <Feather name="bell" size={22} color="#1F2937" />
-          {allAlerts.filter(a => a.status === 'submitted').length > 0 && (
-            <View style={styles.badgeDot} />
-          )}
-        </TouchableOpacity>
       </View>
 
       {/* Search Bar */}

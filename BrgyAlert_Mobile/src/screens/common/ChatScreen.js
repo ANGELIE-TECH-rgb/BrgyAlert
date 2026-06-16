@@ -13,10 +13,11 @@ import {
   ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, getDoc, doc, updateDoc, where, getDocs, increment } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, getDoc, doc, updateDoc, where, getDocs, increment, writeBatch } from 'firebase/firestore';
 import { Feather } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services/firebaseConfig';
+import { setActiveChat } from '../../services/notificationService';
 
 export default function ChatScreen({ route, navigation }) {
   const { alertId, userId, userName } = route.params || {};
@@ -31,6 +32,14 @@ export default function ChatScreen({ route, navigation }) {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(true);
+
+  // Set active chat globally to suppress local banners for this thread
+  useEffect(() => {
+    setActiveChat(currentAlertId);
+    return () => {
+      setActiveChat(null);
+    };
+  }, [currentAlertId]);
 
   // Admin states for multiple incidents selection
   const [userAlerts, setUserAlerts] = useState([]);
@@ -183,6 +192,23 @@ export default function ChatScreen({ route, navigation }) {
               await updateDoc(alertDocRef, { unreadCountAdmin: 0 });
             } else {
               await updateDoc(alertDocRef, { unreadCountCitizen: 0 });
+            }
+
+            // Also mark related notifications as read
+            const notifQuery = query(
+              collection(db, 'users', user.uid, 'notifications'),
+              where('relatedId', '==', currentAlertId),
+              where('type', '==', 'message'),
+              where('read', '==', false)
+            );
+            const notifSnap = await getDocs(notifQuery);
+            if (!notifSnap.empty) {
+              const batch = writeBatch(db);
+              notifSnap.forEach((d) => {
+                const ref = doc(db, 'users', user.uid, 'notifications', d.id);
+                batch.update(ref, { read: true });
+              });
+              await batch.commit();
             }
           } catch (err) {
             console.log('Error resetting alert unread count:', err);

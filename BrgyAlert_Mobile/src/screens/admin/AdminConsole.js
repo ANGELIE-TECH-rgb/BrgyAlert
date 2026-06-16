@@ -7,10 +7,12 @@ import {
   StatusBar, 
   ScrollView,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, where } from 'firebase/firestore';
 import { Feather } from '@expo/vector-icons';
+import { markAsRead, markAllAsRead } from '../../services/notificationService';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { useAuth } from '../../context/AuthContext';
@@ -21,10 +23,13 @@ import AdminBottomTabNav from '../../components/AdminBottomTabNav';
 const BRGY_CENTER = { latitude: 14.6000, longitude: 120.9800 };
 
 export default function AdminConsole({ navigation }) {
-  const { userProfile } = useAuth();
+  const { user, userProfile } = useAuth();
   const insets = useSafeAreaInsets();
   
   const [allAlerts, setAllAlerts] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [dropdownNotifications, setDropdownNotifications] = useState([]);
+  const [showDropdown, setShowDropdown] = useState(false);
   const [loading, setLoading] = useState(true);
   const [mapMode, setMapMode] = useState('Satellite'); // Satellite | Terrain
 
@@ -93,6 +98,29 @@ export default function AdminConsole({ navigation }) {
 
     return () => unsubscribe();
   }, []);
+
+  // Fetch admin unread notifications in real-time
+  useEffect(() => {
+    if (!user) return;
+    const q = query(
+      collection(db, 'users', user.uid, 'notifications'),
+      orderBy('createdAt', 'desc')
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list = [];
+      let unread = 0;
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        if (!data.read) unread++;
+        list.push({ id: doc.id, ...data });
+      });
+      setDropdownNotifications(list.slice(0, 5));
+      setUnreadCount(unread);
+    }, (error) => {
+      console.error('Error fetching admin notifications:', error);
+    });
+    return () => unsubscribe();
+  }, [user]);
 
   const getGreeting = () => {
     const hours = new Date().getHours();
@@ -164,10 +192,15 @@ export default function AdminConsole({ navigation }) {
           </View>
           <TouchableOpacity
             style={styles.bellButton}
-            onPress={() => alert('Notifications screen')}
+            onPress={() => setShowDropdown(true)}
+            activeOpacity={0.7}
           >
             <Feather name="bell" size={22} color="#1F2937" />
-            {pendingReview > 0 && <View style={styles.badgeDot} />}
+            {unreadCount > 0 && (
+              <View style={styles.badgeDot}>
+                <Text style={styles.badgeDotText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -373,6 +406,95 @@ export default function AdminConsole({ navigation }) {
         </Svg>
       </View>
 
+      {/* Notifications Dropdown Modal */}
+      <Modal
+        visible={showDropdown}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowDropdown(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowDropdown(false)}
+        >
+          <View style={[styles.dropdownContainer, { top: insets.top + 72 }]}>
+            <View style={styles.dropdownHeader}>
+              <Text style={styles.dropdownTitle}>Recent Notifications</Text>
+              {unreadCount > 0 && (
+                <TouchableOpacity onPress={() => markAllAsRead(user.uid)}>
+                  <Text style={styles.dropdownMarkRead}>Mark all read</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {dropdownNotifications.length === 0 ? (
+              <View style={styles.dropdownEmpty}>
+                <Feather name="bell" size={24} color="#9CA3AF" />
+                <Text style={styles.dropdownEmptyText}>No notifications yet</Text>
+              </View>
+            ) : (
+              <ScrollView style={styles.dropdownScroll} bounces={false} showsVerticalScrollIndicator={false}>
+                {dropdownNotifications.map((item) => {
+                  const isMsg = item.type === 'message';
+                  const isInc = item.type === 'incident';
+                  const isStatus = item.type === 'status';
+                  const iconName = isInc ? 'alert-triangle' : isMsg ? 'message-square' : isStatus ? 'activity' : 'bell';
+                  const iconColor = isInc ? '#EF4444' : isMsg ? '#2563EB' : isStatus ? '#D97706' : '#6B7280';
+                  const iconBg = isInc ? '#FEF2F2' : isMsg ? '#EFF6FF' : isStatus ? '#FFF9E6' : '#F3F4F6';
+
+                  return (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={[styles.dropdownItem, !item.read && styles.dropdownItemUnread]}
+                      onPress={async () => {
+                        setShowDropdown(false);
+                        if (!item.read) {
+                          await markAsRead(user.uid, item.id);
+                        }
+                        if (item.relatedId) {
+                          if (item.type === 'message') {
+                            navigation.navigate('ChatScreen', { alertId: item.relatedId });
+                          } else {
+                            navigation.navigate('IncidentDetail', { alertId: item.relatedId });
+                          }
+                        }
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[styles.itemIconWrapper, { backgroundColor: iconBg }]}>
+                        <Feather name={iconName} size={14} color={iconColor} />
+                      </View>
+                      <View style={styles.itemTextWrapper}>
+                        <Text style={[styles.itemTitle, !item.read && styles.itemTitleUnread]} numberOfLines={1}>
+                          {item.title}
+                        </Text>
+                        <Text style={styles.itemBody} numberOfLines={1}>
+                          {item.body}
+                        </Text>
+                      </View>
+                      {!item.read && <View style={styles.itemUnreadDot} />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
+
+            <TouchableOpacity
+              style={styles.seeAllButton}
+              onPress={() => {
+                setShowDropdown(false);
+                navigation.navigate('Notifications');
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.seeAllButtonText}>See All Notifications</Text>
+              <Feather name="chevron-right" size={14} color="#2563EB" style={{ marginLeft: 4 }} />
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       {/* Floating Bottom Tab Nav Bar */}
       <AdminBottomTabNav />
 
@@ -441,12 +563,21 @@ const styles = StyleSheet.create({
   },
   badgeDot: {
     position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    top: -4,
+    right: -4,
     backgroundColor: '#EF4444',
+    borderRadius: 9,
+    width: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+  },
+  badgeDotText: {
+    color: '#FFFFFF',
+    fontSize: 8,
+    fontWeight: '700',
   },
   scrollContent: {
     paddingTop: 16,
@@ -710,5 +841,115 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 13,
     color: '#6B7280',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.12)',
+  },
+  dropdownContainer: {
+    position: 'absolute',
+    right: 24,
+    width: 300,
+    maxHeight: 400,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    elevation: 8,
+    overflow: 'hidden',
+    zIndex: 9999,
+  },
+  dropdownHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  dropdownTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  dropdownMarkRead: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#2563EB',
+  },
+  dropdownScroll: {
+    maxHeight: 280,
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  dropdownItemUnread: {
+    backgroundColor: '#F9FCFF',
+  },
+  itemIconWrapper: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  itemTextWrapper: {
+    flex: 1,
+    paddingRight: 6,
+  },
+  itemTitle: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#4B5563',
+  },
+  itemTitleUnread: {
+    fontWeight: '700',
+    color: '#111827',
+  },
+  itemBody: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    marginTop: 2,
+  },
+  itemUnreadDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#2563EB',
+  },
+  dropdownEmpty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  dropdownEmptyText: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 8,
+  },
+  seeAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    backgroundColor: '#F9FAFB',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  seeAllButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#2563EB',
   },
 });

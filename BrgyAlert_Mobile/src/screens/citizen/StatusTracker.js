@@ -14,8 +14,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, query, collection, where, getDocs, writeBatch } from 'firebase/firestore';
 import { db } from '../../services/firebaseConfig';
+import { useAuth } from '../../context/AuthContext';
 
 const STATUS_STEPS = [
   { key: 'submitted', label: 'Report Submitted', desc: 'Your report has been successfully recorded in the system.' },
@@ -27,6 +28,7 @@ const STATUS_STEPS = [
 export default function StatusTracker({ route, navigation }) {
   const { alertId } = route.params || {};
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   
   const [incident, setIncident] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -57,8 +59,33 @@ export default function StatusTracker({ route, navigation }) {
       setLoading(false);
     });
 
+    // Mark status notifications for this report as read
+    const markStatusNotifsAsRead = async () => {
+      if (!user) return;
+      try {
+        const notifQuery = query(
+          collection(db, 'users', user.uid, 'notifications'),
+          where('relatedId', '==', alertId),
+          where('type', '==', 'status'),
+          where('read', '==', false)
+        );
+        const notifSnap = await getDocs(notifQuery);
+        if (!notifSnap.empty) {
+          const batch = writeBatch(db);
+          notifSnap.forEach((d) => {
+            const ref = doc(db, 'users', user.uid, 'notifications', d.id);
+            batch.update(ref, { read: true });
+          });
+          await batch.commit();
+        }
+      } catch (err) {
+        console.log('Error marking status notifications as read:', err);
+      }
+    };
+    markStatusNotifsAsRead();
+
     return () => unsubscribe();
-  }, [alertId]);
+  }, [alertId, user]);
 
   // Determine current active step index
   const getCurrentStepIndex = () => {

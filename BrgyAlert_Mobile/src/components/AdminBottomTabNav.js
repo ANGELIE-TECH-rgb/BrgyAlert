@@ -1,13 +1,63 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { db } from '../services/firebaseConfig';
+import { useAuth } from '../context/AuthContext';
 
 export default function AdminBottomTabNav() {
   const navigation = useNavigation();
   const route = useRoute();
+  const { user } = useAuth();
+
+  const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
+  const [hasUnreadQueue, setHasUnreadQueue] = useState(false);
   
   const activeTab = route.name;
+
+  useEffect(() => {
+    if (!user) return;
+
+    // 1. Subscribe to all alerts for admin unread messages & pending alerts
+    const alertsQ = query(collection(db, 'alerts'));
+    const unsubscribeAlerts = onSnapshot(alertsQ, (snap) => {
+      let unread = false;
+      let hasPending = false;
+      snap.forEach((doc) => {
+        const data = doc.data();
+        if ((data.unreadCountAdmin || 0) > 0) {
+          unread = true;
+        }
+        if (data.status === 'submitted') {
+          hasPending = true;
+        }
+      });
+      setHasUnreadMessages(unread);
+      setHasUnreadQueue(hasPending);
+    }, (err) => {
+      console.log('Error listening to alerts in admin bottom nav:', err);
+    });
+
+    // 2. Subscribe to user notifications for unread incident notifications as fallback
+    const notifsQ = query(
+      collection(db, 'users', user.uid, 'notifications'),
+      where('read', '==', false),
+      where('type', '==', 'incident')
+    );
+    const unsubscribeNotifs = onSnapshot(notifsQ, (snap) => {
+      if (!snap.empty) {
+        setHasUnreadQueue(true);
+      }
+    }, (err) => {
+      console.log('Error listening to notifications in admin bottom nav:', err);
+    });
+
+    return () => {
+      unsubscribeAlerts();
+      unsubscribeNotifs();
+    };
+  }, [user]);
 
   const tabs = [
     { name: 'AdminHome', label: 'Dashboard', icon: 'layout' },
@@ -38,12 +88,20 @@ export default function AdminBottomTabNav() {
               onPress={() => handlePress(tab.name)}
               activeOpacity={0.8}
             >
-              <Feather 
-                name={tab.icon} 
-                size={22} 
-                color={isSelected ? '#0F2C59' : '#6C757D'} 
-                style={styles.tabIcon}
-              />
+              <View style={styles.iconContainer}>
+                <Feather 
+                  name={tab.icon} 
+                  size={22} 
+                  color={isSelected ? '#0F2C59' : '#6C757D'} 
+                  style={styles.tabIcon}
+                />
+                {tab.name === 'AdminMessages' && hasUnreadMessages && (
+                  <View style={styles.redDot} />
+                )}
+                {tab.name === 'AdminQueue' && hasUnreadQueue && (
+                  <View style={styles.redDot} />
+                )}
+              </View>
               <View style={styles.labelWrapper}>
                 <Text style={[styles.labelText, isSelected && styles.labelTextSelected]}>
                   {tab.label}
@@ -122,5 +180,21 @@ const styles = StyleSheet.create({
     backgroundColor: '#0F2C59',
     borderRadius: 1,
     marginTop: 2,
+  },
+  iconContainer: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  redDot: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#EF4444',
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
   },
 });
