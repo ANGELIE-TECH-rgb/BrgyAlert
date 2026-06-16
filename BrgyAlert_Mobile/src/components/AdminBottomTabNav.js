@@ -68,7 +68,7 @@ export default function AdminBottomTabNav() {
   ];
 
   const handlePress = (tabName) => {
-    if (tabName === 'AdminHome' || tabName === 'AdminQueue' || tabName === 'AdminMessages' || tabName === 'AdminAnalytics') {
+    if (tabName === 'AdminHome' || tabName === 'AdminQueue' || tabName === 'AdminMessages' || tabName === 'AdminAnalytics' || tabName === 'AdminSettings') {
       navigation.navigate(tabName);
     } else {
       alert(`${tabName} module will be implemented in the next sprint.`);

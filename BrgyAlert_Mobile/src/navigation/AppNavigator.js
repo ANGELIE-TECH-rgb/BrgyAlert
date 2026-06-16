@@ -25,6 +25,8 @@ import AdminMessages from '../screens/admin/AdminMessages';
 import AdminAnalytics from '../screens/admin/AdminAnalytics';
 import ChatScreen from '../screens/common/ChatScreen';
 import NotificationsScreen from '../screens/common/NotificationsScreen';
+import CitizenSettings from '../screens/citizen/CitizenSettings';
+import AdminSettings from '../screens/admin/AdminSettings';
 
 const Stack = createNativeStackNavigator();
 
@@ -241,6 +243,7 @@ export default function AppNavigator() {
             <Stack.Screen name="AdminMapScreen" component={AdminMapScreen} />
             <Stack.Screen name="ChatScreen" component={ChatScreen} />
             <Stack.Screen name="Notifications" component={NotificationsScreen} />
+            <Stack.Screen name="AdminSettings" component={AdminSettings} />
           </>
         ) : (
           // Citizen Stack (Default)
@@ -253,6 +256,7 @@ export default function AppNavigator() {
             <Stack.Screen name="StatusTracker" component={StatusTracker} />
             <Stack.Screen name="ChatScreen" component={ChatScreen} />
             <Stack.Screen name="Notifications" component={NotificationsScreen} />
+            <Stack.Screen name="SettingsTab" component={CitizenSettings} />
           </>
         )}
       </Stack.Navigator>

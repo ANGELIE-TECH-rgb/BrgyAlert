@@ -1,6 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { Audio } from 'expo-av';
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { collection, addDoc, updateDoc, doc, serverTimestamp, writeBatch, getDocs, query, where } from 'firebase/firestore';
 import { db } from './firebaseConfig';
 
@@ -33,6 +34,10 @@ export function getActiveChat() {
  */
 export async function playNotificationSound() {
   try {
+    const soundPref = await AsyncStorage.getItem('soundEnabled');
+    if (soundPref === 'false') {
+      return; // Audio chime disabled by user preference
+    }
     if (soundObject) {
       try {
         await soundObject.unloadAsync();

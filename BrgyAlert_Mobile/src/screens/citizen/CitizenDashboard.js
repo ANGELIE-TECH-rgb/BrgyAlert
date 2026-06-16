@@ -7,13 +7,15 @@ import {
   StatusBar,
   ScrollView,
   ActivityIndicator,
-  Modal
+  Modal,
+  Alert,
+  Linking
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import Svg, { Defs, LinearGradient, Stop, Rect, Path, Circle } from 'react-native-svg';
 import NetInfo from '@react-native-community/netinfo';
-import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services/firebaseConfig';
 import { markAsRead, markAllAsRead } from '../../services/notificationService';
@@ -32,6 +34,15 @@ export default function CitizenDashboard({ navigation }) {
   const [recentLogs, setRecentLogs] = useState([]);
   const [loadingLogs, setLoadingLogs] = useState(true);
 
+  // Barangay Configuration States
+  const [showHotlinesModal, setShowHotlinesModal] = useState(false);
+  const [barangayConfig, setBarangayConfig] = useState({
+    barangayName: 'Barangay Lepa',
+    hotlinePolice: '',
+    hotlineFire: '',
+    hotlineAmbulance: ''
+  });
+
   // Panic Button hold-to-press states
   const [holdTimer, setHoldTimer] = useState(null);
   const [secondsRemaining, setSecondsRemaining] = useState(3);
@@ -41,9 +52,22 @@ export default function CitizenDashboard({ navigation }) {
   // Monitor Network Connectivity State
   useEffect(() => {
     const unsubscribeNet = NetInfo.addEventListener((state) => {
-      setIsOnline(!!state.isConnected);
+      setIsOnline(state.isConnected ?? false);
     });
     return () => unsubscribeNet();
+  }, []);
+
+  // Fetch Barangay Hotlines Configuration in Real-Time
+  useEffect(() => {
+    const docRef = doc(db, 'config', 'barangay');
+    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setBarangayConfig(docSnap.data());
+      }
+    }, (error) => {
+      console.error('Error listening to barangay config snapshot:', error);
+    });
+    return () => unsubscribe();
   }, []);
 
   // Monitor notifications in real-time
@@ -113,6 +137,18 @@ export default function CitizenDashboard({ navigation }) {
       day: '2-digit',
       month: 'long',
       year: 'numeric'
+    });
+  };
+
+  // Trigger dialing client on device
+  const handleDial = (number) => {
+    if (!number) {
+      Alert.alert('Unavailable', 'This hotline number is not set.');
+      return;
+    }
+    Linking.openURL(`tel:${number}`).catch((err) => {
+      console.warn('Error dialing number:', err);
+      Alert.alert('Error', 'Could not open phone dialer.');
     });
   };
 
@@ -293,7 +329,7 @@ export default function CitizenDashboard({ navigation }) {
             {/* Hotlines Card */}
             <TouchableOpacity
               style={styles.serviceCard}
-              onPress={() => alert('Emergency Hotlines directory is coming soon!')}
+              onPress={() => setShowHotlinesModal(true)}
             >
               <View style={styles.serviceIconWrapper}>
                 <Feather name="phone-call" size={20} color="#2563EB" />
@@ -459,6 +495,114 @@ export default function CitizenDashboard({ navigation }) {
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
+      </Modal>
+
+      {/* Emergency Hotlines Modal */}
+      <Modal
+        visible={showHotlinesModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowHotlinesModal(false)}
+      >
+        <View style={styles.hotlinesModalOverlay}>
+          <TouchableOpacity
+            style={styles.modalOverlayDismiss}
+            activeOpacity={1}
+            onPress={() => setShowHotlinesModal(false)}
+          />
+          <View style={styles.hotlinesModalContent}>
+            
+            {/* Header */}
+            <View style={styles.hotlinesHeader}>
+              <View style={styles.hotlinesHeaderTitleRow}>
+                <Feather name="phone-call" size={22} color="#0F2C59" style={{ marginRight: 8 }} />
+                <Text style={styles.hotlinesModalTitle} numberOfLines={1}>
+                  {barangayConfig.barangayName || 'Barangay'} Hotlines
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowHotlinesModal(false)}
+                style={styles.closeButton}
+                activeOpacity={0.7}
+              >
+                <Feather name="x" size={20} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.hotlinesSubtitle}>
+              Tapping an emergency hotline will immediately launch your phone dialer app.
+            </Text>
+
+            {/* List of Hotlines */}
+            <View style={styles.hotlinesList}>
+              
+              {/* Police */}
+              <TouchableOpacity
+                style={styles.hotlineItem}
+                onPress={() => handleDial(barangayConfig.hotlinePolice)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.hotlineLeft}>
+                  <View style={[styles.hotlineIconWrapper, { backgroundColor: '#EFF6FF' }]}>
+                    <Feather name="shield" size={20} color="#2563EB" />
+                  </View>
+                  <View>
+                    <Text style={styles.hotlineName}>Police Station</Text>
+                    <Text style={styles.hotlineNum}>{barangayConfig.hotlinePolice || 'Not Configured'}</Text>
+                  </View>
+                </View>
+                <Feather name="phone" size={18} color="#2563EB" />
+              </TouchableOpacity>
+
+              {/* Fire */}
+              <TouchableOpacity
+                style={styles.hotlineItem}
+                onPress={() => handleDial(barangayConfig.hotlineFire)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.hotlineLeft}>
+                  <View style={[styles.hotlineIconWrapper, { backgroundColor: '#FEF2F2' }]}>
+                    <Feather name="flame" size={20} color="#EF4444" />
+                  </View>
+                  <View>
+                    <Text style={styles.hotlineName}>Fire Station</Text>
+                    <Text style={styles.hotlineNum}>{barangayConfig.hotlineFire || 'Not Configured'}</Text>
+                  </View>
+                </View>
+                <Feather name="phone" size={18} color="#EF4444" />
+              </TouchableOpacity>
+
+              {/* Ambulance */}
+              <TouchableOpacity
+                style={styles.hotlineItem}
+                onPress={() => handleDial(barangayConfig.hotlineAmbulance)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.hotlineLeft}>
+                  <View style={[styles.hotlineIconWrapper, { backgroundColor: '#ECFDF5' }]}>
+                    <MaterialCommunityIcons name="ambulance" size={20} color="#10B981" />
+                  </View>
+                  <View>
+                    <Text style={styles.hotlineName}>Ambulance & Medical</Text>
+                    <Text style={styles.hotlineNum}>{barangayConfig.hotlineAmbulance || 'Not Configured'}</Text>
+                  </View>
+                </View>
+                <Feather name="phone" size={18} color="#10B981" />
+              </TouchableOpacity>
+
+            </View>
+
+            {/* Back / Dismiss button */}
+            <TouchableOpacity
+              style={styles.dismissButton}
+              onPress={() => setShowHotlinesModal(false)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.dismissButtonText}>Done</Text>
+            </TouchableOpacity>
+
+          </View>
+        </View>
       </Modal>
 
       {/* Custom Bottom Tab Pill */}
@@ -841,5 +985,106 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#2563EB',
+  },
+  hotlinesModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  modalOverlayDismiss: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  hotlinesModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    width: '100%',
+    padding: 24,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 5,
+  },
+  hotlinesHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  hotlinesHeaderTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  hotlinesModalTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F2C59',
+    flex: 1,
+  },
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  hotlinesSubtitle: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 20,
+    lineHeight: 18,
+  },
+  hotlinesList: {
+    marginBottom: 20,
+  },
+  hotlineItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 14,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+    marginBottom: 12,
+  },
+  hotlineLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  hotlineIconWrapper: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  hotlineName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  hotlineNum: {
+    fontSize: 13,
+    color: '#4B5563',
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  dismissButton: {
+    backgroundColor: '#0F2C59',
+    borderRadius: 12,
+    height: 46,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dismissButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

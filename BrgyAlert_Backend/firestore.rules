@@ -67,6 +67,12 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAuthenticated();
     }
+
+    // Rules for barangay configurations
+    match /config/{configId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
   }
 }
 
