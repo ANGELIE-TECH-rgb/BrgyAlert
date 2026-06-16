@@ -21,6 +21,9 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { Feather, AntDesign, Ionicons } from '@expo/vector-icons';
 import GoogleIcon from '../../components/GoogleIcon';
+import { checkSignUpStatus, recordSignUpAttempt } from '../../services/rateLimiter';
+
+import GestureModal from '../../components/GestureModal';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const GENDER_OPTIONS = ['Male', 'Female', 'Other'];
@@ -29,95 +32,6 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
-// Reusable Gesture-dismissible Modal Component
-function GestureModal({ visible, onClose, title, children }) {
-  const panY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
-
-  useEffect(() => {
-    if (visible) {
-      Animated.timing(panY, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }).start();
-    } else {
-      Animated.timing(panY, {
-        toValue: SCREEN_HEIGHT,
-        duration: 250,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [visible]);
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        return gestureState.dy > 5; // only swipe down
-      },
-      onPanResponderGrant: () => {
-        panY.setOffset(0);
-      },
-      onPanResponderMove: (_, gestureState) => {
-        if (gestureState.dy > 0) {
-          panY.setValue(gestureState.dy);
-        }
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dy > 100) {
-          Animated.timing(panY, {
-            toValue: SCREEN_HEIGHT,
-            duration: 200,
-            useNativeDriver: true,
-          }).start(() => {
-            onClose();
-          });
-        } else {
-          Animated.spring(panY, {
-            toValue: 0,
-            useNativeDriver: true,
-            tension: 40,
-            friction: 8,
-          }).start();
-        }
-      },
-    })
-  ).current;
-
-  if (!visible) return null;
-
-  return (
-    <Modal
-      transparent
-      animationType="none"
-      visible={visible}
-      onRequestClose={onClose}
-    >
-      <TouchableOpacity
-        style={styles.modalOverlay}
-        activeOpacity={1}
-        onPress={onClose}
-      >
-        <Animated.View
-          style={[
-            styles.modalContent,
-            { transform: [{ translateY: panY }] }
-          ]}
-          onStartShouldSetResponder={() => true} // stop event bubbling
-        >
-          <View style={styles.dragHandleContainer} {...panResponder.panHandlers}>
-            <View style={styles.modalHandle} />
-          </View>
-
-          {title ? <Text style={styles.modalTitle}>{title}</Text> : null}
-
-          {children}
-        </Animated.View>
-      </TouchableOpacity>
-    </Modal>
-  );
-}
-
 export default function RegisterScreen({ navigation }) {
   const { register, loginWithGoogle } = useAuth();
 
@@ -125,6 +39,36 @@ export default function RegisterScreen({ navigation }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [focusedField, setFocusedField] = useState(null);
+  const [signUpLockoutTime, setSignUpLockoutTime] = useState(0);
+
+  useEffect(() => {
+    const initRateLimit = async () => {
+      const status = await checkSignUpStatus();
+      if (status.locked) {
+        setSignUpLockoutTime(status.secondsRemaining);
+        setErrorMsg(`Too many registration attempts. Try again in ${status.secondsRemaining} seconds.`);
+      }
+    };
+    initRateLimit();
+  }, []);
+
+  useEffect(() => {
+    let timer;
+    if (signUpLockoutTime > 0) {
+      timer = setInterval(() => {
+        setSignUpLockoutTime((prev) => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            setErrorMsg('');
+            return 0;
+          }
+          setErrorMsg(`Too many registration attempts. Try again in ${prev - 1} seconds.`);
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [signUpLockoutTime]);
 
   // Step 1: Credentials
   const [email, setEmail] = useState('');
@@ -268,6 +212,10 @@ export default function RegisterScreen({ navigation }) {
       setErrorMsg('Password must contain at least one lowercase letter.');
       return;
     }
+    if (!/\d/.test(password)) {
+      setErrorMsg('Password must contain at least one number.');
+      return;
+    }
     if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
       setErrorMsg('Password must contain at least one special character (e.g. !@#$%^&*).');
       return;
@@ -288,6 +236,14 @@ export default function RegisterScreen({ navigation }) {
 
   // Submit complete registration with citizen role and all required constraints
   const handleSignUp = async () => {
+    const status = await checkSignUpStatus();
+    if (status.locked) {
+      setSignUpLockoutTime(status.secondsRemaining);
+      setErrorMsg(`Too many registration attempts. Try again in ${status.secondsRemaining} seconds.`);
+      Alert.alert('Locked Out', `Too many registration attempts. Please try again in ${status.secondsRemaining} seconds.`);
+      return;
+    }
+
     if (!fullName.trim()) {
       setErrorMsg('Full Name is required.');
       return;
@@ -303,6 +259,14 @@ export default function RegisterScreen({ navigation }) {
     }
     if (!gender || gender === 'Select your gender') {
       setErrorMsg('Gender is required.');
+      return;
+    }
+
+    const rateStatus = await recordSignUpAttempt();
+    if (rateStatus.locked) {
+      setSignUpLockoutTime(rateStatus.secondsRemaining);
+      setErrorMsg(`Too many registration attempts. Try again in ${rateStatus.secondsRemaining} seconds.`);
+      Alert.alert('Locked Out', `Too many registration attempts. Please try again in ${rateStatus.secondsRemaining} seconds.`);
       return;
     }
 
@@ -348,7 +312,14 @@ export default function RegisterScreen({ navigation }) {
     }
   };
 
-  const handleGoogleSignup = () => {
+  const handleGoogleSignup = async () => {
+    const status = await checkSignUpStatus();
+    if (status.locked) {
+      setSignUpLockoutTime(status.secondsRemaining);
+      setErrorMsg(`Too many registration attempts. Try again in ${status.secondsRemaining} seconds.`);
+      Alert.alert('Locked Out', `Too many registration attempts. Please try again in ${status.secondsRemaining} seconds.`);
+      return;
+    }
     setErrorMsg('');
     loginWithGoogle();
   };
@@ -422,6 +393,52 @@ export default function RegisterScreen({ navigation }) {
             </TouchableOpacity>
           </View>
 
+          {password.length > 0 && (
+            <View style={styles.passwordRequirementsContainer}>
+              <Text style={styles.requirementsTitle}>Password Requirements:</Text>
+              <View style={styles.requirementRow}>
+                <Feather 
+                  name={password.length >= 8 ? "check-circle" : "circle"} 
+                  size={14} 
+                  color={password.length >= 8 ? "#28A745" : "#A0AEC0"} 
+                />
+                <Text style={[styles.requirementText, password.length >= 8 && styles.requirementMet]}>
+                  Minimum of 8 characters
+                </Text>
+              </View>
+              <View style={styles.requirementRow}>
+                <Feather 
+                  name={(/[A-Z]/.test(password) && /[a-z]/.test(password)) ? "check-circle" : "circle"} 
+                  size={14} 
+                  color={(/[A-Z]/.test(password) && /[a-z]/.test(password)) ? "#28A745" : "#A0AEC0"} 
+                />
+                <Text style={[styles.requirementText, (/[A-Z]/.test(password) && /[a-z]/.test(password)) && styles.requirementMet]}>
+                  Both uppercase and lowercase letters
+                </Text>
+              </View>
+              <View style={styles.requirementRow}>
+                <Feather 
+                  name={/\d/.test(password) ? "check-circle" : "circle"} 
+                  size={14} 
+                  color={/\d/.test(password) ? "#28A745" : "#A0AEC0"} 
+                />
+                <Text style={[styles.requirementText, /\d/.test(password) && styles.requirementMet]}>
+                  At least one number
+                </Text>
+              </View>
+              <View style={styles.requirementRow}>
+                <Feather 
+                  name={/[!@#$%^&*(),.?":{}|<>]/.test(password) ? "check-circle" : "circle"} 
+                  size={14} 
+                  color={/[!@#$%^&*(),.?":{}|<>]/.test(password) ? "#28A745" : "#A0AEC0"} 
+                />
+                <Text style={[styles.requirementText, /[!@#$%^&*(),.?":{}|<>]/.test(password) && styles.requirementMet]}>
+                  At least one special character (e.g., !@#$)
+                </Text>
+              </View>
+            </View>
+          )}
+
           {/* Confirm Password */}
           <Text style={[styles.label, focusedField === 'confirmPassword' && styles.labelActive]}>Confirm Password</Text>
           <View style={[styles.passwordContainer, focusedField === 'confirmPassword' && styles.passwordContainerActive]}>
@@ -458,7 +475,14 @@ export default function RegisterScreen({ navigation }) {
         </View>
 
         {/* Google Sign-up */}
-        <TouchableOpacity style={styles.googleButton} onPress={handleGoogleSignup}>
+        <TouchableOpacity
+          style={[
+            styles.googleButton,
+            signUpLockoutTime > 0 && styles.googleButtonDisabled
+          ]}
+          onPress={handleGoogleSignup}
+          disabled={signUpLockoutTime > 0}
+        >
           <GoogleIcon size={20} style={styles.googleIcon} />
           <Text style={styles.googleButtonText}>Continue with Google</Text>
         </TouchableOpacity>
@@ -655,14 +679,19 @@ export default function RegisterScreen({ navigation }) {
 
           {/* Complete Signup Button */}
           <TouchableOpacity
-            style={[styles.primaryButton, isSubmitting && styles.primaryButtonDisabled]}
+            style={[
+              styles.primaryButton,
+              (isSubmitting || signUpLockoutTime > 0) && styles.primaryButtonDisabled
+            ]}
             onPress={handleSignUp}
-            disabled={isSubmitting}
+            disabled={isSubmitting || signUpLockoutTime > 0}
           >
             {isSubmitting ? (
               <ActivityIndicator color="#FFFFFF" />
             ) : (
-              <Text style={styles.primaryButtonText}>Continue</Text>
+              <Text style={styles.primaryButtonText}>
+                {signUpLockoutTime > 0 ? `Locked (${signUpLockoutTime}s)` : 'Continue'}
+              </Text>
             )}
           </TouchableOpacity>
         </View>
@@ -1009,6 +1038,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 32,
   },
+  googleButtonDisabled: {
+    opacity: 0.5,
+    backgroundColor: '#F7FAFC',
+  },
   googleIcon: {
     marginRight: 10,
   },
@@ -1206,5 +1239,33 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#FFFFFF',
     fontWeight: 'bold',
+  },
+  passwordRequirementsContainer: {
+    marginTop: 8,
+    padding: 12,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  requirementsTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#475569',
+    marginBottom: 6,
+  },
+  requirementRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 3,
+  },
+  requirementText: {
+    fontSize: 12,
+    color: '#64748B',
+    marginLeft: 8,
+  },
+  requirementMet: {
+    color: '#28A745',
+    fontWeight: '600',
   },
 });

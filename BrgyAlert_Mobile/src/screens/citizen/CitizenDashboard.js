@@ -9,11 +9,14 @@ import {
   ActivityIndicator,
   Modal,
   Alert,
-  Linking
+  Linking,
+  Animated,
+  Easing,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import Svg, { Defs, LinearGradient, Stop, Rect, Path, Circle } from 'react-native-svg';
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 import NetInfo from '@react-native-community/netinfo';
 import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '../../context/AuthContext';
@@ -44,10 +47,43 @@ export default function CitizenDashboard({ navigation }) {
   });
 
   // Panic Button hold-to-press states
-  const [holdTimer, setHoldTimer] = useState(null);
+  const [holdTimer, setHoldTimer]         = useState(null);
   const [secondsRemaining, setSecondsRemaining] = useState(3);
-  const [isHolding, setIsHolding] = useState(false);
+  const [isHolding, setIsHolding]         = useState(false);
   const secondsRef = useRef(3);
+
+  // ─── Panic button animations ────────────────────────────────────────────
+  const pulseAnim   = useRef(new Animated.Value(1)).current;  // idle breathing ring
+  const scaleAnim   = useRef(new Animated.Value(1)).current;  // button press scale
+  const arcProgress = useRef(new Animated.Value(0)).current;  // 0→1 countdown sweep
+  const subtitleOpacity = useRef(new Animated.Value(1)).current;
+  const pulseLoopRef = useRef(null);
+
+  // Idle pulse loop (starts on mount, stops while holding)
+  useEffect(() => {
+    const startPulse = () => {
+      pulseLoopRef.current = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.35,
+            duration: 1400,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 1400,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      pulseLoopRef.current.start();
+    };
+    startPulse();
+    return () => { if (pulseLoopRef.current) pulseLoopRef.current.stop(); };
+  }, []);
+
 
   // Monitor Network Connectivity State
   useEffect(() => {
@@ -154,6 +190,29 @@ export default function CitizenDashboard({ navigation }) {
 
   // Start Panic Button Hold
   const handlePanicPressIn = () => {
+    // Stop idle pulse, scale button up, start arc sweep
+    if (pulseLoopRef.current) pulseLoopRef.current.stop();
+    Animated.timing(pulseAnim, { toValue: 1, duration: 150, useNativeDriver: true }).start();
+
+    Animated.spring(scaleAnim, {
+      toValue: 1.08,
+      friction: 4,
+      tension: 120,
+      useNativeDriver: true,
+    }).start();
+
+    // Subtitle fade
+    Animated.timing(subtitleOpacity, { toValue: 0.4, duration: 200, useNativeDriver: true }).start();
+
+    // Arc sweep over 3 seconds
+    arcProgress.setValue(0);
+    Animated.timing(arcProgress, {
+      toValue: 1,
+      duration: 3000,
+      easing: Easing.linear,
+      useNativeDriver: false, // needs JS driver for SVG path interpolation
+    }).start();
+
     setIsHolding(true);
     setSecondsRemaining(3);
     secondsRef.current = 3;
@@ -177,6 +236,22 @@ export default function CitizenDashboard({ navigation }) {
       clearInterval(holdTimer);
       setHoldTimer(null);
     }
+
+    // Reset arc and scale
+    arcProgress.stopAnimation();
+    arcProgress.setValue(0);
+    Animated.spring(scaleAnim, { toValue: 1, friction: 5, tension: 80, useNativeDriver: true }).start();
+    Animated.timing(subtitleOpacity, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+
+    // Restart idle pulse
+    pulseLoopRef.current = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.35, duration: 1400, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 1400, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ])
+    );
+    pulseLoopRef.current.start();
+
     setIsHolding(false);
     setSecondsRemaining(3);
     secondsRef.current = 3;
@@ -263,62 +338,101 @@ export default function CitizenDashboard({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* Hold-to-Panic Circular Button Block (Custom Mockup Emergency Icon - No concentric rings, shadow-based) */}
+        {/* ─── Emergency Button ─────────────────────────────────────── */}
         <View style={styles.panicContainer}>
-          <TouchableOpacity
-            style={[
-              styles.panicButton,
-              isHolding && styles.panicButtonHolding
-            ]}
-            onPressIn={handlePanicPressIn}
-            onPressOut={handlePanicPressOut}
-            activeOpacity={0.9}
-          >
-            {isHolding ? (
-              <Text style={styles.holdTimerText}>{secondsRemaining}s</Text>
-            ) : (
-              <Svg width={64} height={64} viewBox="0 0 64 64">
-                {/* Warning Triangle Outline */}
-                <Path
-                  d="M 28 8 L 8 44 C 6.5 47 8.5 49 11 49 L 43 49 C 45.5 49 47.5 47 46 44 L 28 8 Z"
-                  stroke="#FFFFFF"
-                  strokeWidth="3.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  fill="none"
-                />
-                {/* Exclamation point inside warning triangle */}
-                <Path
-                  d="M 28 20 L 28 33"
-                  stroke="#FFFFFF"
-                  strokeWidth="3.5"
-                  strokeLinecap="round"
-                />
-                <Circle cx="28" cy="40" r="2" fill="#FFFFFF" />
 
-                {/* Siren light dome and base overlapping bottom-right corner */}
-                <Path
-                  d="M 36 44 L 56 44"
-                  stroke="#FFFFFF"
-                  strokeWidth="4"
-                  strokeLinecap="round"
-                />
-                <Path
-                  d="M 38 44 C 38 34 54 34 54 44 Z"
-                  fill="#FFFFFF"
-                />
-                <Path
-                  d="M 52 32 L 57 27 M 55 40 L 61 39 M 46 28 L 48 21"
-                  stroke="#FFFFFF"
-                  strokeWidth="3"
-                  strokeLinecap="round"
-                />
-              </Svg>
+          {/* Animated wrapper: breathing pulse ring + scale press */}
+          <Animated.View style={[
+            styles.panicButtonWrapper,
+            { transform: [{ scale: scaleAnim }] }
+          ]}>
+
+            {/* Breathing pulse ring (behind button) */}
+            <Animated.View style={[
+              styles.pulseRing,
+              {
+                opacity: pulseAnim.interpolate({ inputRange: [1, 1.35], outputRange: [0.35, 0] }),
+                transform: [{ scale: pulseAnim }],
+              }
+            ]} />
+
+            {/* Second, slower pulse ring */}
+            <Animated.View style={[
+              styles.pulseRing,
+              styles.pulseRingOuter,
+              {
+                opacity: pulseAnim.interpolate({ inputRange: [1, 1.35], outputRange: [0.15, 0] }),
+                transform: [{ scale: pulseAnim.interpolate({ inputRange: [1, 1.35], outputRange: [1.1, 1.55] }) }],
+              }
+            ]} />
+
+            {/* SVG countdown arc (shown during hold) */}
+            {isHolding && (
+              <View style={styles.arcOverlay} pointerEvents="none">
+                <Svg width={140} height={140} viewBox="0 0 140 140">
+                  {/* Background circle track */}
+                  <Circle cx="70" cy="70" r="62" stroke="rgba(255,255,255,0.2)" strokeWidth="4" fill="none" />
+                  {/* Sweeping progress arc */}
+                  <AnimatedCircle
+                    cx="70"
+                    cy="70"
+                    r="62"
+                    stroke="#FFFFFF"
+                    strokeWidth="4"
+                    strokeLinecap="round"
+                    fill="none"
+                    strokeDasharray={389.56}
+                    strokeDashoffset={arcProgress.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [389.56, 0]
+                    })}
+                    transform="rotate(-90 70 70)"
+                  />
+                </Svg>
+              </View>
             )}
-          </TouchableOpacity>
-          <Text style={styles.panicSubtitle}>
+
+            {/* The actual button */}
+            <TouchableOpacity
+              style={[styles.panicButton, isHolding && styles.panicButtonHolding]}
+              onPressIn={handlePanicPressIn}
+              onPressOut={handlePanicPressOut}
+              activeOpacity={1}
+            >
+              {isHolding ? (
+                <Text style={styles.holdTimerText}>{secondsRemaining}s</Text>
+              ) : (
+                <Svg width={64} height={64} viewBox="0 0 64 64">
+                  {/* Warning Triangle Outline */}
+                  <Path
+                    d="M 28 8 L 8 44 C 6.5 47 8.5 49 11 49 L 43 49 C 45.5 49 47.5 47 46 44 L 28 8 Z"
+                    stroke="#FFFFFF"
+                    strokeWidth="3.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    fill="none"
+                  />
+                  {/* Exclamation point inside warning triangle */}
+                  <Path
+                    d="M 28 20 L 28 33"
+                    stroke="#FFFFFF"
+                    strokeWidth="3.5"
+                    strokeLinecap="round"
+                  />
+                  <Circle cx="28" cy="40" r="2" fill="#FFFFFF" />
+                  {/* Siren light dome and base */}
+                  <Path d="M 36 44 L 56 44" stroke="#FFFFFF" strokeWidth="4" strokeLinecap="round" />
+                  <Path d="M 38 44 C 38 34 54 34 54 44 Z" fill="#FFFFFF" />
+                  <Path d="M 52 32 L 57 27 M 55 40 L 61 39 M 46 28 L 48 21" stroke="#FFFFFF" strokeWidth="3" strokeLinecap="round" />
+                </Svg>
+              )}
+            </TouchableOpacity>
+          </Animated.View>
+
+          {/* Subtitle fades slightly on hold */}
+          <Animated.Text style={[styles.panicSubtitle, { opacity: subtitleOpacity }]}>
             {isHolding ? 'RELEASE TO CANCEL' : 'Press and hold in an immediate threatening emergency.'}
-          </Text>
+          </Animated.Text>
         </View>
 
         {/* Quick Services section */}
@@ -679,21 +793,44 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     marginBottom: 36,
   },
+  panicButtonWrapper: {
+    width: 160,
+    height: 160,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  pulseRing: {
+    position: 'absolute',
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: '#FF3B3F',
+  },
+  pulseRingOuter: {
+    backgroundColor: '#FF3B3F',
+  },
+  arcOverlay: {
+    position: 'absolute',
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    overflow: 'hidden',
+  },
   panicButton: {
     width: 140,
     height: 140,
     borderRadius: 70,
-    backgroundColor: '#FF3B3F', // Mockup red color
+    backgroundColor: '#FF3B3F',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 4,
-    borderColor: '#FFEBEB',
-    // Smooth glowing red shadow
+    borderColor: 'rgba(255,255,255,0.25)',
     shadowColor: '#FF3B3F',
     shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.15, // Low opacity soft red shadow
+    shadowOpacity: 0.4,
     shadowRadius: 28,
-    elevation: 6,
+    elevation: 10,
   },
   panicButtonHolding: {
     backgroundColor: '#DC2626',

@@ -22,6 +22,13 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
+    // Helper: check if requesting user is an admin or responder
+    function isAdminOrResponder() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'responder');
+    }
+
     // Rules for user profiles
     match /users/{userId} {
       // Create: only the authenticated user can create their own profile.
@@ -30,12 +37,18 @@ service cloud.firestore {
       allow create: if isOwner(userId)
                     && request.resource.data.uid == request.auth.uid;
 
-      // Read / update / delete: owner only
-      allow read, update, delete: if isOwner(userId);
+      // Read: owner OR admin/responder (so responders can view reporter profiles)
+      allow read: if isOwner(userId) || isAdminOrResponder();
+
+      // Update / delete: owner only
+      allow update, delete: if isOwner(userId);
 
       // Rules for user notifications
       match /notifications/{notificationId} {
-        allow read, write: if isOwner(userId);
+        // Read: owner only
+        allow read: if isOwner(userId);
+        // Write: owner OR admin/responder (so admin/responders can trigger updates)
+        allow write: if isOwner(userId) || isAdminOrResponder();
       }
     }
 

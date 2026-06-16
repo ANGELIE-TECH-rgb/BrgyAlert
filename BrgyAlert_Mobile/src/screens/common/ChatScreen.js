@@ -11,6 +11,7 @@ import {
   Platform,
   ActivityIndicator,
   ScrollView,
+  Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, getDoc, doc, updateDoc, where, getDocs, increment, writeBatch } from 'firebase/firestore';
@@ -32,6 +33,102 @@ export default function ChatScreen({ route, navigation }) {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(true);
+  const [citizenProfile, setCitizenProfile] = useState(null);
+
+  // Typing animation & status refs/states
+  const typingTimeoutRef = useRef(null);
+  const localIsTypingRef = useRef(false);
+  const dot1 = useRef(new Animated.Value(0)).current;
+  const dot2 = useRef(new Animated.Value(0)).current;
+  const dot3 = useRef(new Animated.Value(0)).current;
+
+  const isOtherTyping = isAdmin 
+    ? activeAlert?.typingCitizen === true 
+    : activeAlert?.typingAdmin === true;
+
+  const updateTypingStatus = async (typing) => {
+    if (!currentAlertId || !user) return;
+    if (localIsTypingRef.current === typing) return;
+    localIsTypingRef.current = typing;
+
+    try {
+      const alertDocRef = doc(db, 'alerts', currentAlertId);
+      if (isAdmin) {
+        await updateDoc(alertDocRef, { typingAdmin: typing });
+      } else {
+        await updateDoc(alertDocRef, { typingCitizen: typing });
+      }
+    } catch (err) {
+      console.log('Error updating typing status:', err);
+    }
+  };
+
+  const handleTextChange = (text) => {
+    setInputText(text);
+
+    if (text.trim().length > 0) {
+      updateTypingStatus(true);
+
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+
+      typingTimeoutRef.current = setTimeout(() => {
+        updateTypingStatus(false);
+      }, 3000);
+    } else {
+      updateTypingStatus(false);
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (isOtherTyping) {
+      const animateDot = (dot, delay) => {
+        return Animated.loop(
+          Animated.sequence([
+            Animated.delay(delay),
+            Animated.timing(dot, {
+              toValue: -6,
+              duration: 250,
+              useNativeDriver: true,
+            }),
+            Animated.timing(dot, {
+              toValue: 0,
+              duration: 250,
+              useNativeDriver: true,
+            }),
+            Animated.delay(250),
+          ])
+        );
+      };
+
+      const anim = Animated.parallel([
+        animateDot(dot1, 0),
+        animateDot(dot2, 125),
+        animateDot(dot3, 250),
+      ]);
+      anim.start();
+
+      return () => {
+        anim.stop();
+        dot1.setValue(0);
+        dot2.setValue(0);
+        dot3.setValue(0);
+      };
+    }
+  }, [isOtherTyping]);
+
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      updateTypingStatus(false);
+    };
+  }, [currentAlertId]);
 
   // Set active chat globally to suppress local banners for this thread
   useEffect(() => {
@@ -138,6 +235,25 @@ export default function ChatScreen({ route, navigation }) {
     return () => unsubscribe();
   }, [currentAlertId]);
 
+  // Subscribe to citizen profile to get the latest name dynamically
+  useEffect(() => {
+    if (!isAdmin || !activeAlert?.userId) {
+      setCitizenProfile(null);
+      return;
+    }
+
+    const userDocRef = doc(db, 'users', activeAlert.userId);
+    const unsubscribeUser = onSnapshot(userDocRef, (userSnap) => {
+      if (userSnap.exists()) {
+        setCitizenProfile(userSnap.data());
+      }
+    }, (err) => {
+      console.error('Error listening to citizen profile in ChatScreen:', err);
+    });
+
+    return () => unsubscribeUser();
+  }, [isAdmin, activeAlert?.userId]);
+
   // Subscribe to real-time chat messages for the current alert
   useEffect(() => {
     if (!currentAlertId || !user) {
@@ -237,6 +353,11 @@ export default function ChatScreen({ route, navigation }) {
     const messageText = inputText.trim();
     setInputText('');
 
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    updateTypingStatus(false);
+
     try {
       const messagesRef = collection(db, 'alerts', currentAlertId, 'messages');
       
@@ -325,6 +446,26 @@ export default function ChatScreen({ route, navigation }) {
     );
   };
 
+  const renderListFooter = () => {
+    if (!isOtherTyping) return null;
+
+    const otherName = isAdmin ? citizenProfile?.fullName || activeAlert?.reporterName || 'Citizen' : 'Barangay Support';
+    const avatarInitial = otherName.substring(0, 1).toUpperCase();
+
+    return (
+      <View style={[styles.messageRow, styles.messageRowLeft, { marginBottom: 16 }]}>
+        <View style={styles.senderAvatar}>
+          <Text style={styles.senderAvatarText}>{avatarInitial}</Text>
+        </View>
+        <View style={[styles.bubble, styles.bubbleLeft, styles.typingBubble]}>
+          <Animated.View style={[styles.typingDot, { transform: [{ translateY: dot1 }] }]} />
+          <Animated.View style={[styles.typingDot, { transform: [{ translateY: dot2 }] }]} />
+          <Animated.View style={[styles.typingDot, { transform: [{ translateY: dot3 }] }]} />
+        </View>
+      </View>
+    );
+  };
+
   const activeBadge = activeAlert ? getStatusBadgeStyle(activeAlert.status) : null;
   const currentSerial = activeAlert ? `#INC-${activeAlert.id.substring(0, 3).toUpperCase()}` : '';
 
@@ -343,7 +484,7 @@ export default function ChatScreen({ route, navigation }) {
         </TouchableOpacity>
         
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>{isAdmin ? userName || 'Citizen Chat' : 'Barangay Support'}</Text>
+          <Text style={styles.headerTitle}>{isAdmin ? citizenProfile?.fullName || userName || 'Citizen Chat' : 'Barangay Support'}</Text>
           <Text style={styles.headerSubtitle}>
             {isAdmin ? 'Responder Mode' : 'Barangay Command Center'}
           </Text>
@@ -450,6 +591,7 @@ export default function ChatScreen({ route, navigation }) {
           data={messages}
           keyExtractor={(item) => item.id}
           renderItem={renderMessageItem}
+          ListFooterComponent={renderListFooter}
           contentContainerStyle={styles.chatListContent}
           showsVerticalScrollIndicator={false}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
@@ -463,7 +605,8 @@ export default function ChatScreen({ route, navigation }) {
           placeholder="Type your message here..."
           placeholderTextColor="#9CA3AF"
           value={inputText}
-          onChangeText={setInputText}
+          onChangeText={handleTextChange}
+          onBlur={() => updateTypingStatus(false)}
           multiline
           maxLength={500}
         />
@@ -734,5 +877,20 @@ const styles = StyleSheet.create({
     marginTop: 12,
     color: '#4B5563',
     fontSize: 14,
+  },
+  typingBubble: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    justifyContent: 'center',
+    minWidth: 60,
+  },
+  typingDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#9CA3AF',
+    marginHorizontal: 3,
   },
 });

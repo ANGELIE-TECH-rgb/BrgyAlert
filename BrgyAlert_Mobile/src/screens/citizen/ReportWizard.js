@@ -27,6 +27,7 @@ import { useAuth } from '../../context/AuthContext';
 import { db, storage } from '../../services/firebaseConfig';
 import { getCurrentLocation } from '../../services/locationService';
 import { selectImageFromLibrary, captureImageWithCamera } from '../../services/mediaService';
+import GestureModal from '../../components/GestureModal';
 
 const INCIDENT_TYPES = [
   'Physical Abuse',
@@ -49,95 +50,6 @@ const CATEGORY_SMS_CODES = {
 };
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-
-// Reusable Gesture-dismissible Modal Component
-function GestureModal({ visible, onClose, title, children }) {
-  const panY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
-
-  useEffect(() => {
-    if (visible) {
-      Animated.timing(panY, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }).start();
-    } else {
-      Animated.timing(panY, {
-        toValue: SCREEN_HEIGHT,
-        duration: 250,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [visible]);
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        return gestureState.dy > 5; // only swipe down
-      },
-      onPanResponderGrant: () => {
-        panY.setOffset(0);
-      },
-      onPanResponderMove: (_, gestureState) => {
-        if (gestureState.dy > 0) {
-          panY.setValue(gestureState.dy);
-        }
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dy > 100) {
-          Animated.timing(panY, {
-            toValue: SCREEN_HEIGHT,
-            duration: 200,
-            useNativeDriver: true,
-          }).start(() => {
-            onClose();
-          });
-        } else {
-          Animated.spring(panY, {
-            toValue: 0,
-            useNativeDriver: true,
-            tension: 40,
-            friction: 8,
-          }).start();
-        }
-      },
-    })
-  ).current;
-
-  if (!visible) return null;
-
-  return (
-    <Modal
-      transparent
-      animationType="none"
-      visible={visible}
-      onRequestClose={onClose}
-    >
-      <TouchableOpacity
-        style={styles.modalOverlay}
-        activeOpacity={1}
-        onPress={onClose}
-      >
-        <Animated.View
-          style={[
-            styles.modalContent,
-            { transform: [{ translateY: panY }] }
-          ]}
-          onStartShouldSetResponder={() => true} // stop event bubbling
-        >
-          <View style={styles.dragHandleContainer} {...panResponder.panHandlers}>
-            <View style={styles.modalHandle} />
-          </View>
-
-          {title ? <Text style={styles.modalTitle}>{title}</Text> : null}
-
-          {children}
-        </Animated.View>
-      </TouchableOpacity>
-    </Modal>
-  );
-}
 
 export default function ReportWizard({ navigation }) {
   const { user, userProfile } = useAuth();

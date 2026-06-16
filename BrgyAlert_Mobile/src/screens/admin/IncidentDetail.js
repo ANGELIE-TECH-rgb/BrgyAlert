@@ -22,6 +22,7 @@ import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import { doc, onSnapshot, updateDoc, serverTimestamp, query, collection, where, getDocs, writeBatch } from 'firebase/firestore';
 import { db } from '../../services/firebaseConfig';
 import { useAuth } from '../../context/AuthContext';
+import GestureModal from '../../components/GestureModal';
 
 const STATUS_STEPS = [
   { key: 'submitted', label: 'Report Submitted', desc: 'Report has been successfully recorded in the system.' },
@@ -55,6 +56,12 @@ export default function IncidentDetail({ route, navigation }) {
   const [declineModalVisible, setDeclineModalVisible] = useState(false);
   const [declineReason, setDeclineReason] = useState('');
   const [declineSubmitting, setDeclineSubmitting] = useState(false);
+
+  // Status modal state
+  const [statusModalVisible, setStatusModalVisible] = useState(false);
+  
+  // Dynamic reporter profile lookup
+  const [reporterProfile, setReporterProfile] = useState(null);
 
   // Subscribe to real-time updates for this alert
   useEffect(() => {
@@ -107,6 +114,23 @@ export default function IncidentDetail({ route, navigation }) {
     return () => unsubscribe();
   }, [alertId, user]);
 
+  useEffect(() => {
+    if (!incident?.userId) {
+      setReporterProfile(null);
+      return;
+    }
+    const userDocRef = doc(db, 'users', incident.userId);
+    const unsubscribeUser = onSnapshot(userDocRef, (userSnap) => {
+      if (userSnap.exists()) {
+        setReporterProfile(userSnap.data());
+      }
+    }, (err) => {
+      console.error('Error listening to reporter profile:', err);
+    });
+
+    return () => unsubscribeUser();
+  }, [incident?.userId]);
+
   // Determine current active step index for timeline
   const getCurrentStepIndex = () => {
     if (!incident) return 0;
@@ -140,14 +164,46 @@ export default function IncidentDetail({ route, navigation }) {
   };
 
   // Normal status update (non-decline)
-  const updateIncidentStatus = async (newStatus) => {
+  const handleStatusSelection = (newStatus) => {
+    const selectedOpt = STATUS_OPTIONS.find(opt => opt.key === newStatus);
+    const label = selectedOpt ? selectedOpt.label : newStatus;
+
     if (newStatus === 'declined') {
-      // Open decline reason modal instead
-      setDeclineReason('');
-      setDeclineModalVisible(true);
+      Alert.alert(
+        'Decline Report',
+        'Are you sure you want to decline this report? This will mark it as invalid/fake.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Yes, Decline', 
+            onPress: () => {
+              setStatusModalVisible(false);
+              setDeclineReason('');
+              setDeclineModalVisible(true);
+            }
+          }
+        ]
+      );
       return;
     }
 
+    Alert.alert(
+      'Change Status',
+      `Are you sure you want to change the status of this report to "${label}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Confirm', 
+          onPress: async () => {
+            setStatusModalVisible(false);
+            await performStatusUpdate(newStatus);
+          }
+        }
+      ]
+    );
+  };
+
+  const performStatusUpdate = async (newStatus) => {
     if (updating || !alertId) return;
     setUpdating(true);
     try {
@@ -156,7 +212,7 @@ export default function IncidentDetail({ route, navigation }) {
         status: newStatus,
         updatedAt: serverTimestamp()
       });
-      Alert.alert('Updated', `Status changed to ${newStatus.replace('_', ' ').toUpperCase()}.`);
+      Alert.alert('Success', `Incident status updated to "${newStatus.replace('_', ' ').toUpperCase()}".`);
     } catch (error) {
       console.error('Error updating status:', error);
       Alert.alert('Error', 'Failed to update status. Please try again.');
@@ -171,23 +227,35 @@ export default function IncidentDetail({ route, navigation }) {
       Alert.alert('Reason Required', 'Please enter a reason before declining this report.');
       return;
     }
-    setDeclineSubmitting(true);
-    try {
-      const docRef = doc(db, 'alerts', alertId);
-      await updateDoc(docRef, {
-        status: 'declined',
-        declineReason: declineReason.trim(),
-        updatedAt: serverTimestamp()
-      });
-      setDeclineModalVisible(false);
-      setDeclineReason('');
-      Alert.alert('Report Declined', 'The report has been marked as declined. The citizen will be notified with your reason.');
-    } catch (error) {
-      console.error('Error declining report:', error);
-      Alert.alert('Error', 'Failed to decline the report. Please try again.');
-    } finally {
-      setDeclineSubmitting(false);
-    }
+    Alert.alert(
+      'Confirm Decline',
+      'Are you sure you want to decline this report with the provided reason?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Decline',
+          onPress: async () => {
+            setDeclineSubmitting(true);
+            try {
+              const docRef = doc(db, 'alerts', alertId);
+              await updateDoc(docRef, {
+                status: 'declined',
+                declineReason: declineReason.trim(),
+                updatedAt: serverTimestamp()
+              });
+              setDeclineModalVisible(false);
+              setDeclineReason('');
+              Alert.alert('Report Declined', 'The report has been marked as declined.');
+            } catch (error) {
+              console.error('Error declining report:', error);
+              Alert.alert('Error', 'Failed to decline the report. Please try again.');
+            } finally {
+              setDeclineSubmitting(false);
+            }
+          }
+        }
+      ]
+    );
   };
 
   // Open native Maps app with the incident coordinates — 100% free, no API call
@@ -282,49 +350,26 @@ export default function IncidentDetail({ route, navigation }) {
                 <Text style={styles.reviewHeader}>Manage Incident Status</Text>
               </View>
               <Text style={styles.actionSubtitle}>
-                Tap a status to update, or decline if the report is fake / invalid:
+                Update the stage or status of this incident:
               </Text>
 
-              <View style={styles.statusButtonsContainer}>
-                {STATUS_OPTIONS.map((opt) => {
-                  const isSelected = currentStatusKey === opt.key
-                    || (opt.key === 'done' && currentStatusKey === 'resolved');
-
-                  return (
-                    <TouchableOpacity
-                      key={opt.key}
-                      style={[
-                        styles.statusOptionButton,
-                        isSelected && {
-                          backgroundColor: opt.bgSelected,
-                          borderColor: opt.themeColor,
-                          borderWidth: 2,
-                        },
-                        opt.key === 'declined' && styles.declineButton,
-                      ]}
-                      onPress={() => updateIncidentStatus(opt.key === 'done' ? 'resolved' : opt.key)}
-                      disabled={updating}
-                      activeOpacity={0.7}
-                    >
-                      {opt.key === 'declined' && (
-                        <Feather
-                          name="x-circle"
-                          size={14}
-                          color={isSelected ? '#EF4444' : '#9CA3AF'}
-                          style={{ marginBottom: 4 }}
-                        />
-                      )}
-                      <Text style={[
-                        styles.statusOptionText,
-                        { color: isSelected ? opt.themeColor : '#718096' },
-                        isSelected && { fontWeight: '700' },
-                      ]}>
-                        {opt.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+              <TouchableOpacity
+                style={styles.statusTriggerBtn}
+                onPress={() => setStatusModalVisible(true)}
+                disabled={updating}
+                activeOpacity={0.8}
+              >
+                <View style={styles.statusTriggerLeft}>
+                  <View style={[styles.statusTriggerDot, { backgroundColor: statusInfo.tagColor }]} />
+                  <Text style={styles.statusTriggerLabel}>
+                    Status: <Text style={styles.statusTriggerValue}>{statusInfo.statusText}</Text>
+                  </Text>
+                </View>
+                <View style={styles.statusTriggerRight}>
+                  <Text style={styles.editBtnText}>Edit</Text>
+                  <Feather name="chevron-right" size={16} color="#0F2C59" />
+                </View>
+              </TouchableOpacity>
             </View>
 
             {/* ─── INCIDENT DETAILS CARD ────────────────────────────────── */}
@@ -351,7 +396,9 @@ export default function IncidentDetail({ route, navigation }) {
               </View>
               <View style={styles.reviewRow}>
                 <Text style={styles.reviewLabel}>Witness / Reporter</Text>
-                <Text style={styles.reviewValue}>{incident.reporterName || incident.witnessName || 'Anonymous'}</Text>
+                <Text style={styles.reviewValue}>
+                  {reporterProfile?.fullName || incident.reporterName || incident.witnessName || 'Anonymous'}
+                </Text>
               </View>
             </View>
 
@@ -502,85 +549,126 @@ export default function IncidentDetail({ route, navigation }) {
           {/* Sticky Message Reporter Footer Button */}
           <View style={styles.footerContainer}>
             <TouchableOpacity 
-              style={styles.messageButton}
+              style={[styles.messageButton, isDeclined && styles.disabledMessageButton]}
               onPress={() => navigation.navigate('ChatScreen', { alertId })}
+              disabled={isDeclined}
+              activeOpacity={isDeclined ? 1 : 0.8}
             >
-              <Text style={styles.messageButtonText}>Message Reporter</Text>
+              {isDeclined ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                  <Feather name="lock" size={16} color="#FFFFFF" style={{ marginRight: 8 }} />
+                  <Text style={styles.messageButtonText}>Chat Locked (Report Declined)</Text>
+                </View>
+              ) : (
+                <Text style={styles.messageButtonText}>Message Reporter</Text>
+              )}
             </TouchableOpacity>
           </View>
         </>
       )}
 
-      {/* ─── DECLINE REASON MODAL ──────────────────────────────────────── */}
-      <Modal
-        visible={declineModalVisible}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setDeclineModalVisible(false)}
+      {/* ─── STATUS SELECTION MODAL ─────────────────────────────────────── */}
+      <GestureModal
+        visible={statusModalVisible}
+        onClose={() => setStatusModalVisible(false)}
+        contentStyle={styles.statusModalSheet}
       >
-        <KeyboardAvoidingView
-          style={styles.modalOverlay}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        <Text style={styles.statusModalTitle}>Update Status</Text>
+        <Text style={styles.statusModalSubtitle}>Select the new status for this incident:</Text>
+
+        <View style={styles.statusOptionsList}>
+          {STATUS_OPTIONS.map((opt) => {
+            const isSelected = currentStatusKey === opt.key
+              || (opt.key === 'done' && currentStatusKey === 'resolved');
+
+            return (
+              <TouchableOpacity
+                key={opt.key}
+                style={[
+                  styles.statusSelectRow,
+                  isSelected && { backgroundColor: opt.bgSelected, borderColor: opt.themeColor, borderWidth: 1.5 }
+                ]}
+                onPress={() => handleStatusSelection(opt.key === 'done' ? 'resolved' : opt.key)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.statusSelectLeft}>
+                  <View style={[styles.statusOptionDot, { backgroundColor: opt.themeColor }]} />
+                  <Text style={[
+                    styles.statusSelectLabel,
+                    isSelected && { color: opt.themeColor, fontWeight: '700' }
+                  ]}>
+                    {opt.label}
+                  </Text>
+                </View>
+                {isSelected && <Feather name="check" size={18} color={opt.themeColor} />}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <TouchableOpacity
+          style={styles.cancelStatusBtn}
+          onPress={() => setStatusModalVisible(false)}
         >
-          <TouchableOpacity
-            style={styles.modalBackdrop}
-            activeOpacity={1}
-            onPress={() => setDeclineModalVisible(false)}
-          />
-          <View style={styles.declineModalSheet}>
-            {/* Drag handle */}
-            <View style={styles.modalHandle} />
+          <Text style={styles.cancelStatusBtnText}>Cancel</Text>
+        </TouchableOpacity>
+      </GestureModal>
 
-            {/* Modal header */}
-            <View style={styles.declineModalHeader}>
-              <View style={styles.declineIconCircle}>
-                <Feather name="x-circle" size={22} color="#EF4444" />
-              </View>
-              <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={styles.declineModalTitle}>Decline Report</Text>
-                <Text style={styles.declineModalSubtitle}>
-                  Provide a reason so the citizen understands why their report was declined.
-                </Text>
-              </View>
-            </View>
-
-            {/* Reason input */}
-            <Text style={styles.declineInputLabel}>Reason for declining</Text>
-            <TextInput
-              style={styles.declineInput}
-              placeholder="e.g. Duplicate report, false alarm, insufficient details..."
-              placeholderTextColor="#9CA3AF"
-              value={declineReason}
-              onChangeText={setDeclineReason}
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-              maxLength={300}
-            />
-            <Text style={styles.charCount}>{declineReason.length}/300</Text>
-
-            {/* Action buttons */}
-            <View style={styles.declineModalButtons}>
-              <TouchableOpacity
-                style={styles.cancelModalButton}
-                onPress={() => setDeclineModalVisible(false)}
-              >
-                <Text style={styles.cancelModalButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.confirmDeclineButton, declineSubmitting && { opacity: 0.6 }]}
-                onPress={submitDecline}
-                disabled={declineSubmitting}
-              >
-                {declineSubmitting
-                  ? <ActivityIndicator size="small" color="#FFFFFF" />
-                  : <Text style={styles.confirmDeclineButtonText}>Decline Report</Text>
-                }
-              </TouchableOpacity>
-            </View>
+      {/* ─── DECLINE REASON MODAL ──────────────────────────────────────── */}
+      <GestureModal
+        visible={declineModalVisible}
+        onClose={() => setDeclineModalVisible(false)}
+        contentStyle={styles.declineModalSheet}
+        keyboardAvoiding
+      >
+        {/* Modal header */}
+        <View style={styles.declineModalHeader}>
+          <View style={styles.declineIconCircle}>
+            <Feather name="x-circle" size={22} color="#EF4444" />
           </View>
-        </KeyboardAvoidingView>
-      </Modal>
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={styles.declineModalTitle}>Decline Report</Text>
+            <Text style={styles.declineModalSubtitle}>
+              Provide a reason so the citizen understands why their report was declined.
+            </Text>
+          </View>
+        </View>
+
+        {/* Reason input */}
+        <Text style={styles.declineInputLabel}>Reason for declining</Text>
+        <TextInput
+          style={styles.declineInput}
+          placeholder="e.g. Duplicate report, false alarm, insufficient details..."
+          placeholderTextColor="#9CA3AF"
+          value={declineReason}
+          onChangeText={setDeclineReason}
+          multiline
+          numberOfLines={4}
+          textAlignVertical="top"
+          maxLength={300}
+        />
+        <Text style={styles.charCount}>{declineReason.length}/300</Text>
+
+        {/* Action buttons */}
+        <View style={styles.declineModalButtons}>
+          <TouchableOpacity
+            style={styles.cancelModalButton}
+            onPress={() => setDeclineModalVisible(false)}
+          >
+            <Text style={styles.cancelModalButtonText}>Cancel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.confirmDeclineButton, declineSubmitting && { opacity: 0.6 }]}
+            onPress={submitDecline}
+            disabled={declineSubmitting}
+          >
+            {declineSubmitting
+              ? <ActivityIndicator size="small" color="#FFFFFF" />
+              : <Text style={styles.confirmDeclineButtonText}>Decline Report</Text>
+            }
+          </TouchableOpacity>
+        </View>
+      </GestureModal>
 
       {/* ─── IMAGE VIEWER MODAL ───────────────────────────────────────── */}
       <Modal
@@ -877,9 +965,121 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 3,
   },
+  disabledMessageButton: {
+    backgroundColor: '#94A3B8',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
   messageButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
+  },
+  statusTriggerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginTop: 8,
+  },
+  statusTriggerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statusTriggerDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 10,
+  },
+  statusTriggerLabel: {
+    fontSize: 14,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  statusTriggerValue: {
+    color: '#0F2C59',
+    fontWeight: '700',
+  },
+  statusTriggerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  editBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0F2C59',
+    marginRight: 4,
+  },
+  statusModalSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 24,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 28,
+    paddingTop: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  statusModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  statusModalSubtitle: {
+    fontSize: 13,
+    color: '#6B7280',
+    fontWeight: '500',
+    marginBottom: 16,
+  },
+  statusOptionsList: {
+    marginBottom: 16,
+  },
+  statusSelectRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 10,
+  },
+  statusSelectLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statusOptionDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 10,
+  },
+  statusSelectLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  cancelStatusBtn: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 30,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  cancelStatusBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#6B7280',
   },
 });

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -10,11 +10,15 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
-  StatusBar
+  StatusBar,
+  Alert,
+  Modal
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { Feather, AntDesign, Ionicons } from '@expo/vector-icons';
 import GoogleIcon from '../../components/GoogleIcon';
+import { checkLoginStatus, recordFailedLogin, resetLoginAttempts } from '../../services/rateLimiter';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function LoginScreen({ navigation }) {
   const { login, loginWithGoogle } = useAuth();
@@ -25,10 +29,66 @@ export default function LoginScreen({ navigation }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [focusedField, setFocusedField] = useState(null);
+  const [lockoutTime, setLockoutTime] = useState(0);
+  const [rememberMe, setRememberMe] = useState(false);
+
+  // Load remembered email on startup
+  useEffect(() => {
+    const loadRememberedEmail = async () => {
+      try {
+        const storedEmail = await AsyncStorage.getItem('rememberedEmail');
+        if (storedEmail) {
+          setEmail(storedEmail);
+          setRememberMe(true);
+        }
+      } catch (err) {
+        console.error('Failed to load remembered email', err);
+      }
+    };
+    loadRememberedEmail();
+  }, []);
+
+  useEffect(() => {
+    const initRateLimit = async () => {
+      const status = await checkLoginStatus();
+      if (status.locked) {
+        setLockoutTime(status.secondsRemaining);
+        setErrorMsg(`Too many failed attempts. Try again in ${status.secondsRemaining} seconds.`);
+      }
+    };
+    initRateLimit();
+  }, []);
+
+  useEffect(() => {
+    let timer;
+    if (lockoutTime > 0) {
+      timer = setInterval(() => {
+        setLockoutTime((prev) => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            setErrorMsg('');
+            return 0;
+          }
+          setErrorMsg(`Too many failed attempts. Try again in ${prev - 1} seconds.`);
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [lockoutTime]);
 
   const handleLogin = async () => {
+    const status = await checkLoginStatus();
+    if (status.locked) {
+      setLockoutTime(status.secondsRemaining);
+      setErrorMsg(`Too many failed attempts. Try again in ${status.secondsRemaining} seconds.`);
+      Alert.alert('Locked Out', `Too many failed attempts. Please try again in ${status.secondsRemaining} seconds.`);
+      return;
+    }
+
     if (!email || !password) {
       setErrorMsg('Please enter both email and password.');
+      Alert.alert('Validation Error', 'Please enter both email and password.');
       return;
     }
 
@@ -37,15 +97,37 @@ export default function LoginScreen({ navigation }) {
 
     try {
       await login(email.trim(), password);
+      await resetLoginAttempts();
+      
+      if (rememberMe) {
+        await AsyncStorage.setItem('rememberedEmail', email.trim());
+      } else {
+        await AsyncStorage.removeItem('rememberedEmail');
+      }
     } catch (error) {
       console.log('Login failed:', error.code || error.message);
-      setErrorMsg('Incorrect email or password. Please try again.');
+      const rateStatus = await recordFailedLogin();
+      if (rateStatus.locked) {
+        setLockoutTime(rateStatus.secondsRemaining);
+        setErrorMsg(`Too many failed attempts. Try again in ${rateStatus.secondsRemaining} seconds.`);
+        Alert.alert('Locked Out', `Too many failed attempts. Please try again in ${rateStatus.secondsRemaining} seconds.`);
+      } else {
+        setErrorMsg('Incorrect email or password. Please try again.');
+        Alert.alert('Login Failed', 'Incorrect email or password. Please try again.');
+      }
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleGoogleLogin = () => {
+  const handleGoogleLogin = async () => {
+    const status = await checkLoginStatus();
+    if (status.locked) {
+      setLockoutTime(status.secondsRemaining);
+      setErrorMsg(`Too many failed attempts. Try again in ${status.secondsRemaining} seconds.`);
+      Alert.alert('Locked Out', `Too many failed attempts. Please try again in ${status.secondsRemaining} seconds.`);
+      return;
+    }
     setErrorMsg('');
     loginWithGoogle();
   };
@@ -123,26 +205,42 @@ export default function LoginScreen({ navigation }) {
               </TouchableOpacity>
             </View>
 
-            {/* Forgot Password Link */}
-            <TouchableOpacity
-              style={styles.forgotPasswordContainer}
-              onPress={() => navigation.navigate('ForgotPassword')}
-              disabled={isSubmitting}
-            >
-              <Text style={styles.forgotPasswordText}>Forgot password?</Text>
-            </TouchableOpacity>
+            {/* Options Row (Remember Me & Forgot Password) */}
+            <View style={styles.optionsRow}>
+              <TouchableOpacity
+                style={styles.rememberMeContainer}
+                onPress={() => setRememberMe(!rememberMe)}
+                disabled={isSubmitting}
+                activeOpacity={0.7}
+              >
+                <Feather
+                  name={rememberMe ? "check-square" : "square"}
+                  size={18}
+                  color={rememberMe ? "#0B2564" : "#A0AEC0"}
+                />
+                <Text style={styles.rememberMeText}>Remember me</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => navigation.navigate('ForgotPassword')}
+                disabled={isSubmitting}
+              >
+                <Text style={styles.forgotPasswordText}>Forgot password?</Text>
+              </TouchableOpacity>
+            </View>
 
             {/* Login Button */}
             <TouchableOpacity
-              style={[styles.loginButton, isSubmitting && styles.loginButtonDisabled]}
+              style={[
+                styles.loginButton,
+                (isSubmitting || lockoutTime > 0) && styles.loginButtonDisabled
+              ]}
               onPress={handleLogin}
-              disabled={isSubmitting}
+              disabled={isSubmitting || lockoutTime > 0}
             >
-              {isSubmitting ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.loginButtonText}>Login</Text>
-              )}
+              <Text style={styles.loginButtonText}>
+                {lockoutTime > 0 ? `Locked (${lockoutTime}s)` : 'Login'}
+              </Text>
             </TouchableOpacity>
           </View>
 
@@ -155,9 +253,12 @@ export default function LoginScreen({ navigation }) {
 
           {/* Google Button */}
           <TouchableOpacity
-            style={styles.googleButton}
+            style={[
+              styles.googleButton,
+              (isSubmitting || lockoutTime > 0) && styles.googleButtonDisabled
+            ]}
             onPress={handleGoogleLogin}
-            disabled={isSubmitting}
+            disabled={isSubmitting || lockoutTime > 0}
           >
             <GoogleIcon size={20} style={styles.googleIcon} />
             <Text style={styles.googleButtonText}>Continue with Google</Text>
@@ -173,6 +274,22 @@ export default function LoginScreen({ navigation }) {
 
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Loading Overlay Modal */}
+      <Modal
+        transparent={true}
+        animationType="fade"
+        visible={isSubmitting}
+        onRequestClose={() => {}}
+      >
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#0B2564" />
+            <Text style={styles.loadingText}>Signing in...</Text>
+            <Text style={styles.loadingSubtext}>Please wait while we verify your credentials</Text>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -276,10 +393,22 @@ const styles = StyleSheet.create({
     height: '100%',
     justifyContent: 'center',
   },
-  forgotPasswordContainer: {
-    alignSelf: 'flex-end',
+  optionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginTop: 12,
     marginBottom: 28,
+  },
+  rememberMeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  rememberMeText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#4A5568',
+    fontWeight: '500',
   },
   forgotPasswordText: {
     color: '#0B2564',
@@ -348,5 +477,40 @@ const styles = StyleSheet.create({
     color: '#0B2564',
     fontSize: 14,
     fontWeight: 'bold',
+  },
+  googleButtonDisabled: {
+    opacity: 0.5,
+    backgroundColor: '#F7FAFC',
+  },
+  loadingOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.40)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingContainer: {
+    backgroundColor: '#FFFFFF',
+    padding: 24,
+    borderRadius: 20,
+    alignItems: 'center',
+    width: 280,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  loadingText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0B2564',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  loadingSubtext: {
+    fontSize: 12,
+    color: '#718096',
+    marginTop: 8,
+    textAlign: 'center',
   },
 });

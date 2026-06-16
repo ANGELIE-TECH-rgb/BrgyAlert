@@ -7,6 +7,7 @@ import {
   StatusBar,
   FlatList,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
@@ -22,6 +23,26 @@ export default function ChatMessages({ navigation }) {
 
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [readFilter, setReadFilter] = useState('all'); // all | unread | read
+
+  // Filter alerts by search query and read/unread status
+  const filteredAlerts = alerts.filter((alert) => {
+    const serialCode = alert.id ? `INC-${alert.id.substring(0, 3).toUpperCase()}` : '';
+    const matchesSearch =
+      (alert.category || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (alert.details || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (alert.lastMessageText || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      serialCode.toLowerCase().includes(searchQuery.toLowerCase());
+
+    const unreadCount = alert.unreadCountCitizen || 0;
+    const matchesFilter =
+      readFilter === 'all' ||
+      (readFilter === 'unread' && unreadCount > 0) ||
+      (readFilter === 'read' && unreadCount === 0);
+
+    return matchesSearch && matchesFilter;
+  });
 
   // Fetch only this citizen's incident reports
   useEffect(() => {
@@ -38,9 +59,13 @@ export default function ChatMessages({ navigation }) {
       (snapshot) => {
         const list = [];
         snapshot.forEach((doc) => {
+          const data = doc.data();
+          if (data.status === 'declined') {
+            return;
+          }
           list.push({
             id: doc.id,
-            ...doc.data(),
+            ...data,
           });
         });
         setAlerts(list);
@@ -175,6 +200,49 @@ export default function ChatMessages({ navigation }) {
         </Text>
       </View>
 
+      {/* Search and Filter Panel */}
+      {!loading && alerts.length > 0 && (
+        <View style={styles.searchFilterContainer}>
+          {/* Search Bar */}
+          <View style={styles.searchBar}>
+            <Feather name="search" size={18} color="#9CA3AF" style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search conversations..."
+              placeholderTextColor="#9CA3AF"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoCorrect={false}
+            />
+            {searchQuery ? (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <Feather name="x" size={16} color="#6B7280" />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+
+          {/* Filter Pills */}
+          <View style={styles.filterPills}>
+            {['all', 'unread', 'read'].map((filter) => {
+              const isSelected = readFilter === filter;
+              const label = filter.charAt(0).toUpperCase() + filter.slice(1);
+              return (
+                <TouchableOpacity
+                  key={filter}
+                  style={[styles.filterPill, isSelected && styles.filterPillActive]}
+                  onPress={() => setReadFilter(filter)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.filterPillText, isSelected && styles.filterPillTextActive]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      )}
+
       {/* List / Content */}
       {loading ? (
         <View style={styles.centerContainer}>
@@ -190,9 +258,18 @@ export default function ChatMessages({ navigation }) {
             No reports filed yet. Tapping the floating '+' button on the home screen allows you to report an incident and start chatting.
           </Text>
         </View>
+      ) : filteredAlerts.length === 0 ? (
+        <View style={styles.centerContainer}>
+          <View style={styles.emptyIconWrapper}>
+            <Feather name="search" size={40} color="#9CA3AF" />
+          </View>
+          <Text style={styles.emptyText}>
+            No conversations match your search or filter.
+          </Text>
+        </View>
       ) : (
         <FlatList
-          data={alerts}
+          data={filteredAlerts}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           contentContainerStyle={styles.listContent}
@@ -378,5 +455,49 @@ const styles = StyleSheet.create({
     right: 0,
     height: 180,
     zIndex: 5,
+  },
+  searchFilterContainer: {
+    paddingHorizontal: 24,
+    marginBottom: 16,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    height: 48,
+    marginBottom: 12,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#1F2937',
+    height: '100%',
+  },
+  filterPills: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  filterPill: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+    marginRight: 8,
+  },
+  filterPillActive: {
+    backgroundColor: '#0F2C59',
+  },
+  filterPillText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  filterPillTextActive: {
+    color: '#FFFFFF',
   },
 });

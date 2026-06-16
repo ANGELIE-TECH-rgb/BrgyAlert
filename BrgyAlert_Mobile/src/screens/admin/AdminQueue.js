@@ -109,12 +109,12 @@ export default function AdminQueue({ navigation }) {
   // Filter and search computation
   const filteredAlerts = allAlerts.filter((alert) => {
     // 1. Filter by Status Chip
-    if (statusFilter !== 'all') {
-      if (statusFilter === 'resolved') {
-        if (alert.status !== 'done' && alert.status !== 'resolved') return false;
-      } else {
-        if (alert.status !== statusFilter) return false;
-      }
+    if (statusFilter === 'all') {
+      if (alert.status === 'declined') return false;
+    } else if (statusFilter === 'resolved') {
+      if (alert.status !== 'done' && alert.status !== 'resolved') return false;
+    } else {
+      if (alert.status !== statusFilter) return false;
     }
 
     // 2. Filter by Search Query

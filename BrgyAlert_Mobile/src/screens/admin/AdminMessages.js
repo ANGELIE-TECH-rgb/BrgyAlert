@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,9 +7,10 @@ import {
   StatusBar,
   FlatList,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc } from 'firebase/firestore';
 import { Feather } from '@expo/vector-icons';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import { db } from '../../services/firebaseConfig';
@@ -20,6 +21,60 @@ export default function AdminMessages({ navigation }) {
 
   const [loading, setLoading] = useState(true);
   const [chatThreads, setChatThreads] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [readFilter, setReadFilter] = useState('all'); // all | unread | read
+
+  // Dynamic user profiles lookup
+  const [userProfiles, setUserProfiles] = useState({});
+  const listenersRef = useRef({});
+
+  useEffect(() => {
+    const newUids = chatThreads
+      .map((t) => t.userId)
+      .filter((uid) => uid && uid !== 'anonymous' && !uid.startsWith('+') && !listenersRef.current[uid]);
+
+    if (newUids.length > 0) {
+      newUids.forEach((uid) => {
+        const unsub = onSnapshot(doc(db, 'users', uid), (userSnap) => {
+          if (userSnap.exists()) {
+            setUserProfiles((prev) => ({
+              ...prev,
+              [uid]: userSnap.data()
+            }));
+          }
+        }, (err) => {
+          console.error(`Error listening to user profile ${uid}:`, err);
+        });
+        listenersRef.current[uid] = unsub;
+      });
+    }
+  }, [chatThreads]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(listenersRef.current).forEach((unsub) => unsub());
+    };
+  }, []);
+
+  // Filter threads by search query and read/unread status
+  const filteredThreads = chatThreads.filter((thread) => {
+    const profile = userProfiles[thread.userId];
+    const resolvedReporterName = profile?.fullName || thread.reporterName || '';
+
+    const matchesSearch =
+      resolvedReporterName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (thread.lastMessageText || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (thread.phoneNumber || '').includes(searchQuery) ||
+      thread.alerts.some(a => a.category.toLowerCase().includes(searchQuery.toLowerCase()));
+
+    const unreadCount = thread.unreadCountAdmin || 0;
+    const matchesFilter =
+      readFilter === 'all' ||
+      (readFilter === 'unread' && unreadCount > 0) ||
+      (readFilter === 'read' && unreadCount === 0);
+
+    return matchesSearch && matchesFilter;
+  });
 
   // Fetch all alerts to aggregate and group by reporter (userId)
   useEffect(() => {
@@ -35,6 +90,9 @@ export default function AdminMessages({ navigation }) {
 
         snapshot.forEach((doc) => {
           const data = doc.data();
+          if (data.status === 'declined') {
+            return;
+          }
           const alertId = doc.id;
           
           let groupKey = data.userId;
@@ -106,6 +164,9 @@ export default function AdminMessages({ navigation }) {
 
   // Render chat thread row
   const renderItem = ({ item }) => {
+    const userProfile = userProfiles[item.userId];
+    const resolvedReporterName = userProfile?.fullName || item.reporterName;
+
     // Format Time of Last Activity
     let timeText = '';
     const lastActive = item.lastMessageAt || (item.alerts[0] && item.alerts[0].createdAt ? (item.alerts[0].createdAt.toDate ? item.alerts[0].createdAt.toDate() : new Date(item.alerts[0].createdAt)) : null);
@@ -130,13 +191,17 @@ export default function AdminMessages({ navigation }) {
 
     const unreadCount = item.unreadCountAdmin || 0;
 
+    const initials = resolvedReporterName
+      ? resolvedReporterName.split(' ').filter(Boolean).map(n => n[0]).join('').substring(0, 2).toUpperCase()
+      : 'C';
+
     return (
       <TouchableOpacity
         style={styles.card}
         onPress={() =>
           navigation.navigate('ChatScreen', {
             userId: item.userId,
-            userName: item.reporterName,
+            userName: resolvedReporterName,
             alertId: item.alerts[0]?.id,
           })
         }
@@ -145,12 +210,12 @@ export default function AdminMessages({ navigation }) {
         <View style={styles.cardLeft}>
           <View style={styles.avatarWrapper}>
             <Text style={styles.avatarText}>
-              {item.reporterName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
+              {initials}
             </Text>
           </View>
           <View style={styles.cardContent}>
             <View style={styles.cardTitleRow}>
-              <Text style={styles.reporterNameText}>{item.reporterName}</Text>
+              <Text style={styles.reporterNameText}>{resolvedReporterName}</Text>
               <View style={styles.badge}>
                 <Text style={styles.badgeText}>
                   {item.alerts.length} report{item.alerts.length !== 1 ? 's' : ''}
@@ -195,6 +260,49 @@ export default function AdminMessages({ navigation }) {
         </Text>
       </View>
 
+      {/* Search and Filter Panel */}
+      {!loading && chatThreads.length > 0 && (
+        <View style={styles.searchFilterContainer}>
+          {/* Search Bar */}
+          <View style={styles.searchBar}>
+            <Feather name="search" size={18} color="#9CA3AF" style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search conversations..."
+              placeholderTextColor="#9CA3AF"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoCorrect={false}
+            />
+            {searchQuery ? (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <Feather name="x" size={16} color="#6B7280" />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+
+          {/* Filter Pills */}
+          <View style={styles.filterPills}>
+            {['all', 'unread', 'read'].map((filter) => {
+              const isSelected = readFilter === filter;
+              const label = filter.charAt(0).toUpperCase() + filter.slice(1);
+              return (
+                <TouchableOpacity
+                  key={filter}
+                  style={[styles.filterPill, isSelected && styles.filterPillActive]}
+                  onPress={() => setReadFilter(filter)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.filterPillText, isSelected && styles.filterPillTextActive]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      )}
+
       {/* List / Content */}
       {loading ? (
         <View style={styles.centerContainer}>
@@ -210,9 +318,18 @@ export default function AdminMessages({ navigation }) {
             No chat threads available. Citizens will appear here once they report incidents or launch direct chat support.
           </Text>
         </View>
+      ) : filteredThreads.length === 0 ? (
+        <View style={styles.centerContainer}>
+          <View style={styles.emptyIconWrapper}>
+            <Feather name="search" size={40} color="#9CA3AF" />
+          </View>
+          <Text style={styles.emptyText}>
+            No conversations match your search or filter.
+          </Text>
+        </View>
       ) : (
         <FlatList
-          data={chatThreads}
+          data={filteredThreads}
           keyExtractor={(item) => item.userId}
           renderItem={renderItem}
           contentContainerStyle={styles.listContent}
@@ -407,5 +524,49 @@ const styles = StyleSheet.create({
     right: 0,
     height: 180,
     zIndex: 5,
+  },
+  searchFilterContainer: {
+    paddingHorizontal: 24,
+    marginBottom: 16,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    height: 48,
+    marginBottom: 12,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#1F2937',
+    height: '100%',
+  },
+  filterPills: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  filterPill: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+    marginRight: 8,
+  },
+  filterPillActive: {
+    backgroundColor: '#0B2564',
+  },
+  filterPillText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  filterPillTextActive: {
+    color: '#FFFFFF',
   },
 });

@@ -348,10 +348,19 @@ export default function StatusTracker({ route, navigation }) {
           {/* Sticky Message Responder Footer Button */}
           <View style={styles.footerContainer}>
             <TouchableOpacity 
-              style={styles.messageButton}
+              style={[styles.messageButton, incident?.status === 'declined' && styles.disabledMessageButton]}
               onPress={() => navigation.navigate('ChatScreen', { alertId })}
+              disabled={incident?.status === 'declined'}
+              activeOpacity={incident?.status === 'declined' ? 1 : 0.8}
             >
-              <Text style={styles.messageButtonText}>Message Responder</Text>
+              {incident?.status === 'declined' ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                  <Feather name="lock" size={16} color="#FFFFFF" style={{ marginRight: 8 }} />
+                  <Text style={styles.messageButtonText}>Chat Locked (Report Declined)</Text>
+                </View>
+              ) : (
+                <Text style={styles.messageButtonText}>Message Responder</Text>
+              )}
             </TouchableOpacity>
           </View>
         </>
@@ -664,6 +673,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 20,
     elevation: 3,
+  },
+  disabledMessageButton: {
+    backgroundColor: '#94A3B8',
+    shadowOpacity: 0,
+    elevation: 0,
   },
   messageButtonText: {
     color: '#FFFFFF',
