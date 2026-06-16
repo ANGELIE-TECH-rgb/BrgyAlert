@@ -1,0 +1,617 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  StyleSheet, 
+  Text, 
+  View, 
+  TouchableOpacity, 
+  StatusBar, 
+  ScrollView, 
+  ActivityIndicator,
+  Image,
+  Modal,
+  Platform
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Feather, Ionicons } from '@expo/vector-icons';
+import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '../../services/firebaseConfig';
+
+const STATUS_STEPS = [
+  { key: 'submitted', label: 'Report Submitted', desc: 'Your report has been successfully recorded in the system.' },
+  { key: 'under_review', label: 'Under Review', desc: 'Command center is currently reviewing the details.' },
+  { key: 'dispatched', label: 'Dispatched', desc: 'Responder units have been deployed to the scene.' },
+  { key: 'done', label: 'Resolved', desc: 'The incident has been resolved and closed.' }
+];
+
+export default function StatusTracker({ route, navigation }) {
+  const { alertId } = route.params || {};
+  const insets = useSafeAreaInsets();
+  
+  const [incident, setIncident] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [selectedImageUri, setSelectedImageUri] = useState(null);
+  const [imageModalVisible, setImageModalVisible] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  // Subscribe to real-time updates for this alert
+  useEffect(() => {
+    if (!alertId) {
+      setErrorMsg('No Report ID provided.');
+      setLoading(false);
+      return;
+    }
+
+    const docRef = doc(db, 'alerts', alertId);
+    
+    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setIncident(docSnap.data());
+      } else {
+        setErrorMsg('Report not found in database.');
+      }
+      setLoading(false);
+    }, (err) => {
+      console.error('Error listening to alert:', err);
+      setErrorMsg('Could not establish real-time listener.');
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [alertId]);
+
+  // Determine current active step index
+  const getCurrentStepIndex = () => {
+    if (!incident) return 0;
+    const currentStatus = incident.status || 'submitted';
+    
+    if (currentStatus === 'resolved') return 3;
+
+    const index = STATUS_STEPS.findIndex(step => step.key === currentStatus);
+    return index !== -1 ? index : 0;
+  };
+
+  const activeIndex = getCurrentStepIndex();
+
+  // Custom status color schemes matching dashboard citizen
+  const getStatusStyle = (status) => {
+    let statusText = 'Pending';
+    let tagBg = '#FFF9E6';
+    let tagColor = '#D97706'; // Vibrant orange/yellow
+
+    if (status === 'under_review') {
+      statusText = 'Under Review';
+      tagBg = '#EFF6FF';
+      tagColor = '#2563EB'; // Blue
+    } else if (status === 'dispatched') {
+      statusText = 'Dispatched';
+      tagBg = '#ECFDF5';
+      tagColor = '#10B981'; // Green
+    } else if (status === 'done' || status === 'resolved') {
+      statusText = 'Resolved';
+      tagBg = '#F3F4F6';
+      tagColor = '#4B5563'; // Grey
+    }
+
+    return { statusText, tagBg, tagColor };
+  };
+
+  // Format Date and Time
+  const formatStepTime = (createdAt) => {
+    if (!createdAt) return '';
+    try {
+      const date = createdAt.toDate ? createdAt.toDate() : new Date(createdAt);
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: '2-digit'
+      }) + `, ` + date.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      });
+    } catch (e) {
+      return '';
+    }
+  };
+
+  const statusInfo = incident ? getStatusStyle(incident.status) : { statusText: 'Pending', tagBg: '#FFF9E6', tagColor: '#D97706' };
+  const displayId = alertId ? (alertId.length > 10 ? alertId.substring(0, 10).toUpperCase() : alertId.toUpperCase()) : 'NEW';
+
+  return (
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+
+      {/* Header (Mockup Alignment) */}
+      <View style={styles.navHeader}>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.navigate('CitizenHome')}>
+          <Feather name="arrow-left" size={20} color="#1F2937" />
+        </TouchableOpacity>
+        
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.headerTitle}>Report Details</Text>
+          <Text style={styles.headerSubtitle}>ReportID: #{displayId}</Text>
+        </View>
+
+        <View style={[styles.statusTag, { backgroundColor: statusInfo.tagBg }]}>
+          <Text style={[styles.statusText, { color: statusInfo.tagColor }]}>{statusInfo.statusText}</Text>
+        </View>
+      </View>
+
+      {loading ? (
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color="#0F2C59" />
+          <Text style={styles.loadingText}>Syncing details...</Text>
+        </View>
+      ) : errorMsg ? (
+        <View style={styles.centerContainer}>
+          <Text style={styles.errorText}>⚠️ {errorMsg}</Text>
+          <TouchableOpacity 
+            style={styles.retryButton}
+            onPress={() => navigation.navigate('CitizenHome')}
+          >
+            <Text style={styles.retryButtonText}>Go to Home</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <>
+          <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            
+            {/* Card 1: Incident Details */}
+            <View style={styles.reviewCard}>
+              <View style={styles.reviewHeaderRow}>
+                <Feather name="alert-triangle" size={18} color="#0F2C59" style={{ marginRight: 8 }} />
+                <Text style={styles.reviewHeader}>Incident Details</Text>
+              </View>
+              
+              <View style={styles.reviewRow}>
+                <Text style={styles.reviewLabel}>Incident Type</Text>
+                <Text style={styles.reviewValue}>{incident.category}</Text>
+              </View>
+              
+              <View style={styles.reviewRow}>
+                <Text style={styles.reviewLabel}>Location</Text>
+                <Text style={styles.reviewValue}>{incident.location?.addressText || 'N/A'}</Text>
+              </View>
+
+              <View style={styles.reviewRow}>
+                <Text style={styles.reviewLabel}>Date & Time</Text>
+                <Text style={styles.reviewValue}>{formatStepTime(incident.createdAt)}</Text>
+              </View>
+
+              <View style={styles.reviewRow}>
+                <Text style={styles.reviewLabel}>Description</Text>
+                <Text style={styles.reviewValue}>{incident.details}</Text>
+              </View>
+
+              <View style={styles.reviewRow}>
+                <Text style={styles.reviewLabel}>Witness</Text>
+                <Text style={styles.reviewValue}>{incident.witnessName || 'None'}</Text>
+              </View>
+            </View>
+
+            {/* Card 2: Incident Media Evidence */}
+            {incident.mediaUrls && incident.mediaUrls.length > 0 ? (
+              <View style={styles.reviewCard}>
+                <View style={styles.reviewHeaderRow}>
+                  <Feather name="image" size={18} color="#0F2C59" style={{ marginRight: 8 }} />
+                  <Text style={styles.reviewHeader}>Evidence</Text>
+                </View>
+                <View style={styles.reviewThumbnailsRow}>
+                  {incident.mediaUrls.map((url, index) => (
+                    <TouchableOpacity 
+                      key={index} 
+                      activeOpacity={0.9} 
+                      onPress={() => {
+                        setSelectedImageUri(url);
+                        setImageModalVisible(true);
+                      }}
+                    >
+                      <Image source={{ uri: url }} style={styles.reviewThumbnailSquare} />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            ) : null}
+
+            {/* Section: Status timeline */}
+            <View style={styles.timelineSection}>
+              <Text style={styles.timelineHeader}>Status timeline</Text>
+              
+              <View style={styles.timelineList}>
+                {STATUS_STEPS.map((step, idx) => {
+                  const isCompleted = idx <= activeIndex;
+                  const isActive = idx === activeIndex;
+                  const isLast = idx === STATUS_STEPS.length - 1;
+
+                  return (
+                    <View key={step.key} style={styles.timelineItem}>
+                      
+                      {/* Timeline Node Column */}
+                      <View style={styles.nodeColumn}>
+                        <View style={[
+                          styles.circleNode,
+                          isCompleted && styles.circleCompleted,
+                          isActive && styles.circleActive
+                        ]}>
+                          {isCompleted ? (
+                            <Feather name="check" size={12} color="#FFFFFF" />
+                          ) : null}
+                        </View>
+                        {!isLast ? (
+                          <View style={[
+                            styles.lineConnector,
+                            idx < activeIndex && styles.lineCompleted
+                          ]} />
+                        ) : null}
+                      </View>
+
+                      {/* Timeline Step Details */}
+                      <View style={styles.stepDetails}>
+                        <Text style={[
+                          styles.stepLabel,
+                          isCompleted && styles.stepLabelCompleted,
+                          isActive && styles.stepLabelActive
+                        ]}>
+                          {step.label}
+                        </Text>
+                        
+                        {isCompleted && (
+                          <Text style={styles.stepTime}>
+                            {idx === 0 ? formatStepTime(incident.createdAt) : formatStepTime(incident.updatedAt || incident.createdAt)}
+                          </Text>
+                        )}
+                        
+                        <Text style={styles.stepDesc}>{step.desc}</Text>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+
+          </ScrollView>
+
+          {/* Bottom Smooth Gradient Background Fade */}
+          <View style={styles.bottomGradient} pointerEvents="none">
+            <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+              <Defs>
+                <LinearGradient id="fadeGrad" x1="0" y1="0" x2="0" y2="1">
+                  <Stop offset="0" stopColor="#FFFFFF" stopOpacity="0" />
+                  <Stop offset="0.6" stopColor="#FFFFFF" stopOpacity="0.85" />
+                  <Stop offset="1" stopColor="#FFFFFF" stopOpacity="1" />
+                </LinearGradient>
+              </Defs>
+              <Rect width="100" height="100" fill="url(#fadeGrad)" />
+            </Svg>
+          </View>
+
+          {/* Sticky Message Responder Footer Button */}
+          <View style={styles.footerContainer}>
+            <TouchableOpacity 
+              style={styles.messageButton}
+              onPress={() => alert('Direct Messaging feature will be implemented in Sprint 3!')}
+            >
+              <Text style={styles.messageButtonText}>Message Responder</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
+
+      {/* Image Viewer Popup Modal */}
+      <Modal
+        visible={imageModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          setImageModalVisible(false);
+          setSelectedImageUri(null);
+        }}
+      >
+        <TouchableOpacity 
+          style={styles.imageOverlay} 
+          activeOpacity={1} 
+          onPress={() => {
+            setImageModalVisible(false);
+            setSelectedImageUri(null);
+          }}
+        >
+          <TouchableOpacity 
+            style={styles.closeImageBtn}
+            onPress={() => {
+              setImageModalVisible(false);
+              setSelectedImageUri(null);
+            }}
+          >
+            <Feather name="x" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          {selectedImageUri && (
+            <Image 
+              source={{ uri: selectedImageUri }} 
+              style={styles.fullImage} 
+              resizeMode="contain" 
+            />
+          )}
+        </TouchableOpacity>
+      </Modal>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  navHeader: {
+    height: 64,
+    paddingHorizontal: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    // Smooth soft shadow matching dashboard
+    shadowColor: '#00000040',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.02,
+    shadowRadius: 10,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+  },
+  headerTitleContainer: {
+    flex: 1,
+    marginLeft: 16,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  statusTag: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginTop: 12,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#EF4444',
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: '#0F2C59',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 20,
+    marginTop: 20,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  scrollContent: {
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 120, // Ensure room for sticky footer button
+  },
+  reviewCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+    marginBottom: 20,
+    // Smooth soft shadow matching dashboard
+    shadowColor: '#00000040',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.03,
+    shadowRadius: 16,
+    elevation: 2,
+  },
+  reviewHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  reviewHeader: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F2C59',
+  },
+  reviewRow: {
+    marginBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F9FAFB',
+    paddingBottom: 8,
+  },
+  reviewLabel: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  reviewValue: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1F2937',
+    lineHeight: 20,
+  },
+  reviewThumbnailsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  reviewThumbnailSquare: {
+    width: 90,
+    height: 90,
+    borderRadius: 14,
+    marginRight: 12,
+    marginBottom: 12,
+    resizeMode: 'cover',
+  },
+  timelineSection: {
+    marginTop: 8,
+    paddingHorizontal: 4,
+  },
+  timelineHeader: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#374151',
+    marginBottom: 20,
+  },
+  timelineList: {
+    paddingLeft: 4,
+  },
+  timelineItem: {
+    flexDirection: 'row',
+    minHeight: 80,
+  },
+  nodeColumn: {
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  circleNode: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  circleCompleted: {
+    borderColor: '#0F2C59',
+    backgroundColor: '#0F2C59',
+  },
+  circleActive: {
+    borderColor: '#0F2C59',
+    backgroundColor: '#0F2C59',
+  },
+  lineConnector: {
+    width: 2,
+    flex: 1,
+    backgroundColor: '#E5E7EB',
+    marginVertical: 4,
+  },
+  lineCompleted: {
+    backgroundColor: '#0F2C59',
+  },
+  stepDetails: {
+    flex: 1,
+    paddingTop: 2,
+  },
+  stepLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#9CA3AF',
+  },
+  stepLabelCompleted: {
+    color: '#1F2937',
+  },
+  stepLabelActive: {
+    color: '#1F2937',
+  },
+  stepTime: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  stepDesc: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginTop: 4,
+    lineHeight: 18,
+    fontWeight: '500',
+  },
+  footerContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 24,
+    paddingBottom: 32,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderColor: '#F3F4F6',
+    zIndex: 10, // Sit on top of linear gradient
+  },
+  messageButton: {
+    backgroundColor: '#0F2C59',
+    borderRadius: 30,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    // Smooth soft shadow matching dashboard primary buttons
+    shadowColor: '#0F2C5940',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 3,
+  },
+  messageButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  bottomGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 180,
+    zIndex: 5,
+  },
+  imageOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  closeImageBtn: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 60 : 40,
+    right: 20,
+    zIndex: 10,
+    padding: 8,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 20,
+  },
+  fullImage: {
+    width: '90%',
+    height: '75%',
+  },
+});

@@ -10,6 +10,9 @@ import RegisterScreen from '../screens/common/RegisterScreen';
 import ForgotPasswordScreen from '../screens/common/ForgotPasswordScreen';
 import CitizenDashboard from '../screens/citizen/CitizenDashboard';
 import AdminConsole from '../screens/admin/AdminConsole';
+import ReportWizard from '../screens/citizen/ReportWizard';
+import ReportSuccess from '../screens/citizen/ReportSuccess';
+import StatusTracker from '../screens/citizen/StatusTracker';
 
 const Stack = createNativeStackNavigator();
 
@@ -40,7 +43,12 @@ export default function AppNavigator() {
           <Stack.Screen name="AdminHome" component={AdminConsole} />
         ) : (
           // Citizen Stack (Default)
-          <Stack.Screen name="CitizenHome" component={CitizenDashboard} />
+          <>
+            <Stack.Screen name="CitizenHome" component={CitizenDashboard} />
+            <Stack.Screen name="ReportWizard" component={ReportWizard} />
+            <Stack.Screen name="ReportSuccess" component={ReportSuccess} />
+            <Stack.Screen name="StatusTracker" component={StatusTracker} />
+          </>
         )}
       </Stack.Navigator>
     </NavigationContainer>

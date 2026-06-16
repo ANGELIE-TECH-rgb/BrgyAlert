@@ -1,138 +1,302 @@
-import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, StatusBar } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { 
+  StyleSheet, 
+  Text, 
+  View, 
+  TouchableOpacity, 
+  StatusBar, 
+  ScrollView,
+  ActivityIndicator
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Feather, Ionicons } from '@expo/vector-icons';
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '../../context/AuthContext';
+import { db } from '../../services/firebaseConfig';
+import IncidentCard from '../../components/IncidentCard';
 
-export default function AdminConsole() {
+export default function AdminConsole({ navigation }) {
   const { userProfile, logout } = useAuth();
+  const insets = useSafeAreaInsets();
+  
+  const [allAlerts, setAllAlerts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [criticalCount, setCriticalCount] = useState(0);
+  const [pendingCount, setPendingCount] = useState(0);
+
+  // Fetch ALL reports in real-time for the Admin Console
+  useEffect(() => {
+    const q = query(
+      collection(db, 'alerts'),
+      orderBy('createdAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const alertsList = [];
+      let critical = 0;
+      let pending = 0;
+
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        const alertItem = {
+          id: doc.id,
+          ...data
+        };
+        alertsList.push(alertItem);
+
+        // Count critical active issues
+        if (data.urgency === 'critical' && data.status !== 'done' && data.status !== 'resolved') {
+          critical++;
+        }
+        // Count pending triage issues
+        if (data.status === 'submitted') {
+          pending++;
+        }
+      });
+
+      setAllAlerts(alertsList);
+      setCriticalCount(critical);
+      setPendingCount(pending);
+      setLoading(false);
+    }, (error) => {
+      console.error('Error fetching admin alerts snapshot:', error);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const getFormattedDate = () => {
+    return new Date().toLocaleDateString('en-US', {
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric'
+    });
+  };
+
+  const getGreeting = () => {
+    const hours = new Date().getHours();
+    const displayName = userProfile?.fullName ? userProfile.fullName.split(' ')[0] : 'Admin';
+    if (hours < 12) return `Good morning, ${displayName}`;
+    if (hours < 18) return `Good afternoon, ${displayName}`;
+    return `Good evening, ${displayName}`;
+  };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0F2C59" />
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       
-      {/* Header */}
+      {/* Header Block (Cohesive with Citizen Dashboard) */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>BrgyAlert Admin Console</Text>
+        <View style={styles.headerLeft}>
+          <Text style={styles.greetingText}>{getGreeting()}</Text>
+          <Text style={styles.dateText}>{getFormattedDate()}</Text>
+          
+          {/* Active Command Indicator */}
+          <View style={styles.statusContainer}>
+            <View style={[styles.statusDot, { backgroundColor: '#22C55E' }]} />
+            <Text style={styles.statusLabel}>Command Console Active</Text>
+          </View>
+        </View>
+        
+        {/* Logout Button in header matching bell button position */}
+        <TouchableOpacity 
+          style={styles.logoutHeaderButton}
+          onPress={logout}
+        >
+          <Feather name="log-out" size={20} color="#DC2626" />
+        </TouchableOpacity>
       </View>
 
-      {/* Main Content */}
-      <View style={styles.content}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        
+        {/* Welcome Profile Card */}
         <View style={styles.welcomeCard}>
-          <Text style={styles.welcomeText}>Logged in as Responder/Official,</Text>
-          <Text style={styles.userName}>{userProfile?.fullName || 'Barangay Staff'}</Text>
+          <View style={styles.welcomeCardHeader}>
+            <View>
+              <Text style={styles.welcomeText}>Logged in as Responder/Staff</Text>
+              <Text style={styles.userName}>{userProfile?.fullName || 'Barangay Staff'}</Text>
+            </View>
+            <View style={styles.roleTag}>
+              <Text style={styles.roleTagText}>{userProfile?.role?.toUpperCase() || 'RESPONDER'}</Text>
+            </View>
+          </View>
           
           <View style={styles.divider} />
           
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Role:</Text>
-            <Text style={[styles.infoValue, styles.adminRole]}>{userProfile?.role?.toUpperCase() || 'RESPONDER'}</Text>
-          </View>
-          
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Email:</Text>
+            <Feather name="mail" size={14} color="#6B7280" style={{ marginRight: 8 }} />
             <Text style={styles.infoValue}>{userProfile?.email || 'N/A'}</Text>
           </View>
-          
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Contact:</Text>
-            <Text style={styles.infoValue}>{userProfile?.phoneNumber || 'N/A'}</Text>
-          </View>
         </View>
 
-        {/* Quick Metrics Placeholder */}
+        {/* Live Metrics Tiles (styled like Services Cards) */}
         <View style={styles.metricsContainer}>
           <View style={[styles.metricBox, styles.metricCritical]}>
-            <Text style={styles.metricCount}>0</Text>
-            <Text style={styles.metricLabel}>Critical Alerts</Text>
+            <View style={styles.metricIconWrapperCritical}>
+              <Feather name="alert-triangle" size={18} color="#EF4444" />
+            </View>
+            <View style={styles.metricTextWrapper}>
+              <Text style={styles.metricCountText}>{criticalCount}</Text>
+              <Text style={styles.metricLabelText}>Critical Alerts</Text>
+            </View>
           </View>
+          
           <View style={[styles.metricBox, styles.metricPending]}>
-            <Text style={styles.metricCount}>0</Text>
-            <Text style={styles.metricLabel}>Pending Triage</Text>
+            <View style={styles.metricIconWrapperPending}>
+              <Feather name="clock" size={18} color="#D97706" />
+            </View>
+            <View style={styles.metricTextWrapper}>
+              <Text style={styles.metricCountText}>{pendingCount}</Text>
+              <Text style={styles.metricLabelText}>Pending Triage</Text>
+            </View>
           </View>
         </View>
 
-        <Text style={styles.statusMsg}>
-          This is the Admin Dashboard. The Dispatch Queue and Evacuation Center monitors are coming in Sprint 3!
-        </Text>
+        {/* Live Incident Command List */}
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>Live Command Queue ({allAlerts.length})</Text>
 
-        <TouchableOpacity style={styles.logoutButton} onPress={logout}>
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
-      </View>
-    </SafeAreaView>
+          {loading ? (
+            <ActivityIndicator style={styles.loader} color="#0F2C59" />
+          ) : allAlerts.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Feather name="list" size={36} color="#9CA3AF" style={styles.emptyIcon} />
+              <Text style={styles.emptyText}>No emergency reports in queue.</Text>
+            </View>
+          ) : (
+            allAlerts.map((item) => (
+              <IncidentCard 
+                key={item.id} 
+                incident={item} 
+                onPress={() => alert(`Details for Report #${item.id.substring(0, 8).toUpperCase()}:\n\nType: ${item.category}\nDetails: ${item.details}\nStatus: ${item.status}\nUrgency: ${item.urgency}`)}
+              />
+            ))
+          )}
+        </View>
+
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#FFFFFF',
   },
   header: {
-    backgroundColor: '#0F2C59',
-    paddingVertical: 20,
-    paddingHorizontal: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E9ECEF',
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    marginBottom: 20,
   },
-  headerTitle: {
-    color: '#FFFFFF',
-    fontSize: 20,
-    fontWeight: 'bold',
-    letterSpacing: 0.5,
-  },
-  content: {
+  headerLeft: {
     flex: 1,
-    padding: 24,
+  },
+  greetingText: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  dateText: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginTop: 4,
+  },
+  statusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
+  },
+  statusLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  logoutHeaderButton: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    borderRadius: 24,
+    width: 48,
+    height: 48,
     justifyContent: 'center',
     alignItems: 'center',
+    // Smooth red shadow
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  scrollContent: {
+    paddingHorizontal: 24,
+    paddingBottom: 40,
   },
   welcomeCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 24,
+    borderRadius: 20,
+    padding: 20,
     width: '100%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
+    // Smooth, soft shadow
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.04,
+    shadowRadius: 16,
     elevation: 2,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: '#E9ECEF',
+    borderColor: '#F3F4F6',
+  },
+  welcomeCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
   },
   welcomeText: {
-    fontSize: 14,
-    color: '#6C757D',
+    fontSize: 13,
+    color: '#6B7280',
+    fontWeight: '600',
   },
   userName: {
     fontSize: 22,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: '#0F2C59',
     marginTop: 4,
   },
+  roleTag: {
+    backgroundColor: '#FEF3C7',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+  },
+  roleTagText: {
+    fontSize: 11,
+    color: '#D97706',
+    fontWeight: '700',
+  },
   divider: {
     height: 1,
-    backgroundColor: '#E9ECEF',
+    backgroundColor: '#F3F4F6',
     marginVertical: 16,
   },
   infoRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  infoLabel: {
-    fontSize: 14,
-    color: '#6C757D',
-    fontWeight: '500',
+    alignItems: 'center',
   },
   infoValue: {
-    fontSize: 14,
-    color: '#1A1D20',
+    fontSize: 13,
+    color: '#4B5563',
     fontWeight: '600',
-  },
-  adminRole: {
-    color: '#FF9E00',
   },
   metricsContainer: {
     flexDirection: 'row',
@@ -143,55 +307,88 @@ const styles = StyleSheet.create({
   metricBox: {
     flex: 1,
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 20,
     padding: 16,
+    flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 6,
+    marginHorizontal: 4,
     borderWidth: 1,
-    borderColor: '#E9ECEF',
+    borderColor: '#F3F4F6',
+    // Smooth, soft shadow
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.04,
+    shadowRadius: 16,
+    elevation: 2,
   },
   metricCritical: {
     borderLeftWidth: 4,
-    borderLeftColor: '#DC3545',
+    borderLeftColor: '#EF4444',
   },
   metricPending: {
     borderLeftWidth: 4,
-    borderLeftColor: '#FF9E00',
+    borderLeftColor: '#D97706',
   },
-  metricCount: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#1A1D20',
-  },
-  metricLabel: {
-    fontSize: 12,
-    color: '#6C757D',
-    marginTop: 4,
-  },
-  statusMsg: {
-    fontSize: 14,
-    color: '#6C757D',
-    textAlign: 'center',
-    lineHeight: 20,
-    marginHorizontal: 16,
-    marginBottom: 32,
-  },
-  logoutButton: {
-    backgroundColor: '#DC3545',
-    paddingVertical: 14,
-    paddingHorizontal: 32,
-    borderRadius: 24,
-    width: '100%',
+  metricIconWrapperCritical: {
+    backgroundColor: '#FEE2E2',
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#DC3545',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 3,
+    marginRight: 10,
   },
-  logoutText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
+  metricIconWrapperPending: {
+    backgroundColor: '#FEF3C7',
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  metricTextWrapper: {
+    flex: 1,
+  },
+  metricCountText: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  metricLabelText: {
+    fontSize: 11,
+    color: '#6B7280',
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  sectionContainer: {
+    width: '100%',
+    marginBottom: 28,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 16,
+  },
+  loader: {
+    marginVertical: 20,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 32,
+    backgroundColor: '#FAFAFA',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#D1D5DB',
+  },
+  emptyIcon: {
+    marginBottom: 10,
+  },
+  emptyText: {
+    fontSize: 13,
+    color: '#6B7280',
   },
 });
