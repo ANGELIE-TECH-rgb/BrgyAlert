@@ -6,10 +6,10 @@ export default function IncidentCard({ incident, onPress }) {
   // Format the status for styling
   const status = incident.status || 'submitted';
 
-  // Custom status color schemes matching the mockup
+  // Custom status color schemes — must match admin badge & StatusTracker pill colors
   let statusText = 'Pending';
   let tagBg = '#FFF9E6';
-  let tagColor = '#D97706'; // Vibrant orange/yellow
+  let tagColor = '#D97706'; // Amber
 
   if (status === 'under_review') {
     statusText = 'Under Review';
@@ -23,6 +23,10 @@ export default function IncidentCard({ incident, onPress }) {
     statusText = 'Resolved';
     tagBg = '#F3F4F6';
     tagColor = '#4B5563'; // Grey
+  } else if (status === 'declined') {
+    statusText = 'Declined';
+    tagBg = '#FEF2F2';
+    tagColor = '#EF4444'; // Red
   }
 
   // Format Date and Time

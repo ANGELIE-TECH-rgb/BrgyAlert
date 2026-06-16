@@ -10,6 +10,7 @@ import RegisterScreen from '../screens/common/RegisterScreen';
 import ForgotPasswordScreen from '../screens/common/ForgotPasswordScreen';
 import CitizenDashboard from '../screens/citizen/CitizenDashboard';
 import AdminConsole from '../screens/admin/AdminConsole';
+import IncidentDetail from '../screens/admin/IncidentDetail';
 import ReportWizard from '../screens/citizen/ReportWizard';
 import ReportSuccess from '../screens/citizen/ReportSuccess';
 import StatusTracker from '../screens/citizen/StatusTracker';
@@ -40,7 +41,10 @@ export default function AppNavigator() {
           </>
         ) : userProfile?.role === 'responder' || userProfile?.role === 'admin' ? (
           // Admin / Responder stack
-          <Stack.Screen name="AdminHome" component={AdminConsole} />
+          <>
+            <Stack.Screen name="AdminHome" component={AdminConsole} />
+            <Stack.Screen name="IncidentDetail" component={IncidentDetail} />
+          </>
         ) : (
           // Citizen Stack (Default)
           <>

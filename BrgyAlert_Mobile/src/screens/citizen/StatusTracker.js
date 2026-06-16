@@ -91,6 +91,10 @@ export default function StatusTracker({ route, navigation }) {
       statusText = 'Resolved';
       tagBg = '#F3F4F6';
       tagColor = '#4B5563'; // Grey
+    } else if (status === 'declined') {
+      statusText = 'Declined';
+      tagBg = '#FEF2F2';
+      tagColor = '#EF4444'; // Red
     }
 
     return { statusText, tagBg, tagColor };
@@ -116,6 +120,7 @@ export default function StatusTracker({ route, navigation }) {
 
   const statusInfo = incident ? getStatusStyle(incident.status) : { statusText: 'Pending', tagBg: '#FFF9E6', tagColor: '#D97706' };
   const displayId = alertId ? (alertId.length > 10 ? alertId.substring(0, 10).toUpperCase() : alertId.toUpperCase()) : 'NEW';
+  const isDeclined = incident?.status === 'declined';
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -155,7 +160,26 @@ export default function StatusTracker({ route, navigation }) {
       ) : (
         <>
           <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-            
+
+            {/* ─── DECLINE WARNING BANNER ─────────────────────────────── */}
+            {isDeclined && (
+              <View style={styles.declineBanner}>
+                <View style={styles.declineBannerHeader}>
+                  <Feather name="alert-octagon" size={18} color="#EF4444" style={{ marginRight: 8 }} />
+                  <Text style={styles.declineBannerTitle}>Report Declined</Text>
+                </View>
+                <Text style={styles.declineBannerSubtitle}>
+                  Your report has been reviewed and marked as invalid or a false alarm by the Command Center.
+                </Text>
+                {incident.declineReason ? (
+                  <View style={styles.declineReasonBox}>
+                    <Text style={styles.declineReasonLabel}>Reason from Admin:</Text>
+                    <Text style={styles.declineReasonText}>"{incident.declineReason}"</Text>
+                  </View>
+                ) : null}
+              </View>
+            )}
+
             {/* Card 1: Incident Details */}
             <View style={styles.reviewCard}>
               <View style={styles.reviewHeaderRow}>
@@ -219,8 +243,8 @@ export default function StatusTracker({ route, navigation }) {
               
               <View style={styles.timelineList}>
                 {STATUS_STEPS.map((step, idx) => {
-                  const isCompleted = idx <= activeIndex;
-                  const isActive = idx === activeIndex;
+                  const isCompleted = !isDeclined && idx <= activeIndex;
+                  const isActive    = !isDeclined && idx === activeIndex;
                   const isLast = idx === STATUS_STEPS.length - 1;
 
                   return (
@@ -423,6 +447,30 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 120, // Ensure room for sticky footer button
   },
+
+  // ── Decline banner styles ─────────────────────────────────────────────
+  declineBanner: {
+    backgroundColor: '#FEF2F2',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  declineBannerHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  declineBannerTitle: { fontSize: 15, fontWeight: '700', color: '#B91C1C' },
+  declineBannerSubtitle: { fontSize: 13, color: '#EF4444', lineHeight: 18, fontWeight: '500' },
+  declineReasonBox: {
+    marginTop: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  declineReasonLabel: { fontSize: 11, fontWeight: '700', color: '#9CA3AF', marginBottom: 4 },
+  declineReasonText: { fontSize: 14, color: '#1F2937', fontWeight: '600', lineHeight: 20, fontStyle: 'italic' },
+
   reviewCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
