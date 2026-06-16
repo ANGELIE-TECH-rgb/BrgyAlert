@@ -12,6 +12,7 @@ import CitizenDashboard from '../screens/citizen/CitizenDashboard';
 import AdminConsole from '../screens/admin/AdminConsole';
 import IncidentDetail from '../screens/admin/IncidentDetail';
 import AdminMapScreen from '../screens/admin/AdminMapScreen';
+import AdminQueue from '../screens/admin/AdminQueue';
 import ReportWizard from '../screens/citizen/ReportWizard';
 import ReportSuccess from '../screens/citizen/ReportSuccess';
 import StatusTracker from '../screens/citizen/StatusTracker';
@@ -44,6 +45,7 @@ export default function AppNavigator() {
           // Admin / Responder stack
           <>
             <Stack.Screen name="AdminHome" component={AdminConsole} />
+            <Stack.Screen name="AdminQueue" component={AdminQueue} />
             <Stack.Screen name="IncidentDetail" component={IncidentDetail} />
             <Stack.Screen name="AdminMapScreen" component={AdminMapScreen} />
           </>

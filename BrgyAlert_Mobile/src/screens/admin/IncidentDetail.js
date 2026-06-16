@@ -192,7 +192,16 @@ export default function IncidentDetail({ route, navigation }) {
 
       {/* Header */}
       <View style={styles.navHeader}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.navigate('AdminHome')}>
+        <TouchableOpacity 
+          style={styles.backButton} 
+          onPress={() => {
+            if (navigation.canGoBack()) {
+              navigation.goBack();
+            } else {
+              navigation.navigate('AdminHome');
+            }
+          }}
+        >
           <Feather name="arrow-left" size={20} color="#1F2937" />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
