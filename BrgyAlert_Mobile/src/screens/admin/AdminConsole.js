@@ -4,27 +4,21 @@ import {
   Text, 
   View, 
   TouchableOpacity, 
-  SafeAreaView, 
   StatusBar, 
   ScrollView,
   ActivityIndicator,
-  Dimensions
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
-import { Feather, Ionicons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services/firebaseConfig';
 import AdminBottomTabNav from '../../components/AdminBottomTabNav';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-// Bounding box for mapping coordinates (Barangay Lepa pilot area)
-const MIN_LAT = 14.5900;
-const MAX_LAT = 14.6100;
-const MIN_LNG = 120.9700;
-const MAX_LNG = 120.9900;
+// Barangay Lepa center coordinates
+const BRGY_CENTER = { latitude: 14.6000, longitude: 120.9800 };
 
 export default function AdminConsole({ navigation }) {
   const { userProfile } = useAuth();
@@ -126,26 +120,11 @@ export default function AdminConsole({ navigation }) {
     return parts[0][0].toUpperCase();
   };
 
-  // Maps coordinates (lat, lng) to absolute container offsets for pins
-  const getMapPinOffsets = (lat, lng) => {
-    // Standard coordinates check
-    if (!lat || !lng || lat < MIN_LAT || lat > MAX_LAT || lng < MIN_LNG || lng > MAX_LNG) {
-      // Fallback pseudo-random position inside center bounding box
-      const pseudoLat = MIN_LAT + 0.005 + (Math.random() * 0.01);
-      const pseudoLng = MIN_LNG + 0.005 + (Math.random() * 0.01);
-      return getMapPinOffsets(pseudoLat, pseudoLng);
-    }
-
-    const containerWidth = SCREEN_WIDTH - 48; // padding margins
-    const containerHeight = 220; // fixed map container height
-
-    const x = ((lng - MIN_LNG) / (MAX_LNG - MIN_LNG)) * containerWidth;
-    const y = (1 - (lat - MIN_LAT) / (MAX_LAT - MIN_LAT)) * containerHeight;
-
-    return { 
-      left: Math.min(Math.max(x, 10), containerWidth - 25), 
-      top: Math.min(Math.max(y, 10), containerHeight - 25) 
-    };
+  // Color-codes marker pins by alert category
+  const getPinColor = (category) => {
+    if (category === 'Fire' || category === 'Medical') return '#EF4444';      // Red — critical
+    if (category === 'Flooding' || category === 'Accident' || category === 'Traffic') return '#D97706'; // Amber
+    return '#2563EB'; // Blue — general
   };
 
   // Status Badge configurations — covers every Firestore status value
@@ -255,63 +234,83 @@ export default function AdminConsole({ navigation }) {
               <Text style={styles.mapTitle}>Live Incident Map</Text>
             </View>
             <View style={styles.mapToggles}>
-              <TouchableOpacity 
-                style={[styles.toggleBtn, mapMode === 'Satellite' && styles.toggleBtnActive]}
-                onPress={() => setMapMode('Satellite')}
-              >
-                <Text style={[styles.toggleBtnText, mapMode === 'Satellite' && styles.toggleBtnTextActive]}>Satellite</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.toggleBtn, mapMode === 'Terrain' && styles.toggleBtnActive]}
-                onPress={() => setMapMode('Terrain')}
-              >
-                <Text style={[styles.toggleBtnText, mapMode === 'Terrain' && styles.toggleBtnTextActive]}>Terrain</Text>
-              </TouchableOpacity>
+              {['Standard', 'Satellite', 'Terrain'].map((mode) => (
+                <TouchableOpacity
+                  key={mode}
+                  style={[styles.toggleBtn, mapMode === mode && styles.toggleBtnActive]}
+                  onPress={() => setMapMode(mode)}
+                >
+                  <Text style={[styles.toggleBtnText, mapMode === mode && styles.toggleBtnTextActive]}>
+                    {mode}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
           </View>
 
-          {/* Styled Grid Vector Map Mockup container */}
-          <View style={[styles.mapCanvas, mapMode === 'Satellite' ? styles.satelliteMap : styles.terrainMap]}>
-            {/* Real-time incident pins positioned on map coordinates */}
-            {allAlerts.filter(alert => alert.status !== 'done' && alert.status !== 'resolved').map((alert) => {
-              const offsets = getMapPinOffsets(alert.location?.latitude, alert.location?.longitude);
-              
-              // Color code based on category
-              let pinColor = '#EF4444'; // default red critical
-              if (alert.category === 'Flooding' || alert.category === 'Accident') {
-                pinColor = '#D97706'; // brown/yellow
-              } else if (alert.category === 'General') {
-                pinColor = '#2563EB'; // blue general
+          {/* ── Real Google Maps Tile ─────────────────────────────────── */}
+          <View style={styles.realMapCanvas}>
+            <MapView
+              style={styles.mapView}
+              provider={PROVIDER_GOOGLE}
+              mapType={
+                mapMode === 'Satellite' ? 'satellite'
+                : mapMode === 'Terrain'  ? 'terrain'
+                : 'standard'
               }
-
-              return (
-                <TouchableOpacity
-                  key={alert.id}
-                  style={[styles.mapPin, { left: offsets.left, top: offsets.top, backgroundColor: pinColor }]}
-                  onPress={() => navigation.navigate('IncidentDetail', { alertId: alert.id })}
-                >
-                  <View style={styles.pinInnerPulse} />
-                </TouchableOpacity>
-              );
-            })}
+              initialRegion={{
+                latitude: BRGY_CENTER.latitude,
+                longitude: BRGY_CENTER.longitude,
+                latitudeDelta: 0.025,
+                longitudeDelta: 0.025,
+              }}
+            >
+              {allAlerts
+                .filter(a => a.status !== 'done' && a.status !== 'resolved' && a.status !== 'declined')
+                .map((alert) => (
+                  <Marker
+                    key={alert.id}
+                    coordinate={{
+                      latitude:  alert.location?.latitude  ?? BRGY_CENTER.latitude,
+                      longitude: alert.location?.longitude ?? BRGY_CENTER.longitude,
+                    }}
+                    pinColor={getPinColor(alert.category)}
+                    title={alert.category || 'Incident'}
+                    description={alert.location?.addressText || 'Tap for details'}
+                    onCalloutPress={() => navigation.navigate('IncidentDetail', { alertId: alert.id })}
+                  />
+                ))
+              }
+            </MapView>
 
             {/* Map Legend Overlay */}
-            <View style={styles.legendOverlay}>
-              <Text style={styles.legendTitle}>Map Legend</Text>
+            <View style={styles.legendOverlay} pointerEvents="none">
+              <Text style={styles.legendTitle}>MAP LEGEND</Text>
               <View style={styles.legendRow}>
                 <View style={[styles.legendDot, { backgroundColor: '#EF4444' }]} />
-                <Text style={styles.legendText}>Critical (Fire/Medical)</Text>
+                <Text style={styles.legendText}>Fire / Medical</Text>
               </View>
               <View style={styles.legendRow}>
                 <View style={[styles.legendDot, { backgroundColor: '#D97706' }]} />
-                <Text style={styles.legendText}>Traffic/Obstruction</Text>
+                <Text style={styles.legendText}>Traffic / Flooding</Text>
               </View>
               <View style={styles.legendRow}>
                 <View style={[styles.legendDot, { backgroundColor: '#2563EB' }]} />
-                <Text style={styles.legendText}>General Assistance</Text>
+                <Text style={styles.legendText}>General</Text>
               </View>
             </View>
           </View>
+
+          {/* Expand to Full-Screen Map */}
+          <TouchableOpacity
+            style={styles.expandMapBtn}
+            onPress={() => navigation.navigate('AdminMapScreen')}
+            activeOpacity={0.8}
+          >
+            <Feather name="maximize-2" size={14} color="#0B2564" style={{ marginRight: 6 }} />
+            <Text style={styles.expandMapText}>Expand Full Map</Text>
+          </TouchableOpacity>
+
         </View>
 
         {/* Recent Logs Section */}
@@ -579,38 +578,33 @@ const styles = StyleSheet.create({
   toggleBtnTextActive: {
     color: '#FFFFFF',
   },
-  mapCanvas: {
-    height: 220,
+  realMapCanvas: {
+    height: 230,
     borderRadius: 16,
-    position: 'relative',
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#F3F4F6',
+    position: 'relative',
   },
-  satelliteMap: {
-    backgroundColor: '#1E293B',
+  mapView: {
+    width: '100%',
+    height: '100%',
   },
-  terrainMap: {
-    backgroundColor: '#EDF2F7',
+  expandMapBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+    paddingVertical: 9,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#F9FAFB',
   },
-  mapPin: {
-    position: 'absolute',
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-    zIndex: 10,
-  },
-  pinInnerPulse: {
-    position: 'absolute',
-    top: -4,
-    left: -4,
-    right: -4,
-    bottom: -4,
-    borderRadius: 11,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.4)',
+  expandMapText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0B2564',
   },
   legendOverlay: {
     position: 'absolute',

@@ -12,8 +12,10 @@ import {
   TextInput,
   Platform,
   Alert,
-  KeyboardAvoidingView
+  KeyboardAvoidingView,
+  Linking,
 } from 'react-native';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
@@ -161,6 +163,24 @@ export default function IncidentDetail({ route, navigation }) {
     }
   };
 
+  // Open native Maps app with the incident coordinates — 100% free, no API call
+  const openInMaps = () => {
+    const lat = incident?.location?.latitude;
+    const lng = incident?.location?.longitude;
+    if (!lat || !lng) {
+      Alert.alert('No Coordinates', 'This report has no GPS coordinates attached.');
+      return;
+    }
+    const label = encodeURIComponent(incident?.location?.addressText || 'Incident Location');
+    const url = Platform.OS === 'ios'
+      ? `maps:0,0?q=${label}@${lat},${lng}`
+      : `geo:${lat},${lng}?q=${lat},${lng}(${label})`;
+    Linking.openURL(url).catch(() =>
+      // Fallback to Google Maps web if native Maps not available
+      Linking.openURL(`https://maps.google.com/?q=${lat},${lng}`)
+    );
+  };
+
   const statusInfo = incident ? getStatusStyle(incident.status) : { statusText: 'Pending', tagBg: '#FFF9E6', tagColor: '#D97706' };
   const displayId = alertId ? (alertId.length > 10 ? alertId.substring(0, 10).toUpperCase() : alertId.toUpperCase()) : 'NEW';
   const currentStatusKey = incident?.status || 'submitted';
@@ -298,6 +318,68 @@ export default function IncidentDetail({ route, navigation }) {
                 <Text style={styles.reviewValue}>{incident.reporterName || incident.witnessName || 'Anonymous'}</Text>
               </View>
             </View>
+
+            {/* ─── LOCATION MAP CARD ─────────────────────────────────── */}
+            {incident.location?.latitude && incident.location?.longitude && (
+              <View style={styles.reviewCard}>
+                <View style={styles.reviewHeaderRow}>
+                  <Feather name="map-pin" size={18} color="#0F2C59" style={{ marginRight: 8 }} />
+                  <Text style={styles.reviewHeader}>Incident Location</Text>
+                </View>
+
+                {/* Address text */}
+                <Text style={styles.addressText}>
+                  {incident.location?.addressText || 'GPS coordinates recorded'}
+                </Text>
+
+                {/* Embedded map with single pin */}
+                <View style={styles.mapContainer}>
+                  <MapView
+                    style={styles.mapView}
+                    provider={PROVIDER_GOOGLE}
+                    initialRegion={{
+                      latitude:       incident.location.latitude,
+                      longitude:      incident.location.longitude,
+                      latitudeDelta:  0.005,
+                      longitudeDelta: 0.005,
+                    }}
+                    scrollEnabled={false}
+                    zoomEnabled={false}
+                    rotateEnabled={false}
+                    pitchEnabled={false}
+                    toolbarEnabled={false}
+                  >
+                    <Marker
+                      coordinate={{
+                        latitude:  incident.location.latitude,
+                        longitude: incident.location.longitude,
+                      }}
+                      pinColor="#EF4444"
+                      title={incident.category || 'Incident'}
+                      description={incident.location?.addressText || ''}
+                    />
+                  </MapView>
+
+                  {/* Coordinates badge overlay */}
+                  <View style={styles.coordsBadge}>
+                    <Feather name="navigation" size={10} color="#0F2C59" style={{ marginRight: 4 }} />
+                    <Text style={styles.coordsText}>
+                      {incident.location.latitude.toFixed(5)}, {incident.location.longitude.toFixed(5)}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Open in Maps deep-link button */}
+                <TouchableOpacity
+                  style={styles.openMapsBtn}
+                  onPress={openInMaps}
+                  activeOpacity={0.8}
+                >
+                  <Feather name="external-link" size={15} color="#FFFFFF" style={{ marginRight: 8 }} />
+                  <Text style={styles.openMapsBtnText}>Navigate to Scene</Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
             {/* ─── EVIDENCE CARD ────────────────────────────────────────── */}
             {incident.mediaUrls && incident.mediaUrls.length > 0 && (
@@ -594,6 +676,65 @@ const styles = StyleSheet.create({
   stepLabelActive:    { color: '#1F2937' },
   stepTime:        { fontSize: 12, color: '#9CA3AF', marginTop: 2, fontWeight: '500' },
   stepDesc:        { fontSize: 13, color: '#6B7280', marginTop: 4, lineHeight: 18, fontWeight: '500' },
+
+  // ── Location map card ──────────────────────────────────────────────
+  addressText: {
+    fontSize: 13,
+    color: '#6B7280',
+    fontWeight: '500',
+    marginBottom: 12,
+    lineHeight: 18,
+  },
+  mapContainer: {
+    height: 180,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+    position: 'relative',
+    marginBottom: 12,
+  },
+  mapView: {
+    width: '100%',
+    height: '100%',
+  },
+  coordsBadge: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+  },
+  coordsText: {
+    fontSize: 10,
+    color: '#4B5563',
+    fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+  openMapsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0F2C59',
+    borderRadius: 14,
+    paddingVertical: 12,
+    shadowColor: '#0F2C59',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  openMapsBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
 
   // ── Bottom gradient ───────────────────────────────────────────────────
   bottomGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 120, zIndex: 5 },

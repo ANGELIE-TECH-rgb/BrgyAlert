@@ -16,7 +16,12 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "package": "com.anonymous.BrgyAlert_Mobile"
+      "package": "com.anonymous.BrgyAlert_Mobile",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyD6dt6618BrcQrz8othFF1pyujiiHjwrY8"
+        }
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -32,3 +37,4 @@
     ]
   }
 }
+
