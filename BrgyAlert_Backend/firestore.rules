@@ -12,9 +12,21 @@ service cloud.firestore {
       allow read, update, delete: if isAuthenticated();
     }
 
+    // Helper: check if the requesting user owns this document
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
     // Rules for user profiles
     match /users/{userId} {
-      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+      // Create: only the authenticated user can create their own profile.
+      // We also verify the uid field in the written data matches the auth uid
+      // to prevent one user from writing a profile for another user.
+      allow create: if isOwner(userId)
+                    && request.resource.data.uid == request.auth.uid;
+
+      // Read / update / delete: owner only
+      allow read, update, delete: if isOwner(userId);
     }
 
     // Rules for responders

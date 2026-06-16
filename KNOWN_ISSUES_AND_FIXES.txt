@@ -1,0 +1,226 @@
+================================================================================
+  BRGYALERT - KNOWN ISSUES & FIXES LOG
+  Last Updated: 2026-06-15
+================================================================================
+
+Keep this file updated whenever you encounter and fix a bug. This serves as a
+quick reference to avoid re-diagnosing the same problems in the future.
+
+--------------------------------------------------------------------------------
+ISSUE #1: Expo App Freezes at 100% During Bundling
+--------------------------------------------------------------------------------
+STATUS     : FIXED
+DATE       : 2026-06-15
+AFFECTED   : BrgyAlert_Mobile
+
+SYMPTOMS:
+  - Running `npx expo start` causes Metro bundler to get stuck at 100%
+  - The terminal freezes and never finishes bundling
+  - No error message is shown — it just hangs indefinitely
+
+ROOT CAUSE:
+  Firebase v10+ uses a "package.json exports" field (a modern Node.js feature
+  for specifying different module entry points for ESM/CJS/browser/etc.).
+  Metro bundler's default behavior when it encounters these exports fields on
+  complex packages like Firebase is to get stuck in an infinite resolution loop.
+
+FIX APPLIED:
+  Created file: BrgyAlert_Mobile/metro.config.js
+
+  Key settings:
+    config.resolver.sourceExts = [...config.resolver.sourceExts, 'cjs'];
+    config.resolver.unstable_enablePackageExports = true;
+    config.resolver.unstable_conditionNames = ['require', 'default'];
+
+  Explanation:
+    - Enable package exports (so Firebase's internal @firebase/* imports work)
+    - Force the 'require' (CommonJS) condition instead of 'import' (ESM)
+    - CJS builds are self-contained and don't have circular ESM import issues
+
+IF IT HAPPENS AGAIN:
+  1. Make sure metro.config.js exists in BrgyAlert_Mobile/ with the settings above
+  2. Run: npx expo start --clear --tunnel
+  3. If still hanging, delete node_modules and re-run: npm install
+
+--------------------------------------------------------------------------------
+ISSUE #2: Bundling Error - "Unable to resolve @firebase/firestore"
+--------------------------------------------------------------------------------
+STATUS     : FIXED
+DATE       : 2026-06-15
+AFFECTED   : BrgyAlert_Mobile
+
+SYMPTOMS:
+  - Metro bundles to ~94% then fails with error:
+    "Unable to resolve @firebase/firestore from
+     node_modules\firebase\firestore\dist\esm\index.esm.js"
+  - Error code 500 shown on phone screen in red
+  - Import chain: index.js > App.js > AuthContext.js > firebase/firestore
+
+ROOT CAUSE:
+  When metro.config.js had `unstable_enablePackageExports = false`, Metro
+  ignored Firebase's "exports" field and fell back to the package's "main"
+  field. For `firebase/firestore`, the "main" field points to an ESM file:
+    firebase/firestore/dist/esm/index.esm.js
+  That ESM file does `export * from '@firebase/firestore'` — but without
+  exports support enabled, Metro cannot resolve `@firebase/firestore` either,
+  causing the UnableToResolveError.
+
+FIX APPLIED:
+  Updated BrgyAlert_Mobile/metro.config.js:
+    Changed: config.resolver.unstable_enablePackageExports = false
+    To:      config.resolver.unstable_enablePackageExports = true
+             config.resolver.unstable_conditionNames = ['require', 'default']
+
+  This tells Metro: "Use the exports field, but always pick the CJS/require
+  version" — which is a complete, working bundle with no broken internal imports.
+
+IF IT HAPPENS AGAIN:
+  1. Check metro.config.js has BOTH:
+       unstable_enablePackageExports = true
+       unstable_conditionNames = ['require', 'default']
+  2. Do NOT set unstable_enablePackageExports = false (causes this error)
+  3. Run: npx expo start --clear --tunnel
+
+--------------------------------------------------------------------------------
+ISSUE #3: Bundling Error - "Cannot find module react-native-worklets/plugin"
+--------------------------------------------------------------------------------
+STATUS     : FIXED
+DATE       : 2026-06-15
+AFFECTED   : BrgyAlert_Mobile
+
+SYMPTOMS:
+  - App immediately fails to bundle with error:
+    "[BABEL] Cannot find module 'react-native-worklets/plugin'"
+
+ROOT CAUSE:
+  babel.config.js was accidentally updated to include 'nativewind/babel' preset.
+  NativeWind v4's babel preset internally requires 'react-native-worklets-core'
+  which is NOT installed in this project.
+
+FIX APPLIED:
+  Reverted BrgyAlert_Mobile/babel.config.js to the original simple config:
+    module.exports = function(api) {
+      api.cache(true);
+      return {
+        presets: ['babel-preset-expo'],
+      };
+    };
+
+IF IT HAPPENS AGAIN:
+  1. Do NOT add 'nativewind/babel' to babel.config.js unless you also install:
+     npm install react-native-worklets-core
+  2. Keep babel.config.js minimal: only 'babel-preset-expo' preset
+  3. Run: npx expo start --clear --tunnel
+
+--------------------------------------------------------------------------------
+ISSUE #4: "Failed to download remote update" (HTTP 500 / Network Error)
+--------------------------------------------------------------------------------
+STATUS     : WORKAROUND
+DATE       : 2026-06-15
+AFFECTED   : BrgyAlert_Mobile (Expo Go on Android)
+
+SYMPTOMS:
+  - Blue screen on phone: "The development server returned response error code: 500"
+  - Or red screen: "Failed to download remote update"
+  - App works on tunnel but not on LAN
+
+ROOT CAUSE:
+  Phone and computer are on different network segments, or Windows Firewall is
+  blocking Node.js LAN traffic. Common on college/office Wi-Fi networks.
+
+WORKAROUND:
+  Always use tunnel mode: npx expo start --clear --tunnel
+  Tunnel routes traffic through Expo's servers, bypassing local network issues.
+
+PERMANENT FIX OPTIONS:
+  1. Set Windows Wi-Fi to "Private" network (not "Public")
+  2. Allow Node.js through Windows Defender Firewall (both public & private)
+  3. Use a personal mobile hotspot — connect both PC and phone to it
+
+--------------------------------------------------------------------------------
+FIREBASE & PACKAGE VERSIONS (as of 2026-06-15)
+--------------------------------------------------------------------------------
+  expo           : 54
+  react          : 19.1.0
+  react-native   : 0.81.5
+  firebase       : 10.14.1  (downgraded from v12 for Expo 54 stability)
+  nativewind     : ^4.2.5
+
+NOTE: Firebase v12 had additional compatibility issues with Expo 54.
+      Stick with firebase@10.14.1 until Expo 55+ officially supports v12.
+
+--------------------------------------------------------------------------------
+ISSUE #5: App Freezes at "Building 100%" on Phone After Bundle Succeeds
+--------------------------------------------------------------------------------
+STATUS     : FIXED
+DATE       : 2026-06-15
+AFFECTED   : BrgyAlert_Mobile
+
+SYMPTOMS:
+  - Metro terminal shows "Android Bundled Xms index.js (961 modules)" — SUCCESS
+  - But phone screen stays frozen at "Building..." at 100% forever
+  - App never launches past the Expo Go loading screen
+
+ROOT CAUSE:
+  In firebaseConfig.js, using initializeAuth() with getReactNativePersistence(AsyncStorage)
+  causes Firebase to synchronously read from AsyncStorage during module evaluation
+  (the import/loading phase). This blocks the JavaScript thread before any React
+  component can render, making the app appear frozen on the Expo Go build screen.
+
+FIX APPLIED:
+  1. firebaseConfig.js: Replaced initializeAuth() with getAuth()
+     - getAuth() does NOT block on AsyncStorage at startup
+     - No persistence is configured at module load time
+
+  2. AuthContext.js: Set up persistence asynchronously AFTER app launch
+     - Added: setPersistence(auth, getReactNativePersistence(AsyncStorage))
+     - This runs async — it never blocks the JS thread
+     - Users stay logged in between sessions (persistence still works)
+
+  3. AuthContext.js: Added 10-second safety timeout
+     - If onAuthStateChanged never fires (e.g. no network), loading is forced false
+     - Prevents app from showing an infinite loading spinner
+
+IF IT HAPPENS AGAIN:
+  1. NEVER use initializeAuth() with getReactNativePersistence() in firebaseConfig.js
+  2. Always use getAuth(app) in firebaseConfig.js
+  3. Set up persistence in AuthContext.js using setPersistence() (async, non-blocking)
+  4. Ensure AuthContext has a safety timeout for onAuthStateChanged
+
+--------------------------------------------------------------------------------
+ISSUE #6: User Registration Data Not Saved to Firestore (WiFi Block & Timing Race)
+--------------------------------------------------------------------------------
+STATUS     : FIXED
+DATE       : 2026-06-15
+AFFECTED   : BrgyAlert_Mobile + BrgyAlert_Backend
+
+SYMPTOMS:
+  - User registers successfully (Auth account created), but profile document is missing in Firestore.
+  - Or Firestore connection hangs forever during registration.
+  - Subsequent registration attempts fail with "email-already-in-use" but profile is still missing.
+
+ROOT CAUSE:
+  1. NETWORK PROTOCOL BLOCKS (Restricted WiFi):
+     Firestore by default uses WebSockets/gRPC. School/office WiFi networks (like PHINMA)
+     often block WebSockets, causing all Firestore operations to hang or time out.
+  2. AUTH TOKEN TIMING:
+     There is an asynchronous delay between when createUserWithEmailAndPassword() resolves
+     and when Firestore receives the authenticated user's token. Running setDoc() immediately
+     causes a PERMISSION_DENIED error since request.auth is initially evaluated as null.
+  3. ORPHAN ACCOUNTS:
+     A failed Firestore write leaves the Auth account created but the profile missing.
+     Subsequent registrations get "email-already-in-use", locking the user out.
+
+FIX APPLIED:
+  1. Firestore HTTP Long Polling (firebaseConfig.js):
+     Configured Firestore with `experimentalForceLongPolling: true` and `useFetchStreams: false`.
+     This forces connection over standard HTTPS POST/GET requests which work on restricted WiFi.
+  2. Retry Loop & Propagation (AuthContext.js):
+     Added a retry loop (3 attempts) on `permission-denied` writes. If the write fails,
+     it forces a local cached token refresh using `getIdToken(false)` and waits 1 second before retrying.
+  3. Self-Healing Registration (AuthContext.js):
+     If registration fails with `auth/email-already-in-use`, the app logs in the user,
+     checks if the Firestore user document is missing, and if so, auto-heals the profile by creating it.
+
+================================================================================
+

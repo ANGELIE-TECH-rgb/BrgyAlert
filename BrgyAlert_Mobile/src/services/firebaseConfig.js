@@ -1,9 +1,7 @@
 import { initializeApp } from 'firebase/app';
-import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
+import { initializeFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getAnalytics } from "firebase/analytics";
 
 //firebase api key
 const firebaseConfig = {
@@ -16,19 +14,24 @@ const firebaseConfig = {
   measurementId: "G-RD88HC5TEN"
 };
 
-
 // Initialize Firebase App
 const app = initializeApp(firebaseConfig);
 
-// Initialize Firebase Auth with React Native persistence to keep users logged in
-const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(AsyncStorage)
-});
+// Initialize Firebase Auth
+// NOTE: Persistence (AsyncStorage) is set up asynchronously in AuthContext
+// to avoid blocking the app startup (which caused the freeze at 100%).
+const auth = getAuth(app);
 
-// Initialize Firestore Database
-const db = getFirestore(app);
+// Initialize Firestore with HTTP long polling instead of WebSocket (gRPC).
+// School/office WiFi networks often block WebSocket connections which causes
+// Firestore writes/reads to hang or timeout. Long polling uses regular HTTP
+// requests which always work through firewalls and proxies.
+const db = initializeFirestore(app, {
+  experimentalForceLongPolling: true,
+  useFetchStreams: false,
+});
 
 // Initialize Firebase Storage
 const storage = getStorage(app);
-const analytics = getAnalytics(app);
+
 export { app, auth, db, storage };

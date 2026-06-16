@@ -1,3 +1,4 @@
+console.log("[DEBUG index.js] Root component registration starting...");
 import { registerRootComponent } from 'expo';
 
 import App from './App';
