@@ -38,16 +38,8 @@ export default function LoginScreen({ navigation }) {
     try {
       await login(email.trim(), password);
     } catch (error) {
-      console.error(error);
-      let friendlyError = 'Incorrect email or password. Please try again.';
-      if (error.code === 'auth/invalid-email') {
-        friendlyError = 'Please enter a valid email address.';
-      } else if (error.code === 'auth/user-not-found') {
-        friendlyError = 'No account found with this email.';
-      } else if (error.code === 'auth/wrong-password') {
-        friendlyError = 'Incorrect password. Please try again.';
-      }
-      setErrorMsg(friendlyError);
+      console.log('Login failed:', error.code || error.message);
+      setErrorMsg('Incorrect email or password. Please try again.');
     } finally {
       setIsSubmitting(false);
     }

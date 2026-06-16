@@ -18,7 +18,7 @@ export default function BottomTabNav() {
   ];
 
   const handlePress = (tabName) => {
-    if (tabName === 'CitizenHome' || tabName === 'CitizenReports') {
+    if (tabName === 'CitizenHome' || tabName === 'CitizenReports' || tabName === 'ChatMessages') {
       navigation.navigate(tabName);
     } else {
       alert(`${tabName} module will be implemented in the next sprint.`);

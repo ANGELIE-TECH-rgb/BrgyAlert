@@ -10,6 +10,11 @@ service cloud.firestore {
     match /alerts/{alertId} {
       allow create: if true;
       allow read, update, delete: if isAuthenticated();
+
+      // Rules for incident chat messages
+      match /messages/{messageId} {
+        allow read, write: if isAuthenticated();
+      }
     }
 
     // Helper: check if the requesting user owns this document

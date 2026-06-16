@@ -231,7 +231,7 @@ export const AuthProvider = ({ children }) => {
       subscribeToUserProfile(userCredential.user.uid);
       return userCredential.user;
     } catch (error) {
-      console.error('Login error:', error.code, error.message);
+      console.log('Login error:', error.code, error.message);
       throw error;
     } finally {
       setLoading(false);

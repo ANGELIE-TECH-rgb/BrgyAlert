@@ -322,7 +322,7 @@ export default function StatusTracker({ route, navigation }) {
           <View style={styles.footerContainer}>
             <TouchableOpacity 
               style={styles.messageButton}
-              onPress={() => alert('Direct Messaging feature will be implemented in Sprint 3!')}
+              onPress={() => navigation.navigate('ChatScreen', { alertId })}
             >
               <Text style={styles.messageButtonText}>Message Responder</Text>
             </TouchableOpacity>

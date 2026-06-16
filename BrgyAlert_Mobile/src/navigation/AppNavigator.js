@@ -17,6 +17,9 @@ import ReportWizard from '../screens/citizen/ReportWizard';
 import ReportSuccess from '../screens/citizen/ReportSuccess';
 import StatusTracker from '../screens/citizen/StatusTracker';
 import CitizenReports from '../screens/citizen/CitizenReports';
+import ChatMessages from '../screens/citizen/ChatMessages';
+import AdminMessages from '../screens/admin/AdminMessages';
+import ChatScreen from '../screens/common/ChatScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -47,17 +50,21 @@ export default function AppNavigator() {
           <>
             <Stack.Screen name="AdminHome" component={AdminConsole} />
             <Stack.Screen name="AdminQueue" component={AdminQueue} />
+            <Stack.Screen name="AdminMessages" component={AdminMessages} />
             <Stack.Screen name="IncidentDetail" component={IncidentDetail} />
             <Stack.Screen name="AdminMapScreen" component={AdminMapScreen} />
+            <Stack.Screen name="ChatScreen" component={ChatScreen} />
           </>
         ) : (
           // Citizen Stack (Default)
           <>
             <Stack.Screen name="CitizenHome" component={CitizenDashboard} />
             <Stack.Screen name="CitizenReports" component={CitizenReports} />
+            <Stack.Screen name="ChatMessages" component={ChatMessages} />
             <Stack.Screen name="ReportWizard" component={ReportWizard} />
             <Stack.Screen name="ReportSuccess" component={ReportSuccess} />
             <Stack.Screen name="StatusTracker" component={StatusTracker} />
+            <Stack.Screen name="ChatScreen" component={ChatScreen} />
           </>
         )}
       </Stack.Navigator>

@@ -471,6 +471,16 @@ export default function IncidentDetail({ route, navigation }) {
               <Rect width="100" height="100" fill="url(#fadeGrad)" />
             </Svg>
           </View>
+
+          {/* Sticky Message Reporter Footer Button */}
+          <View style={styles.footerContainer}>
+            <TouchableOpacity 
+              style={styles.messageButton}
+              onPress={() => navigation.navigate('ChatScreen', { alertId })}
+            >
+              <Text style={styles.messageButtonText}>Message Reporter</Text>
+            </TouchableOpacity>
+          </View>
         </>
       )}
 
@@ -602,7 +612,7 @@ const styles = StyleSheet.create({
   retryButtonText: { color: '#FFFFFF', fontWeight: '700' },
 
   // ── Scroll content ───────────────────────────────────────────────────
-  scrollContent: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 80 },
+  scrollContent: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 140 },
 
   // ── Decline banner (shown at the top when declined) ──────────────────
   declineBanner: {
@@ -815,4 +825,34 @@ const styles = StyleSheet.create({
     zIndex: 10, padding: 8, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20,
   },
   fullImage: { width: '90%', height: '75%' },
+  footerContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 24,
+    paddingBottom: Platform.OS === 'ios' ? 32 : 20,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderColor: '#F3F4F6',
+    zIndex: 10,
+  },
+  messageButton: {
+    backgroundColor: '#0F2C59',
+    borderRadius: 30,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#0F2C5940',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 3,
+  },
+  messageButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
 });
