@@ -270,7 +270,7 @@ export default function CitizenDashboard({ navigation }) {
             {/* My Reports Card */}
             <TouchableOpacity
               style={styles.serviceCard}
-              onPress={() => alert(`You have submitted ${recentLogs.length} reports.`)}
+              onPress={() => navigation.navigate('CitizenReports')}
             >
               <View style={styles.serviceIconWrapper}>
                 <Feather name="file-text" size={20} color="#2563EB" />
@@ -284,7 +284,7 @@ export default function CitizenDashboard({ navigation }) {
         <View style={[styles.sectionContainer, styles.logsSection]}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Recent logs</Text>
-            <TouchableOpacity onPress={() => alert('Historical logs view coming in Sprint 3!')}>
+            <TouchableOpacity onPress={() => navigation.navigate('CitizenReports')}>
               <Text style={styles.seeAllText}>See all</Text>
             </TouchableOpacity>
           </View>

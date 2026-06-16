@@ -128,7 +128,16 @@ export default function StatusTracker({ route, navigation }) {
 
       {/* Header (Mockup Alignment) */}
       <View style={styles.navHeader}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.navigate('CitizenHome')}>
+        <TouchableOpacity 
+          style={styles.backButton} 
+          onPress={() => {
+            if (navigation.canGoBack()) {
+              navigation.goBack();
+            } else {
+              navigation.navigate('CitizenHome');
+            }
+          }}
+        >
           <Feather name="arrow-left" size={20} color="#1F2937" />
         </TouchableOpacity>
         

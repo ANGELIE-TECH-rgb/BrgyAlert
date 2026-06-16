@@ -16,6 +16,7 @@ import AdminQueue from '../screens/admin/AdminQueue';
 import ReportWizard from '../screens/citizen/ReportWizard';
 import ReportSuccess from '../screens/citizen/ReportSuccess';
 import StatusTracker from '../screens/citizen/StatusTracker';
+import CitizenReports from '../screens/citizen/CitizenReports';
 
 const Stack = createNativeStackNavigator();
 
@@ -53,6 +54,7 @@ export default function AppNavigator() {
           // Citizen Stack (Default)
           <>
             <Stack.Screen name="CitizenHome" component={CitizenDashboard} />
+            <Stack.Screen name="CitizenReports" component={CitizenReports} />
             <Stack.Screen name="ReportWizard" component={ReportWizard} />
             <Stack.Screen name="ReportSuccess" component={ReportSuccess} />
             <Stack.Screen name="StatusTracker" component={StatusTracker} />

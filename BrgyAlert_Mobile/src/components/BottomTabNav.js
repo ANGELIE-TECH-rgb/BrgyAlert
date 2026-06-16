@@ -13,15 +13,13 @@ export default function BottomTabNav() {
   const tabs = [
     { name: 'CitizenHome', label: 'Home', icon: 'home' },
     { name: 'ChatMessages', label: 'messages', icon: 'message-square' },
-    { name: 'ReportWizard', label: 'Report', icon: 'file-text' },
+    { name: 'CitizenReports', label: 'Reports', icon: 'file-text' },
     { name: 'SettingsTab', label: 'Settings', icon: 'settings' }
   ];
 
   const handlePress = (tabName) => {
-    if (tabName === 'CitizenHome') {
-      navigation.navigate('CitizenHome');
-    } else if (tabName === 'ReportWizard') {
-      navigation.navigate('ReportWizard');
+    if (tabName === 'CitizenHome' || tabName === 'CitizenReports') {
+      navigation.navigate(tabName);
     } else {
       alert(`${tabName} module will be implemented in the next sprint.`);
     }
