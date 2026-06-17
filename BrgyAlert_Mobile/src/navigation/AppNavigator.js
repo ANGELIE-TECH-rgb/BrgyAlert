@@ -146,10 +146,15 @@ export default function AppNavigator() {
                   // Admin pending reports sync
                   if (data.status === 'submitted' && !activeUnreadNotifs[`incident_${alertId}`]) {
                     const locationText = data.location?.addressText || 'Unknown Location';
+                    const isPanic = data.urgency === 'critical' || (data.details && data.details.includes('PANIC BUTTON'));
+                    const notifType = isPanic ? 'emergency' : 'incident';
+                    
                     sendAndSaveNotification(user.uid, {
-                      title: `🚨 NEW INCIDENT: ${data.category || 'General'}`,
-                      body: `Reported at ${locationText}. Urgency: ${(data.urgency || 'medium').toUpperCase()}.`,
-                      type: 'incident',
+                      title: isPanic ? `🚨 CRITICAL PANIC ALERT!` : `🚨 NEW INCIDENT: ${data.category || 'General'}`,
+                      body: isPanic 
+                        ? `Panic button triggered by ${data.reporterName || 'Citizen'} at ${locationText}.` 
+                        : `Reported at ${locationText}. Urgency: ${(data.urgency || 'medium').toUpperCase()}.`,
+                      type: notifType,
                       relatedId: alertId
                     });
                     activeUnreadNotifs[`incident_${alertId}`] = true;
@@ -171,10 +176,15 @@ export default function AppNavigator() {
               // 2. Real-time Trigger for brand new reports (Only Admin/Responder gets notified)
               if (isAdmin && !isFirstLoad) {
                 const locationText = data.location?.addressText || 'Unknown Location';
+                const isPanic = data.urgency === 'critical' || (data.details && data.details.includes('PANIC BUTTON'));
+                const notifType = isPanic ? 'emergency' : 'incident';
+                
                 sendAndSaveNotification(user.uid, {
-                  title: `🚨 NEW INCIDENT: ${data.category || 'General'}`,
-                  body: `Reported at ${locationText}. Urgency: ${(data.urgency || 'medium').toUpperCase()}.`,
-                  type: 'incident',
+                  title: isPanic ? `🚨 CRITICAL PANIC ALERT!` : `🚨 NEW INCIDENT: ${data.category || 'General'}`,
+                  body: isPanic 
+                    ? `Panic button triggered by ${data.reporterName || 'Citizen'} at ${locationText}.` 
+                    : `Reported at ${locationText}. Urgency: ${(data.urgency || 'medium').toUpperCase()}.`,
+                  type: notifType,
                   relatedId: alertId
                 });
               }

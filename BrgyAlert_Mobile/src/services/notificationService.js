@@ -29,10 +29,18 @@ export function getActiveChat() {
   return activeChatAlertId;
 }
 
+const SOUND_ASSETS = {
+  emergency: require('../../assets/sounds/emergency.wav'),
+  message: require('../../assets/sounds/message.wav'),
+  report: require('../../assets/sounds/report.wav'),
+  incident: require('../../assets/sounds/report.wav'),
+  status: require('../../assets/sounds/report.wav'),
+};
+
 /**
- * Pre-load and play the premium custom WAV notification chime
+ * Pre-load and play the custom WAV notification chime based on notification type
  */
-export async function playNotificationSound() {
+export async function playNotificationSound(type = 'report') {
   try {
     const soundPref = await AsyncStorage.getItem('soundEnabled');
     if (soundPref === 'false') {
@@ -45,11 +53,30 @@ export async function playNotificationSound() {
         // Ignore unloading errors
       }
     }
-    soundObject = new Audio.Sound();
-    await soundObject.loadAsync(require('../../assets/sounds/notification.wav'));
-    await soundObject.playAsync();
+    
+    // Set Audio mode to ensure sound plays even when device is on silent/vibrate mode
+    await Audio.setAudioModeAsync({
+      playsInSilentModeIOS: true,
+      allowsRecordingIOS: false,
+      shouldDuckAndroid: true,
+      staysActiveInBackground: false,
+    });
+
+    const soundAsset = SOUND_ASSETS[type] || SOUND_ASSETS.report;
+    
+    // Load and play the sound, with automatic cleanup once done playing
+    const { sound } = await Audio.Sound.createAsync(
+      soundAsset,
+      { shouldPlay: true },
+      (status) => {
+        if (status.didJustFinish) {
+          sound.unloadAsync().catch(() => {});
+        }
+      }
+    );
+    soundObject = sound;
   } catch (error) {
-    console.log('Error playing notification sound:', error);
+    console.log(`Error playing notification sound of type "${type}":`, error);
   }
 }
 
@@ -89,7 +116,7 @@ export async function registerForNotificationsAsync() {
 /**
  * Schedules a local system notification banner and triggers foreground sound
  */
-export async function triggerLocalNotification(title, body) {
+export async function triggerLocalNotification(title, body, type = 'report') {
   try {
     await Notifications.scheduleNotificationAsync({
       content: {
@@ -101,8 +128,8 @@ export async function triggerLocalNotification(title, body) {
       trigger: null, // trigger immediately
     });
     
-    // Also play the custom audio sound chime
-    await playNotificationSound();
+    // Also play the custom audio sound chime matching the notification type
+    await playNotificationSound(type);
   } catch (error) {
     console.log('Error triggering local notification:', error);
   }
@@ -129,7 +156,7 @@ export async function sendAndSaveNotification(userId, { title, body, type, relat
     });
 
     // 2. Trigger local system notification and play chime
-    await triggerLocalNotification(title, body);
+    await triggerLocalNotification(title, body, type);
   } catch (error) {
     console.log('Error sending and saving notification:', error);
   }

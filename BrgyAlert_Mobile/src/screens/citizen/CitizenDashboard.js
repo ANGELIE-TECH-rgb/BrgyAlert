@@ -23,7 +23,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services/firebaseConfig';
-import { markAsRead, markAllAsRead } from '../../services/notificationService';
+import { markAsRead, markAllAsRead, playNotificationSound } from '../../services/notificationService';
 import { getCurrentLocation } from '../../services/locationService';
 import IncidentCard from '../../components/IncidentCard';
 import BottomTabNav from '../../components/BottomTabNav';
@@ -328,6 +328,7 @@ export default function CitizenDashboard({ navigation }) {
 
     try {
       Alert.alert('Panic Triggered', 'Sending emergency location alert to Barangay Command Center...');
+      await playNotificationSound('emergency');
       const location = await getCurrentLocation();
 
       const panicPayload = {
