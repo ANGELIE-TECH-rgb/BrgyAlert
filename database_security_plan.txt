@@ -1,0 +1,163 @@
+========================================================================
+                      BRGYALERT — DATABASE SECURITY PLAN
+========================================================================
+
+This document details the security audit findings, architectural guidelines,
+and a fully copy-pasteable, secure blueprint for `firestore.rules` to protect 
+BrgyAlert databases from unauthorized access, data leaks, and privilege escalation.
+
+------------------------------------------------------------------------
+1. AUDIT FINDINGS & SECURITY VULNERABILITIES
+------------------------------------------------------------------------
+
+* SYSTEM VULNERABILITY 1: Unauthenticated Creation of Alerts
+  - Current state: `/alerts` has `allow create: if true;`
+  - Threat: Anyone on the internet can flood the database with spam.
+  - Solution: Restrict creation to authenticated users, OR explicitly validate
+    online guest reporting schema keys (`userId == 'guest'` and `source == 'online_app'`).
+
+* SYSTEM VULNERABILITY 2: Horizontal Privilege Leak on Reports & Chats
+  - Current state: Any logged-in user can read, update, or delete other people's alerts.
+  - Threat: Citizens can delete or modify other citizens' emergency requests.
+  - Solution: Restrict read/update access to the document creator OR admins.
+
+* SYSTEM VULNERABILITY 3: Privilege Escalation via Profile Edit
+  - Current state: Owner can write any fields on profile update.
+  - Threat: Citizens can update their profile and change `"role": "citizen"` to `"admin"`.
+  - Solution: Add rules that prevent users from modifying their own `role` field on update.
+
+* SYSTEM VULNERABILITY 4: Administrative Write Access
+  - Current state: Any logged-in user can modify configs, responders, hotlines, etc.
+  - Threat: Citizens can deface emergency configurations or add fake responders.
+  - Solution: Restrict write operations strictly to `isAdminOrResponder()`.
+
+------------------------------------------------------------------------
+2. SECURED FIRESTORE RULES BLUEPRINT (Copy-Pasteable)
+------------------------------------------------------------------------
+
+Below is the complete, secure contents for `firestore.rules`:
+
+------------------------------------------------------------------------
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper: Verify if the user is signed in
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper: Verify if the requesting user owns this document
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Helper: Verify if the requesting user is an admin or responder
+    function isAdminOrResponder() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'responder');
+    }
+
+    // Rules for citizen reports/alerts
+    match /alerts/{alertId} {
+      // Create: user must write their own UID, OR submit as guest online
+      allow create: if (isAuthenticated() && request.resource.data.userId == request.auth.uid) ||
+                    (request.resource.data.userId == 'guest' && request.resource.data.source == 'online_app');
+      
+      // Read: only report owner OR admins/responders
+      allow read: if (isAuthenticated() && resource.data.userId == request.auth.uid) || 
+                  isAdminOrResponder();
+                  
+      // Update: Admins can modify everything. Citizens can only cancel or update details (no status/urgency changes).
+      allow update: if isAdminOrResponder() || 
+                    (isAuthenticated() && 
+                     resource.data.userId == request.auth.uid && 
+                     request.resource.data.userId == request.auth.uid &&
+                     (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['status', 'urgency', 'assignedResponders'])));
+      
+      // Delete: Strictly blocked to prevent tampering with emergency records
+      allow delete: if false;
+
+      // Rules for incident chat messages (Nested subcollection)
+      match /messages/{messageId} {
+        // Read/Write: only the parent alert's owner OR admins/responders
+        allow read, write: if (isAuthenticated() && get(/databases/$(database)/documents/alerts/$(alertId)).data.userId == request.auth.uid) || 
+                            isAdminOrResponder();
+      }
+    }
+
+    // Rules for user profiles
+    match /users/{userId} {
+      // Create: owner can write profile matching their auth uid
+      allow create: if isOwner(userId) && request.resource.data.uid == request.auth.uid;
+
+      // Read: owner OR admins/responders (so responders can load reporter info)
+      allow read: if isOwner(userId) || isAdminOrResponder();
+
+      // Update: owner only, and MUST NOT alter the role attribute
+      allow update: if isOwner(userId) && 
+                    (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']));
+
+      // Delete: blocked
+      allow delete: if false;
+
+      // Rules for user notifications (Nested subcollection)
+      match /notifications/{notificationId} {
+        allow read: if isOwner(userId);
+        allow write: if isOwner(userId) || isAdminOrResponder();
+      }
+    }
+
+    // Rules for responders configuration
+    match /responders/{responderId} {
+      allow read: if true;
+      allow write: if isAdminOrResponder();
+    }
+
+    // Rules for evacuation centers configuration
+    match /evacuation_centers/{centerId} {
+      allow read: if true;
+      allow write: if isAdminOrResponder();
+    }
+
+    // Rules for broadcasts
+    match /broadcasts/{broadcastId} {
+      allow read: if true;
+      allow write: if isAdminOrResponder();
+    }
+
+    // Rules for SMS logs (Only accessible via Backend Admin SDK, block clients)
+    match /sms_logs/{logId} {
+      allow read, write: if false;
+    }
+
+    // Rules for emergency contacts
+    match /emergency_contacts/{contactId} {
+      allow read: if true;
+      allow write: if isAdminOrResponder();
+    }
+
+    // Rules for barangay configuration settings
+    match /config/{configId} {
+      allow read: if true;
+      allow write: if isAdminOrResponder();
+    }
+  }
+}
+------------------------------------------------------------------------
+
+------------------------------------------------------------------------
+3. DEVELOPER DEPLOYMENT STEPS
+------------------------------------------------------------------------
+
+When you are ready to implement these rules:
+1. Replace the contents of `BrgyAlert_Backend/firestore.rules` with the blueprint code.
+2. Install the Firebase CLI if you haven't already:
+   npm install -g firebase-tools
+3. Authenticate with your Firebase project:
+   firebase login
+4. Deploy rules to your project production backend:
+   firebase deploy --only firestore:rules
+5. Test using the emulator locally to confirm rule logic:
+   firebase emulators:start

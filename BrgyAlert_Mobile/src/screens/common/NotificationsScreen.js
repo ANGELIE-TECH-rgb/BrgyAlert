@@ -44,7 +44,7 @@ export default function NotificationsScreen({ navigation }) {
       setNotifications(list);
       setLoading(false);
     }, (error) => {
-      console.error('Error fetching notifications:', error);
+      console.log('Error fetching notifications:', error);
       setLoading(false);
     });
 

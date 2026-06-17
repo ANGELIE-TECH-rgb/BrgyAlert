@@ -9,23 +9,79 @@ import {
   TextInput,
   ScrollView,
   ActivityIndicator,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { Feather } from '@expo/vector-icons';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services/firebaseConfig';
 import AdminBottomTabNav from '../../components/AdminBottomTabNav';
+import TutorialOverlay from '../../components/TutorialOverlay';
 
 export default function AdminQueue({ navigation }) {
   const { userProfile } = useAuth();
   const insets = useSafeAreaInsets();
+  const { height: H } = useWindowDimensions();
 
   const [allAlerts, setAllAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // all | submitted | under_review | dispatched | resolved | declined
+  const [showTutorial, setShowTutorial] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      const checkTutorial = async () => {
+        try {
+          const val = await AsyncStorage.getItem('hasSeenAdminQueueTutorial');
+          if (val !== 'true') {
+            setTimeout(() => {
+              setShowTutorial(true);
+            }, 600);
+          } else {
+            setShowTutorial(false);
+          }
+        } catch (err) {
+          console.log('Error checking admin queue tutorial state:', err);
+        }
+      };
+      checkTutorial();
+    });
+    return unsubscribe;
+  }, [navigation]);
+
+  const handleFinishTutorial = async () => {
+    try {
+      await AsyncStorage.setItem('hasSeenAdminQueueTutorial', 'true');
+    } catch (err) {
+      console.log('Error saving admin queue tutorial state:', err);
+    }
+    setShowTutorial(false);
+  };
+
+  const adminQueueTourSteps = [
+    {
+      title: 'Search Database logs',
+      desc: 'Search all barangay incidents by code, description, witness, category, or address.',
+      top: insets.top + Math.round(H * 0.06),
+      arrow: 'top'
+    },
+    {
+      title: 'Status Filters',
+      desc: 'Isolate alerts by status to review pending, under review, dispatched, or resolved cases.',
+      top: insets.top + Math.round(H * 0.12),
+      arrow: 'top'
+    },
+    {
+      title: 'Incident Queue List',
+      desc: 'View incident codes, times, locations, and status tags. Tap on any log card to triage and manage details.',
+      top: Math.round(H * 0.32),
+      arrow: 'top'
+    }
+  ];
 
   // Fetch alerts in real-time
   useEffect(() => {
@@ -48,7 +104,7 @@ export default function AdminQueue({ navigation }) {
         setLoading(false);
       },
       (error) => {
-        console.error('Snapshot listener error on AdminQueue:', error);
+        console.log('Snapshot listener error on AdminQueue:', error);
         setLoading(false);
       }
     );

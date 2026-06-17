@@ -54,7 +54,7 @@ export default function AdminAnalytics({ navigation }) {
         setLoading(false);
       },
       (error) => {
-        console.error('Snapshot listener error on AdminAnalytics:', error);
+        console.log('Snapshot listener error on AdminAnalytics:', error);
         setLoading(false);
       }
     );

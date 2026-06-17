@@ -1,0 +1,25 @@
+# BrgyAlert: Security Improvement Plan
+
+This document outlines planned security enhancements to be implemented in the future to harden the BrgyAlert platform.
+
+## 1. Biometric Secure "Remember Me"
+**Status:** Planned for future implementation
+**Target Application:** BrgyAlert_Mobile (React Native / Expo)
+
+### Current State
+The app currently remembers the user's email address using `AsyncStorage` (plain text) to pre-fill the login form. The password is not saved locally to prevent unauthorized access if an unlocked device falls into the wrong hands.
+
+### Planned Enhancement (Option A)
+To allow users to log in instantly without typing their password—while maintaining maximum security—we will implement a Biometric-gated credentials vault.
+
+**Key Libraries Required:**
+- `expo-secure-store`: To encrypt and store the user's password securely using the device's native keychain (iOS) or Keystore (Android).
+- `expo-local-authentication`: To prompt the user for Fingerprint or FaceID verification.
+
+**Implementation Workflow:**
+1. **Saving:** When a user logs in and checks "Remember Me", their password will be saved via `SecureStore.setItemAsync('savedPassword', password)`.
+2. **Retrieval:** Upon opening the app and navigating to the Login screen, the app will call `LocalAuthentication.authenticateAsync()`.
+3. **Verification:** The device will prompt for Biometric verification (Fingerprint/Face). 
+4. **Auto-Login:** Only upon successful biometric verification will the app retrieve the password from `SecureStore` and automatically execute the Firebase login sequence.
+
+This approach provides the ultimate balance of user convenience and strict security, ensuring only the device owner can auto-login to the emergency system.

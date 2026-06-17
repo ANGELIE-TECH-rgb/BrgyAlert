@@ -9,14 +9,17 @@ import {
   ActivityIndicator,
   Image,
   Modal,
-  Platform
+  Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import { doc, onSnapshot, query, collection, where, getDocs, writeBatch } from 'firebase/firestore';
 import { db } from '../../services/firebaseConfig';
 import { useAuth } from '../../context/AuthContext';
+import TutorialOverlay from '../../components/TutorialOverlay';
 
 const STATUS_STEPS = [
   { key: 'submitted', label: 'Report Submitted', desc: 'Your report has been successfully recorded in the system.' },
@@ -28,6 +31,7 @@ const STATUS_STEPS = [
 export default function StatusTracker({ route, navigation }) {
   const { alertId } = route.params || {};
   const insets = useSafeAreaInsets();
+  const { height: H } = useWindowDimensions();
   const { user } = useAuth();
   
   const [incident, setIncident] = useState(null);
@@ -35,6 +39,58 @@ export default function StatusTracker({ route, navigation }) {
   const [selectedImageUri, setSelectedImageUri] = useState(null);
   const [imageModalVisible, setImageModalVisible] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [showTutorial, setShowTutorial] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      const checkTutorial = async () => {
+        try {
+          const val = await AsyncStorage.getItem('hasSeenTrackerTutorial');
+          if (val !== 'true') {
+            setTimeout(() => {
+              setShowTutorial(true);
+            }, 600);
+          } else {
+            setShowTutorial(false);
+          }
+        } catch (err) {
+          console.log('Error checking tracker tutorial state:', err);
+        }
+      };
+      checkTutorial();
+    });
+    return unsubscribe;
+  }, [navigation]);
+
+  const handleFinishTutorial = async () => {
+    try {
+      await AsyncStorage.setItem('hasSeenTrackerTutorial', 'true');
+    } catch (err) {
+      console.log('Error saving tracker tutorial state:', err);
+    }
+    setShowTutorial(false);
+  };
+
+  const trackerTourSteps = [
+    {
+      title: 'Incident Timeline Progress',
+      desc: 'Track the real-time status of your incident. Responders will update this from Submitted to Dispatched and eventually Resolved.',
+      top: insets.top + Math.round(H * 0.12),
+      arrow: 'top'
+    },
+    {
+      title: 'Reporter Details Review',
+      desc: 'Review report details, witness statements, geocoded address coordinates, and compressed photo evidence attachments.',
+      top: Math.round(H * 0.40),
+      arrow: 'top'
+    },
+    {
+      title: 'Secure Message Responders',
+      desc: 'Tap "Message Responder" to open the secure chat thread and coordinate directly with the Command Center in real-time.',
+      bottom: Math.round(H * 0.10),
+      arrow: 'bottom'
+    }
+  ];
 
   // Subscribe to real-time updates for this alert
   useEffect(() => {
@@ -54,8 +110,8 @@ export default function StatusTracker({ route, navigation }) {
       }
       setLoading(false);
     }, (err) => {
-      console.error('Error listening to alert:', err);
-      setErrorMsg('Could not establish real-time listener.');
+      console.log('Error listening to alert:', err);
+      setErrorMsg('Could not establish real-time listener. Please check your internet connection.');
       setLoading(false);
     });
 
@@ -402,6 +458,14 @@ export default function StatusTracker({ route, navigation }) {
           )}
         </TouchableOpacity>
       </Modal>
+
+      {/* Tutorial Overlay App Tour */}
+      {showTutorial && (
+        <TutorialOverlay
+          steps={trackerTourSteps}
+          onFinish={handleFinishTutorial}
+        />
+      )}
     </View>
   );
 }

@@ -291,7 +291,7 @@ export default function RegisterScreen({ navigation }) {
         [{ text: "OK" }]
       );
     } catch (error) {
-      console.error('Registration error:', error.code, error.message);
+      console.log('Registration error:', error.code, error.message);
       let friendlyError = 'Registration failed. Please check your information and try again.';
 
       if (error.code === 'auth/email-already-in-use') {

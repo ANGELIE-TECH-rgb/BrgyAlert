@@ -12,12 +12,14 @@ import {
   Linking,
   Animated,
   Easing,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import Svg, { Defs, LinearGradient, Stop, Rect, Path, Circle } from 'react-native-svg';
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 import NetInfo from '@react-native-community/netinfo';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services/firebaseConfig';
@@ -25,10 +27,12 @@ import { markAsRead, markAllAsRead } from '../../services/notificationService';
 import { getCurrentLocation } from '../../services/locationService';
 import IncidentCard from '../../components/IncidentCard';
 import BottomTabNav from '../../components/BottomTabNav';
+import TutorialOverlay from '../../components/TutorialOverlay';
 
 export default function CitizenDashboard({ navigation }) {
   const { user, userProfile } = useAuth();
   const insets = useSafeAreaInsets();
+  const { height: H } = useWindowDimensions();
 
   const [isOnline, setIsOnline] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -36,6 +40,59 @@ export default function CitizenDashboard({ navigation }) {
   const [showDropdown, setShowDropdown] = useState(false);
   const [recentLogs, setRecentLogs] = useState([]);
   const [loadingLogs, setLoadingLogs] = useState(true);
+  const [showTutorial, setShowTutorial] = useState(false);
+
+  // Monitor navigation focus to trigger/replay the tour
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      const checkTutorial = async () => {
+        try {
+          const val = await AsyncStorage.getItem('hasSeenDashboardTutorial');
+          if (val !== 'true') {
+            setTimeout(() => {
+              setShowTutorial(true);
+            }, 600);
+          } else {
+            setShowTutorial(false);
+          }
+        } catch (err) {
+          console.log('Error checking dashboard tutorial state:', err);
+        }
+      };
+      checkTutorial();
+    });
+    return unsubscribe;
+  }, [navigation]);
+
+  const handleFinishTutorial = async () => {
+    try {
+      await AsyncStorage.setItem('hasSeenDashboardTutorial', 'true');
+    } catch (err) {
+      console.log('Error saving dashboard tutorial state:', err);
+    }
+    setShowTutorial(false);
+  };
+
+  const citizenTourSteps = [
+    {
+      title: 'Instant Panic Button',
+      desc: 'Hold this button for 3 seconds in severe emergencies to notify responders and broadcast your GPS coordinates.',
+      top: Math.round(H * 0.38),
+      arrow: 'top'
+    },
+    {
+      title: 'File Incident Report',
+      desc: 'Tap this button to create a detailed report, select a category, and attach evidence photos.',
+      bottom: Math.round(H * 0.22),
+      arrow: 'bottom'
+    },
+    {
+      title: 'Track Incident Logs',
+      desc: 'Track your reported incidents, verify their statuses, and open real-time chat threads with responders.',
+      bottom: Math.round(H * 0.14),
+      arrow: 'bottom'
+    }
+  ];
 
   // Barangay Configuration States
   const [showHotlinesModal, setShowHotlinesModal] = useState(false);
@@ -101,7 +158,7 @@ export default function CitizenDashboard({ navigation }) {
         setBarangayConfig(docSnap.data());
       }
     }, (error) => {
-      console.error('Error listening to barangay config snapshot:', error);
+      console.log('Error listening to barangay config snapshot:', error);
     });
     return () => unsubscribe();
   }, []);
@@ -124,7 +181,7 @@ export default function CitizenDashboard({ navigation }) {
       setDropdownNotifications(list.slice(0, 5));
       setUnreadCount(unread);
     }, (error) => {
-      console.error('Error fetching dashboard notifications:', error);
+      console.log('Error fetching dashboard notifications:', error);
     });
     return () => unsubscribe();
   }, [user]);
@@ -150,7 +207,7 @@ export default function CitizenDashboard({ navigation }) {
       setRecentLogs(logs);
       setLoadingLogs(false);
     }, (error) => {
-      console.error('Error fetching alerts snapshot:', error);
+      console.log('Error fetching alerts snapshot:', error);
       setLoadingLogs(false);
     });
 
@@ -300,8 +357,8 @@ export default function CitizenDashboard({ navigation }) {
         estimatedTime: '5 - 10 Minutes (Panic Priority)'
       });
     } catch (err) {
-      console.error('Panic trigger failed:', err);
-      Alert.alert('Trigger Failed', 'Could not establish connection to send panic alert. Please call hotlines directly.');
+      console.log('Panic trigger failed:', err);
+      Alert.alert('Low Internet / Trigger Failed', 'Could not establish a connection to trigger panic alert. Please try again or dial local emergency hotlines directly.');
     }
   };
 
@@ -324,18 +381,21 @@ export default function CitizenDashboard({ navigation }) {
             </View>
           </View>
 
-          <TouchableOpacity
-            style={styles.bellButton}
-            onPress={() => setShowDropdown(true)}
-            activeOpacity={0.7}
-          >
-            <Feather name="bell" size={22} color="#1F2937" />
-            {unreadCount > 0 && (
-              <View style={styles.badgeDot}>
-                <Text style={styles.badgeDotText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+
+            <TouchableOpacity
+              style={styles.bellButton}
+              onPress={() => setShowDropdown(true)}
+              activeOpacity={0.7}
+            >
+              <Feather name="bell" size={22} color="#1F2937" />
+              {unreadCount > 0 && (
+                <View style={styles.badgeDot}>
+                  <Text style={styles.badgeDotText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* ─── Emergency Button ─────────────────────────────────────── */}
@@ -721,6 +781,14 @@ export default function CitizenDashboard({ navigation }) {
 
       {/* Custom Bottom Tab Pill */}
       <BottomTabNav />
+
+      {/* Tutorial App Tour Overlay */}
+      {showTutorial && (
+        <TutorialOverlay
+          steps={citizenTourSteps}
+          onFinish={handleFinishTutorial}
+        />
+      )}
 
     </View>
   );

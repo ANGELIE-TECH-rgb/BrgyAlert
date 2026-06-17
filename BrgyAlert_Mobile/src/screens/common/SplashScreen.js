@@ -43,11 +43,6 @@ export default function SplashScreen() {
           resizeMode="contain"
         />
       </Animated.View>
-
-      {/* Subtitle container */}
-      <Animated.View style={[styles.textContainer, { opacity: textFadeAnim }]}>
-        <Text style={styles.subtitle}>Barangay Emergency Command & Dispatch</Text>
-      </Animated.View>
     </View>
   );
 }

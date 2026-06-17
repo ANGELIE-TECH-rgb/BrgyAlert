@@ -39,7 +39,7 @@ export default function AdminMapScreen({ navigation }) {
       setAllAlerts(list);
       setLoading(false);
     }, (err) => {
-      console.error('AdminMapScreen snapshot error:', err);
+      console.log('AdminMapScreen snapshot error:', err);
       setLoading(false);
     });
 

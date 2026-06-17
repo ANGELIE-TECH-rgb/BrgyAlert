@@ -40,7 +40,7 @@ export default function ForgotPasswordScreen({ navigation }) {
       setSuccessMsg('Reset link sent successfully! Please check your email.');
       setEmail('');
     } catch (error) {
-      console.error(error);
+      console.log(error);
       let friendlyError = 'Failed to send password reset email. Please try again.';
       if (error.code === 'auth/invalid-email') {
         friendlyError = 'Please enter a valid email address.';

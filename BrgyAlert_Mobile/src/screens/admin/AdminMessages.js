@@ -43,7 +43,7 @@ export default function AdminMessages({ navigation }) {
             }));
           }
         }, (err) => {
-          console.error(`Error listening to user profile ${uid}:`, err);
+          console.log(`Error listening to user profile ${uid}:`, err);
         });
         listenersRef.current[uid] = unsub;
       });
@@ -154,7 +154,7 @@ export default function AdminMessages({ navigation }) {
         setLoading(false);
       },
       (error) => {
-        console.error('Snapshot listener error on AdminMessages:', error);
+        console.log('Snapshot listener error on AdminMessages:', error);
         setLoading(false);
       }
     );

@@ -20,10 +20,26 @@ import GoogleIcon from '../../components/GoogleIcon';
 import { checkLoginStatus, recordFailedLogin, resetLoginAttempts } from '../../services/rateLimiter';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
+import { requestLocationPermission } from '../../services/locationService';
 
 export default function LoginScreen({ navigation }) {
   const { login, loginWithGoogle } = useAuth();
   const [isOnline, setIsOnline] = useState(true);
+
+  // Proactively request location permissions on mount to prepare for emergencies
+  useEffect(() => {
+    const askLoc = async () => {
+      try {
+        await requestLocationPermission();
+      } catch (err) {
+        console.log('Error prompting location permission on mount:', err);
+      }
+    };
+    const timer = setTimeout(() => {
+      askLoc();
+    }, 800);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Monitor network state
   useEffect(() => {
@@ -52,7 +68,7 @@ export default function LoginScreen({ navigation }) {
           setRememberMe(true);
         }
       } catch (err) {
-        console.error('Failed to load remembered email', err);
+        console.log('Failed to load remembered email', err);
       }
     };
     loadRememberedEmail();
@@ -128,14 +144,32 @@ export default function LoginScreen({ navigation }) {
       }
     } catch (error) {
       console.log('Login failed:', error.code || error.message);
-      const rateStatus = await recordFailedLogin();
-      if (rateStatus.locked) {
-        setLockoutTime(rateStatus.secondsRemaining);
-        setErrorMsg(`Too many failed attempts. Try again in ${rateStatus.secondsRemaining} seconds.`);
-        Alert.alert('Locked Out', `Too many failed attempts. Please try again in ${rateStatus.secondsRemaining} seconds.`);
+      
+      const isNetworkError = 
+        error.code === 'auth/network-request-failed' || 
+        error.message?.toLowerCase().includes('network') || 
+        error.message?.toLowerCase().includes('timeout');
+
+      if (isNetworkError) {
+        setErrorMsg('Network timeout or low connection. Please check your signal and try again.');
+        Alert.alert(
+          'Network Error',
+          'Your connection seems slow or offline. Please check your internet connection and try again, or file an offline report via SMS.',
+          [
+            { text: 'File Offline Report', onPress: () => navigation.navigate('ReportWizard') },
+            { text: 'Try Again', style: 'cancel' }
+          ]
+        );
       } else {
-        setErrorMsg('Incorrect email or password. Please try again.');
-        Alert.alert('Login Failed', 'Incorrect email or password. Please try again.');
+        const rateStatus = await recordFailedLogin();
+        if (rateStatus.locked) {
+          setLockoutTime(rateStatus.secondsRemaining);
+          setErrorMsg(`Too many failed attempts. Try again in ${rateStatus.secondsRemaining} seconds.`);
+          Alert.alert('Locked Out', `Too many failed attempts. Please try again in ${rateStatus.secondsRemaining} seconds.`);
+        } else {
+          setErrorMsg('Incorrect email or password. Please try again.');
+          Alert.alert('Login Failed', 'Incorrect email or password. Please try again.');
+        }
       }
     } finally {
       setIsSubmitting(false);
@@ -259,11 +293,9 @@ export default function LoginScreen({ navigation }) {
                 disabled={isSubmitting}
                 activeOpacity={0.7}
               >
-                <Feather
-                  name={rememberMe ? "check-square" : "square"}
-                  size={18}
-                  color={rememberMe ? "#0B2564" : "#A0AEC0"}
-                />
+                <View style={[styles.customCheckbox, rememberMe && styles.customCheckboxActive]}>
+                  {rememberMe && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
+                </View>
                 <Text style={styles.rememberMeText}>Remember me</Text>
               </TouchableOpacity>
 
@@ -449,6 +481,20 @@ const styles = StyleSheet.create({
   rememberMeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  customCheckbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  customCheckboxActive: {
+    backgroundColor: '#0B2564',
+    borderColor: '#0B2564',
   },
   rememberMeText: {
     marginLeft: 8,

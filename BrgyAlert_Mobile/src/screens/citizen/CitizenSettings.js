@@ -97,7 +97,7 @@ export default function CitizenSettings({ navigation }) {
       Alert.alert('Success', 'Profile updated successfully.');
       setIsEditing(false);
     } catch (error) {
-      console.error('Error saving profile:', error);
+      console.log('Error saving profile:', error);
       Alert.alert('Error', 'Could not update profile. Please try again.');
     } finally {
       setSaving(false);
@@ -191,6 +191,18 @@ export default function CitizenSettings({ navigation }) {
         { text: 'Sign Out', style: 'destructive', onPress: () => logout() }
       ]
     );
+  };
+
+  // Handle Replay Tour
+  const handleReplayTour = async () => {
+    try {
+      await AsyncStorage.removeItem('hasSeenDashboardTutorial');
+      Alert.alert('Tour Reset', 'App tour has been reset. Returning to dashboard...');
+      navigation.navigate('CitizenHome');
+    } catch (err) {
+      console.log('Error resetting tutorial state:', err);
+      Alert.alert('Error', 'Could not reset the app tour.');
+    }
   };
 
   return (
@@ -386,6 +398,24 @@ export default function CitizenSettings({ navigation }) {
                 <View>
                   <Text style={styles.settingTitle}>Change Password</Text>
                   <Text style={styles.settingSubtitle}>Update your password directly in-app</Text>
+                </View>
+              </View>
+              <Feather name="chevron-right" size={18} color="#9CA3AF" />
+            </TouchableOpacity>
+
+            {/* Replay App Tour Row */}
+            <TouchableOpacity
+              style={[styles.settingRow, styles.borderTop]}
+              onPress={handleReplayTour}
+              activeOpacity={0.7}
+            >
+              <View style={styles.settingRowLeft}>
+                <View style={[styles.rowIconWrapper, { backgroundColor: '#EFF6FF' }]}>
+                  <Feather name="help-circle" size={18} color="#2563EB" />
+                </View>
+                <View>
+                  <Text style={styles.settingTitle}>Replay App Tour</Text>
+                  <Text style={styles.settingSubtitle}>Show step-by-step interactive overlay</Text>
                 </View>
               </View>
               <Feather name="chevron-right" size={18} color="#9CA3AF" />

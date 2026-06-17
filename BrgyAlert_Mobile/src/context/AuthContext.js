@@ -103,7 +103,7 @@ export const AuthProvider = ({ children }) => {
       setUser(firebaseUser);
       subscribeToUserProfile(uid);
     } catch (error) {
-      console.error('[AuthContext] Firebase Google login error:', error);
+      console.log('[AuthContext] Firebase Google login error:', error);
       if (error.code === statusCodes.SIGN_IN_CANCELLED) {
         console.log('[AuthContext] Google Sign-in cancelled by user');
       } else if (error.code === statusCodes.IN_PROGRESS) {
@@ -342,7 +342,7 @@ export const AuthProvider = ({ children }) => {
 
       return firebaseUser;
     } catch (error) {
-      console.error('Registration error:', error.code, error.message);
+      console.log('Registration error:', error.code, error.message);
       throw error;
     } finally {
       isRegisteringRef.current = false;
@@ -360,7 +360,7 @@ export const AuthProvider = ({ children }) => {
       setUserProfile(null);
       justRegisteredRef.current = false;
     } catch (error) {
-      console.error('Logout error:', error);
+      console.log('Logout error:', error);
       throw error;
     } finally {
       setLoading(false);
@@ -382,7 +382,7 @@ export const AuthProvider = ({ children }) => {
       });
       console.log(`[AuthContext] Role updated to "${newRole}" for UID:`, targetUid);
     } catch (error) {
-      console.error('updateUserRole error:', error);
+      console.log('updateUserRole error:', error);
       throw error;
     }
   };
@@ -392,7 +392,7 @@ export const AuthProvider = ({ children }) => {
     try {
       await sendPasswordResetEmail(auth, email);
     } catch (error) {
-      console.error('Password reset error:', error);
+      console.log('Password reset error:', error);
       throw error;
     }
   };

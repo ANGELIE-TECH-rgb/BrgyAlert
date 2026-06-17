@@ -7,7 +7,12 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "BrgyAlert uses your location to tag incident reports to the correct Purok and dispatch emergency responders to your exact coordinates.",
+        "NSCameraUsageDescription": "BrgyAlert uses your camera to capture and attach real-time photo evidence for reporting incidents.",
+        "NSPhotoLibraryUsageDescription": "BrgyAlert uses your photo library to select and attach existing images as evidence for your incident reports."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -39,6 +44,19 @@
         {
           "icon": "./assets/icon.png",
           "color": "#0F2C59"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "BrgyAlert uses your location to tag incident reports to the correct Purok and dispatch emergency responders to your exact coordinates."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "BrgyAlert uses your photo library to select and attach existing images as evidence for your incident reports.",
+          "cameraPermission": "BrgyAlert uses your camera to capture and attach real-time photo evidence for reporting incidents."
         }
       ]
     ]

@@ -159,7 +159,7 @@ export default function ChatScreen({ route, navigation }) {
             }
           }
         } catch (err) {
-          console.error('Error resolving alert userId:', err);
+          console.log('Error resolving alert userId:', err);
         }
       }
 
@@ -183,7 +183,7 @@ export default function ChatScreen({ route, navigation }) {
               setCurrentAlertId(alertId);
             }
           } catch (err) {
-            console.error('Error fetching fallback anonymous alert:', err);
+            console.log('Error fetching fallback anonymous alert:', err);
           }
           return;
         } else {
@@ -211,7 +211,7 @@ export default function ChatScreen({ route, navigation }) {
             setCurrentAlertId(list[0].id);
           }
         } catch (err) {
-          console.error('Error fetching user alerts for selector:', err);
+          console.log('Error fetching user alerts for selector:', err);
         }
       }
     };
@@ -248,7 +248,7 @@ export default function ChatScreen({ route, navigation }) {
         setCitizenProfile(userSnap.data());
       }
     }, (err) => {
-      console.error('Error listening to citizen profile in ChatScreen:', err);
+      console.log('Error listening to citizen profile in ChatScreen:', err);
     });
 
     return () => unsubscribeUser();
@@ -338,7 +338,7 @@ export default function ChatScreen({ route, navigation }) {
         }, 100);
       },
       (error) => {
-        console.error('Error listening to messages:', error);
+        console.log('Error listening to messages:', error);
         setLoading(false);
       }
     );
@@ -386,7 +386,7 @@ export default function ChatScreen({ route, navigation }) {
 
       await updateDoc(doc(db, 'alerts', currentAlertId), updateData);
     } catch (err) {
-      console.error('Error sending message:', err);
+      console.log('Error sending message:', err);
     }
   };
 

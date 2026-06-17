@@ -246,7 +246,7 @@ export default function ReportWizard({ navigation }) {
         setEvidenceUris([...evidenceUris, uri]);
       }
     } catch (err) {
-      console.error('Error attaching evidence:', err);
+      console.log('Error attaching evidence:', err);
       if (err.message === 'Image size exceeds the 5MB limit.') {
         Alert.alert('File Size Limit', 'The selected image exceeds the 5MB size limit.');
       } else {
@@ -293,8 +293,52 @@ export default function ReportWizard({ navigation }) {
       const downloadUrl = await getDownloadURL(fileRef);
       return downloadUrl;
     } catch (err) {
-      console.error('Firebase Storage upload failed:', err);
-      throw new Error('Failed to upload photo evidence to Cloud Storage.');
+      console.log('Firebase Storage upload failed:', err);
+      throw new Error('Failed to upload photo evidence. Connection may be low or offline.');
+    }
+  };
+
+  const triggerSmsFallback = () => {
+    try {
+      const categoryCode = CATEGORY_SMS_CODES[incidentType] || 'GI';
+      const rawLocation = (locationCoords?.addressText || '').replace(/[!]/g, '');
+      const rawDetails = (description || '').replace(/[!]/g, '');
+      
+      const smsPayload = `BA!${categoryCode}!${rawLocation}!${rawDetails}`;
+      const gatewayNumber = '+639090000000';
+      const smsUrl = `sms:${gatewayNumber}${Platform.OS === 'ios' ? '&' : '?'}body=${encodeURIComponent(smsPayload)}`;
+
+      Alert.alert(
+        'Offline Mode Detected',
+        'No cellular internet connection. We will compile your report into a compressed SMS to the Barangay gateway. Please press send on the next screen.',
+        [
+          {
+            text: 'Open SMS Client',
+            onPress: async () => {
+              const supported = await Linking.canOpenURL(smsUrl);
+              if (supported) {
+                await Linking.openURL(smsUrl);
+                navigation.navigate('ReportSuccess', {
+                  reportId: 'OFFLINE_SMS',
+                  estimatedTime: 'Waiting for SMS transmission'
+                });
+              } else {
+                Alert.alert('SMS Error', 'Could not open native SMS client.');
+              }
+              setIsSubmitting(false);
+            }
+          },
+          {
+            text: 'Cancel',
+            style: 'cancel',
+            onPress: () => setIsSubmitting(false)
+          }
+        ]
+      );
+    } catch (smsErr) {
+      console.log('Offline SMS trigger failed:', smsErr);
+      setErrorMsg('Could not initialize offline SMS fallback.');
+      setIsSubmitting(false);
     }
   };
 
@@ -403,53 +447,22 @@ export default function ReportWizard({ navigation }) {
           estimatedTime: '15 - 30 Minutes' 
         });
       } catch (err) {
-        console.error('Online submit error:', err);
-        setErrorMsg(err.message || 'Submission failed. Please check internet connection.');
+        console.log('Online submit error:', err);
+        setErrorMsg('Submission failed due to connection issues. Please try again.');
+        
+        Alert.alert(
+          'Low Internet / Submission Failed',
+          'We detected a weak internet connection or timeout. Would you like to compile this report into a compressed SMS to the Barangay gateway instead?',
+          [
+            { text: 'Submit via SMS', onPress: () => triggerSmsFallback() },
+            { text: 'Try Again', style: 'cancel' }
+          ]
+        );
       } finally {
         setIsSubmitting(false);
       }
     } else {
-      try {
-        const categoryCode = CATEGORY_SMS_CODES[incidentType] || 'GI';
-        const rawLocation = locationCoords.addressText.replace(/[!]/g, '');
-        const rawDetails = description.replace(/[!]/g, '');
-        
-        const smsPayload = `BA!${categoryCode}!${rawLocation}!${rawDetails}`;
-        const gatewayNumber = '+639090000000';
-        const smsUrl = `sms:${gatewayNumber}${Platform.OS === 'ios' ? '&' : '?'}body=${encodeURIComponent(smsPayload)}`;
-
-        Alert.alert(
-          'Offline Mode Detected',
-          'No cellular internet connection. We will compile your report into a compressed SMS to the Barangay gateway. Please press send on the next screen.',
-          [
-            {
-              text: 'Open SMS Client',
-              onPress: async () => {
-                const supported = await Linking.canOpenURL(smsUrl);
-                if (supported) {
-                  await Linking.openURL(smsUrl);
-                  navigation.navigate('ReportSuccess', {
-                    reportId: 'OFFLINE_SMS',
-                    estimatedTime: 'Waiting for SMS transmission'
-                  });
-                } else {
-                  Alert.alert('SMS Error', 'Could not open native SMS client.');
-                }
-                setIsSubmitting(false);
-              }
-            },
-            {
-              text: 'Cancel',
-              style: 'cancel',
-              onPress: () => setIsSubmitting(false)
-            }
-          ]
-        );
-      } catch (smsErr) {
-        console.error('Offline SMS trigger failed:', smsErr);
-        setErrorMsg('Could not initialize offline SMS fallback.');
-        setIsSubmitting(false);
-      }
+      triggerSmsFallback();
     }
   };
 

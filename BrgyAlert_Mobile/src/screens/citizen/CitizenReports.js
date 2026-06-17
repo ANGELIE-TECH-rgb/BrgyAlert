@@ -9,23 +9,79 @@ import {
   TextInput,
   ScrollView,
   ActivityIndicator,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { Feather } from '@expo/vector-icons';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services/firebaseConfig';
 import BottomTabNav from '../../components/BottomTabNav';
+import TutorialOverlay from '../../components/TutorialOverlay';
 
 export default function CitizenReports({ navigation }) {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const { height: H } = useWindowDimensions();
 
   const [allAlerts, setAllAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // all | submitted | under_review | dispatched | resolved | declined
+  const [showTutorial, setShowTutorial] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      const checkTutorial = async () => {
+        try {
+          const val = await AsyncStorage.getItem('hasSeenReportsTutorial');
+          if (val !== 'true') {
+            setTimeout(() => {
+              setShowTutorial(true);
+            }, 600);
+          } else {
+            setShowTutorial(false);
+          }
+        } catch (err) {
+          console.log('Error checking reports tutorial state:', err);
+        }
+      };
+      checkTutorial();
+    });
+    return unsubscribe;
+  }, [navigation]);
+
+  const handleFinishTutorial = async () => {
+    try {
+      await AsyncStorage.setItem('hasSeenReportsTutorial', 'true');
+    } catch (err) {
+      console.log('Error saving reports tutorial state:', err);
+    }
+    setShowTutorial(false);
+  };
+
+  const reportsTourSteps = [
+    {
+      title: 'Search Incidents',
+      desc: 'Search your reports list instantly by category, description text, or reporter name.',
+      top: insets.top + Math.round(H * 0.06),
+      arrow: 'top'
+    },
+    {
+      title: 'Filter Status Tabs',
+      desc: 'Filter your list by specific incident statuses (All, Pending, Under Review, Dispatched, Resolved, Declined).',
+      top: insets.top + Math.round(H * 0.12),
+      arrow: 'top'
+    },
+    {
+      title: 'Incident Record Cards',
+      desc: 'Tap on any report card to track its live timeline progress and message responders.',
+      top: Math.round(H * 0.32),
+      arrow: 'top'
+    }
+  ];
 
   // Fetch only this citizen's incident reports in real-time
   useEffect(() => {
@@ -51,7 +107,7 @@ export default function CitizenReports({ navigation }) {
         setLoading(false);
       },
       (error) => {
-        console.error('Snapshot listener error on CitizenReports:', error);
+        console.log('Snapshot listener error on CitizenReports:', error);
         setLoading(false);
       }
     );
@@ -319,6 +375,14 @@ export default function CitizenReports({ navigation }) {
 
       {/* Floating Bottom Tab Nav Bar */}
       <BottomTabNav />
+
+      {/* Tutorial Overlay App Tour */}
+      {showTutorial && (
+        <TutorialOverlay
+          steps={reportsTourSteps}
+          onFinish={handleFinishTutorial}
+        />
+      )}
     </View>
   );
 }

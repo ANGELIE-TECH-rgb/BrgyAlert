@@ -39,7 +39,7 @@ export async function checkLoginStatus() {
     await AsyncStorage.removeItem(LOGIN_ATTEMPTS_KEY);
     return { locked: false, secondsRemaining: 0 };
   } catch (err) {
-    console.error('Error checking login rate limit status:', err);
+    console.log('Error checking login rate limit status:', err);
     return { locked: false, secondsRemaining: 0 };
   }
 }
@@ -76,7 +76,7 @@ export async function recordFailedLogin() {
 
     return { locked: false, secondsRemaining: 0 };
   } catch (err) {
-    console.error('Error recording failed login attempt:', err);
+    console.log('Error recording failed login attempt:', err);
     return { locked: false, secondsRemaining: 0 };
   }
 }
@@ -89,7 +89,7 @@ export async function resetLoginAttempts() {
     await AsyncStorage.removeItem(LOGIN_ATTEMPTS_KEY);
     await AsyncStorage.removeItem(LOGIN_LOCKOUT_KEY);
   } catch (err) {
-    console.error('Error resetting login attempts:', err);
+    console.log('Error resetting login attempts:', err);
   }
 }
 
@@ -119,7 +119,7 @@ export async function checkSignUpStatus() {
     await AsyncStorage.removeItem(SIGNUP_ATTEMPTS_KEY);
     return { locked: false, secondsRemaining: 0 };
   } catch (err) {
-    console.error('Error checking signup rate limit status:', err);
+    console.log('Error checking signup rate limit status:', err);
     return { locked: false, secondsRemaining: 0 };
   }
 }
@@ -156,7 +156,7 @@ export async function recordSignUpAttempt() {
 
     return { locked: false, secondsRemaining: 0 };
   } catch (err) {
-    console.error('Error recording signup attempt:', err);
+    console.log('Error recording signup attempt:', err);
     return { locked: false, secondsRemaining: 0 };
   }
 }

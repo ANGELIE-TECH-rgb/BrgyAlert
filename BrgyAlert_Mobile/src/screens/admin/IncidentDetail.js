@@ -118,8 +118,8 @@ export default function IncidentDetail({ route, navigation }) {
       }
       setLoading(false);
     }, (err) => {
-      console.error('Error listening to alert:', err);
-      setErrorMsg('Could not establish real-time listener.');
+      console.log('Error listening to alert:', err);
+      setErrorMsg('Could not establish real-time listener. Please check your internet connection.');
       setLoading(false);
     });
 
@@ -162,7 +162,7 @@ export default function IncidentDetail({ route, navigation }) {
         setReporterProfile(userSnap.data());
       }
     }, (err) => {
-      console.error('Error listening to reporter profile:', err);
+      console.log('Error listening to reporter profile:', err);
     });
 
     return () => unsubscribeUser();
@@ -251,7 +251,7 @@ export default function IncidentDetail({ route, navigation }) {
       });
       Alert.alert('Success', `Incident status updated to "${newStatus.replace('_', ' ').toUpperCase()}".`);
     } catch (error) {
-      console.error('Error updating status:', error);
+      console.log('Error updating status:', error);
       Alert.alert('Error', 'Failed to update status. Please try again.');
     } finally {
       setUpdating(false);
@@ -284,7 +284,7 @@ export default function IncidentDetail({ route, navigation }) {
               setDeclineReason('');
               Alert.alert('Report Declined', 'The report has been marked as declined.');
             } catch (error) {
-              console.error('Error declining report:', error);
+              console.log('Error declining report:', error);
               Alert.alert('Error', 'Failed to decline the report. Please try again.');
             } finally {
               setDeclineSubmitting(false);

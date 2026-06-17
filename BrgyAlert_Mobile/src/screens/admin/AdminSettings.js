@@ -133,7 +133,7 @@ export default function AdminSettings({ navigation }) {
       Alert.alert('Success', 'Profile updated successfully.');
       setIsEditing(false);
     } catch (error) {
-      console.error('Error saving profile:', error);
+      console.log('Error saving profile:', error);
       Alert.alert('Error', 'Could not update profile. Please try again.');
     } finally {
       setSavingProfile(false);
@@ -157,7 +157,7 @@ export default function AdminSettings({ navigation }) {
       }, { merge: true });
       Alert.alert('Success', 'Barangay configurations updated successfully.');
     } catch (error) {
-      console.error('Error saving barangay config:', error);
+      console.log('Error saving barangay config:', error);
       Alert.alert('Error', 'Could not update Barangay configurations. Please try again.');
     } finally {
       setSavingConfig(false);
@@ -251,6 +251,18 @@ export default function AdminSettings({ navigation }) {
         { text: 'Sign Out', style: 'destructive', onPress: () => logout() }
       ]
     );
+  };
+
+  // Handle Replay Tour
+  const handleReplayTour = async () => {
+    try {
+      await AsyncStorage.removeItem('hasSeenAdminTutorial');
+      Alert.alert('Tour Reset', 'Admin tour has been reset. Returning to command console...');
+      navigation.navigate('AdminHome');
+    } catch (err) {
+      console.log('Error resetting tutorial state:', err);
+      Alert.alert('Error', 'Could not reset the app tour.');
+    }
   };
 
   return (
@@ -510,6 +522,24 @@ export default function AdminSettings({ navigation }) {
                 <View>
                   <Text style={styles.settingTitle}>Change Password</Text>
                   <Text style={styles.settingSubtitle}>Update your password directly in-app</Text>
+                </View>
+              </View>
+              <Feather name="chevron-right" size={18} color="#9CA3AF" />
+            </TouchableOpacity>
+
+            {/* Replay App Tour Row */}
+            <TouchableOpacity
+              style={[styles.settingRow, styles.borderTop]}
+              onPress={handleReplayTour}
+              activeOpacity={0.7}
+            >
+              <View style={styles.settingRowLeft}>
+                <View style={[styles.rowIconWrapper, { backgroundColor: '#EFF6FF' }]}>
+                  <Feather name="help-circle" size={18} color="#2563EB" />
+                </View>
+                <View>
+                  <Text style={styles.settingTitle}>Replay App Tour</Text>
+                  <Text style={styles.settingSubtitle}>Show step-by-step interactive overlay</Text>
                 </View>
               </View>
               <Feather name="chevron-right" size={18} color="#9CA3AF" />

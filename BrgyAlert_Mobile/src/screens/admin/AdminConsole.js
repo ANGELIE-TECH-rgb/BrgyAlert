@@ -8,8 +8,10 @@ import {
   ScrollView,
   ActivityIndicator,
   Modal,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { collection, query, orderBy, onSnapshot, where } from 'firebase/firestore';
 import { Feather } from '@expo/vector-icons';
 import { markAsRead, markAllAsRead } from '../../services/notificationService';
@@ -18,6 +20,7 @@ import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services/firebaseConfig';
 import AdminBottomTabNav from '../../components/AdminBottomTabNav';
+import TutorialOverlay from '../../components/TutorialOverlay';
 
 // Barangay Lepa center coordinates
 const BRGY_CENTER = { latitude: 14.6000, longitude: 120.9800 };
@@ -25,6 +28,7 @@ const BRGY_CENTER = { latitude: 14.6000, longitude: 120.9800 };
 export default function AdminConsole({ navigation }) {
   const { user, userProfile } = useAuth();
   const insets = useSafeAreaInsets();
+  const { height: H } = useWindowDimensions();
   
   const [allAlerts, setAllAlerts] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -32,6 +36,65 @@ export default function AdminConsole({ navigation }) {
   const [showDropdown, setShowDropdown] = useState(false);
   const [loading, setLoading] = useState(true);
   const [mapMode, setMapMode] = useState('Satellite'); // Satellite | Terrain
+  const [showTutorial, setShowTutorial] = useState(false);
+
+  // Monitor navigation focus to trigger/replay the tour
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      const checkTutorial = async () => {
+        try {
+          const val = await AsyncStorage.getItem('hasSeenAdminTutorial');
+          if (val !== 'true') {
+            setTimeout(() => {
+              setShowTutorial(true);
+            }, 600);
+          } else {
+            setShowTutorial(false);
+          }
+        } catch (err) {
+          console.log('Error checking admin tutorial state:', err);
+        }
+      };
+      checkTutorial();
+    });
+    return unsubscribe;
+  }, [navigation]);
+
+  const handleFinishTutorial = async () => {
+    try {
+      await AsyncStorage.setItem('hasSeenAdminTutorial', 'true');
+    } catch (err) {
+      console.log('Error saving admin tutorial state:', err);
+    }
+    setShowTutorial(false);
+  };
+
+  const adminTourSteps = [
+    {
+      title: 'Notification Center',
+      desc: 'Access the persistent system notifications log and recent notifications list.',
+      top: insets.top + Math.round(H * 0.06),
+      arrow: 'top'
+    },
+    {
+      title: 'Real-time Performance Metrics',
+      desc: 'View live statistics of pending alerts, dispatched teams, and resolved rates.',
+      top: insets.top + Math.round(H * 0.14),
+      arrow: 'top'
+    },
+    {
+      title: 'Live Incident Command Queue',
+      desc: 'Scan alerts on the interactive map, view details, dispatch emergency responders, or decline incident reports in real-time.',
+      top: Math.round(H * 0.40),
+      arrow: 'top'
+    },
+    {
+      title: 'Command Center Navigation',
+      desc: 'Manage responder messages, examine weekly trend analytics, and configure barangay settings.',
+      bottom: Math.round(H * 0.14),
+      arrow: 'bottom'
+    }
+  ];
 
   // Dynamic Metrics States
   const [totalReports, setTotalReports] = useState(0);
@@ -92,7 +155,7 @@ export default function AdminConsole({ navigation }) {
       setResolvedToday(resolved);
       setLoading(false);
     }, (error) => {
-      console.error('Snapshot listener error on AdminConsole:', error);
+      console.log('Snapshot listener error on AdminConsole:', error);
       setLoading(false);
     });
 
@@ -117,7 +180,7 @@ export default function AdminConsole({ navigation }) {
       setDropdownNotifications(list.slice(0, 5));
       setUnreadCount(unread);
     }, (error) => {
-      console.error('Error fetching admin notifications:', error);
+      console.log('Error fetching admin notifications:', error);
     });
     return () => unsubscribe();
   }, [user]);
@@ -497,6 +560,14 @@ export default function AdminConsole({ navigation }) {
 
       {/* Floating Bottom Tab Nav Bar */}
       <AdminBottomTabNav />
+
+      {/* Tutorial App Tour Overlay */}
+      {showTutorial && (
+        <TutorialOverlay
+          steps={adminTourSteps}
+          onFinish={handleFinishTutorial}
+        />
+      )}
 
     </View>
   );

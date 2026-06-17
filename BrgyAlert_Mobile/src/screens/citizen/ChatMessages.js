@@ -8,23 +8,73 @@ import {
   FlatList,
   ActivityIndicator,
   TextInput,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { Feather } from '@expo/vector-icons';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services/firebaseConfig';
 import BottomTabNav from '../../components/BottomTabNav';
+import TutorialOverlay from '../../components/TutorialOverlay';
 
 export default function ChatMessages({ navigation }) {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const { height: H } = useWindowDimensions();
 
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [readFilter, setReadFilter] = useState('all'); // all | unread | read
+  const [showTutorial, setShowTutorial] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      const checkTutorial = async () => {
+        try {
+          const val = await AsyncStorage.getItem('hasSeenMessagesTutorial');
+          if (val !== 'true') {
+            setTimeout(() => {
+              setShowTutorial(true);
+            }, 600);
+          } else {
+            setShowTutorial(false);
+          }
+        } catch (err) {
+          console.log('Error checking messages tutorial state:', err);
+        }
+      };
+      checkTutorial();
+    });
+    return unsubscribe;
+  }, [navigation]);
+
+  const handleFinishTutorial = async () => {
+    try {
+      await AsyncStorage.setItem('hasSeenMessagesTutorial', 'true');
+    } catch (err) {
+      console.log('Error saving messages tutorial state:', err);
+    }
+    setShowTutorial(false);
+  };
+
+  const messagesTourSteps = [
+    {
+      title: 'Chat Inbox Feed',
+      desc: 'View all your active conversation threads. Conversation items highlighted in bold text with a blue badge contain unread updates from the Command Center.',
+      top: insets.top + Math.round(H * 0.08),
+      arrow: 'top'
+    },
+    {
+      title: 'Real-time Coordination',
+      desc: 'A dedicated chat thread is automatically opened for each report you submit, allowing you to easily send updates or photos directly to responders.',
+      top: Math.round(H * 0.26),
+      arrow: 'top'
+    }
+  ];
 
   // Filter alerts by search query and read/unread status
   const filteredAlerts = alerts.filter((alert) => {
@@ -72,7 +122,7 @@ export default function ChatMessages({ navigation }) {
         setLoading(false);
       },
       (error) => {
-        console.error('Snapshot listener error on ChatMessages:', error);
+        console.log('Snapshot listener error on ChatMessages:', error);
         setLoading(false);
       }
     );
@@ -293,6 +343,14 @@ export default function ChatMessages({ navigation }) {
 
       {/* Floating Bottom Tab Nav Bar */}
       <BottomTabNav />
+
+      {/* Tutorial Overlay App Tour */}
+      {showTutorial && (
+        <TutorialOverlay
+          steps={messagesTourSteps}
+          onFinish={handleFinishTutorial}
+        />
+      )}
     </View>
   );
 }
