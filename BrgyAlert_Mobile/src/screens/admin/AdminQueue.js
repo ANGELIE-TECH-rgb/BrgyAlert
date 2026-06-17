@@ -21,7 +21,7 @@ import { db } from '../../services/firebaseConfig';
 import AdminBottomTabNav from '../../components/AdminBottomTabNav';
 import TutorialOverlay from '../../components/TutorialOverlay';
 
-export default function AdminQueue({ navigation }) {
+export default function AdminQueue({ route, navigation }) {
   const { userProfile } = useAuth();
   const insets = useSafeAreaInsets();
   const { height: H } = useWindowDimensions();
@@ -31,6 +31,18 @@ export default function AdminQueue({ navigation }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // all | submitted | under_review | dispatched | resolved | declined
   const [showTutorial, setShowTutorial] = useState(false);
+
+  // Apply deep-linked filter or search from dashboard/analytics
+  useEffect(() => {
+    if (route.params?.initialFilter) {
+      setStatusFilter(route.params.initialFilter);
+      navigation.setParams({ initialFilter: undefined });
+    }
+    if (route.params?.initialSearch) {
+      setSearchQuery(route.params.initialSearch);
+      navigation.setParams({ initialSearch: undefined });
+    }
+  }, [route.params?.initialFilter, route.params?.initialSearch]);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {

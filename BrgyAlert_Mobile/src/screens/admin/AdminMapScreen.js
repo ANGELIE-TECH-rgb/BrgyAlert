@@ -50,8 +50,8 @@ export default function AdminMapScreen({ navigation }) {
   const activeAlerts = allAlerts.filter(a => ACTIVE_STATUSES.includes(a.status));
 
   const getPinColor = (category) => {
-    if (category === 'Fire' || category === 'Medical') return '#EF4444';
-    if (category === 'Flooding' || category === 'Accident' || category === 'Traffic') return '#D97706';
+    if (category === 'Fire' || category === 'Medical' || category === 'Crime') return '#EF4444';
+    if (category === 'Flooding' || category === 'Accident' || category === 'Traffic' || category === 'Flood') return '#D97706';
     return '#2563EB';
   };
 
@@ -161,8 +161,8 @@ export default function AdminMapScreen({ navigation }) {
       <View style={[styles.legendBox, { bottom: insets.bottom + 24 }]} pointerEvents="none">
         <Text style={styles.legendTitle}>MAP LEGEND</Text>
         {[
-          { color: '#EF4444', label: 'Fire / Medical' },
-          { color: '#D97706', label: 'Traffic / Flooding' },
+          { color: '#EF4444', label: 'Fire / Medical / Crime' },
+          { color: '#D97706', label: 'Flood / Accident / Traffic' },
           { color: '#2563EB', label: 'General' },
         ].map(({ color, label }) => (
           <View key={label} style={styles.legendRow}>

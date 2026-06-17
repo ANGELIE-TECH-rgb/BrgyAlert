@@ -18,15 +18,15 @@ import Svg, {
   LinearGradient,
   Stop,
   Rect,
-  Path,
   Circle,
   Text as SvgText,
 } from 'react-native-svg';
+import { LineChart, BarChart, PieChart } from 'react-native-chart-kit';
 import { db } from '../../services/firebaseConfig';
 import AdminBottomTabNav from '../../components/AdminBottomTabNav';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CHART_WIDTH = SCREEN_WIDTH - 48; // Padding horizontal is 24 on each side
+const CHART_WIDTH = SCREEN_WIDTH - 96; // Accounting for 24px screen padding + 20px card padding + safety margin on each side
 const CHART_HEIGHT = 160;
 
 export default function AdminAnalytics({ navigation }) {
@@ -145,7 +145,7 @@ export default function AdminAnalytics({ navigation }) {
     for (let i = 6; i >= 0; i--) {
       const d = new Date();
       d.setDate(now.getDate() - i);
-      labels.push(daysOfWeek[d.getDay()]);
+      labels.push(`${daysOfWeek[d.getDay()]} ${d.getDate()}`);
     }
 
     filteredAlerts.forEach((alert) => {
@@ -166,48 +166,119 @@ export default function AdminAnalytics({ navigation }) {
   };
 
   const trend = getWeeklyTrend();
-  const maxTrendValue = Math.max(...trend.counts, 5); // Fallback to 5 to avoid flat scale
 
-  // Compute SVG coordinates for custom Area Curve Chart
-  const getSvgCoordinates = () => {
-    const paddingLeftRight = 32;
-    const paddingTop = 20;
-    const paddingBottom = 25;
-    
-    const chartUsableWidth = CHART_WIDTH - paddingLeftRight * 2;
-    const chartUsableHeight = CHART_HEIGHT - paddingTop - paddingBottom;
-    
-    const points = trend.counts.map((val, idx) => {
-      const x = paddingLeftRight + (idx * chartUsableWidth) / 6;
-      const y = CHART_HEIGHT - paddingBottom - (val * chartUsableHeight) / maxTrendValue;
-      return { x, y };
-    });
-
-    // Create spline string commands
-    let linePath = `M ${points[0].x} ${points[0].y}`;
-    for (let i = 1; i < points.length; i++) {
-      // Simple cubic bezier curve approximation for smooth lines
-      const prev = points[i - 1];
-      const curr = points[i];
-      const cpX1 = prev.x + (curr.x - prev.x) / 3;
-      const cpY1 = prev.y;
-      const cpX2 = prev.x + (2 * (curr.x - prev.x)) / 3;
-      const cpY2 = curr.y;
-      linePath += ` C ${cpX1} ${cpY1}, ${cpX2} ${cpY2}, ${curr.x} ${curr.y}`;
+  const getInsights = () => {
+    if (totalCount === 0) {
+      return {
+        text: "No alerts filed in this time frame. Operational activity is fully clear.",
+        badge: "All Clear",
+        color: "#10B981",
+        bg: "#F0FDF4",
+        icon: "smile"
+      };
     }
 
-    const areaPath =
-      `${linePath} L ${points[points.length - 1].x} ${CHART_HEIGHT - paddingBottom} L ${points[0].x} ${CHART_HEIGHT - paddingBottom} Z`;
+    const topCategory = processedCategories[0];
+    const topCategoryLabel = topCategory ? topCategory.label.split('/')[0] : 'General';
+    const topCategoryCount = topCategory ? topCategory.count : 0;
+    
+    // Most active priority
+    let mainUrgency = 'Medium';
+    const totalUrgency = urgencyCounts.high + urgencyCounts.medium + urgencyCounts.low;
+    if (totalUrgency > 0) {
+      if (urgencyCounts.high >= urgencyCounts.medium && urgencyCounts.high >= urgencyCounts.low) {
+        mainUrgency = 'High';
+      } else if (urgencyCounts.low >= urgencyCounts.medium && urgencyCounts.low >= urgencyCounts.high) {
+        mainUrgency = 'Low';
+      }
+    }
 
-    return { points, linePath, areaPath, paddingLeftRight, paddingBottom };
+    let insightText = '';
+    let badge = 'Operational Summary';
+    let color = '#2563EB';
+    let bg = '#EFF6FF';
+    let icon = 'info';
+
+    if (statusCounts.active > 5) {
+      insightText = `Active queue is high (${statusCounts.active} reports). Triage pending reports immediately to dispatch emergency response teams.`;
+      badge = 'Triage Needed';
+      color = '#EF4444';
+      bg = '#FEF2F2';
+      icon = 'alert-triangle';
+    } else if (resolutionRate > 80) {
+      insightText = `Outstanding response performance! Resolution rate is at ${resolutionRate.toFixed(0)}%. ${topCategoryLabel} cases make up ${topCategoryCount} of the logs.`;
+      badge = 'Excellent Status';
+      color = '#10B981';
+      bg = '#F0FDF4';
+      icon = 'thumbs-up';
+    } else {
+      insightText = `${topCategoryLabel} represents the highest volume incident type with ${topCategoryCount} reports. Incident priority leans towards ${mainUrgency}.`;
+      badge = 'Trend Alert';
+      color = '#EA580C';
+      bg = '#FFF7ED';
+      icon = 'trending-up';
+    }
+
+    return { text: insightText, badge, color, bg, icon };
   };
 
-  const svgCoords = getSvgCoordinates();
+  const operationalInsight = getInsights();
+
+  const getUrgencyTheme = (name) => {
+    if (name === 'High') {
+      return { bg: '#FEF2F2', border: '#FEE2E2', text: '#EF4444', label: 'High Priority' };
+    }
+    if (name === 'Medium') {
+      return { bg: '#FFF7ED', border: '#FFEEDB', text: '#D97706', label: 'Medium Priority' };
+    }
+    return { bg: '#ECFDF5', border: '#D1FAE5', text: '#10B981', label: 'Low Priority' };
+  };
 
   // Circular progress stroke specs
   const RADIUS = 36;
   const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
   const strokeOffset = CIRCUMFERENCE - (resolutionRate / 100) * CIRCUMFERENCE;
+
+  // Chart configs
+  const chartConfigBase = {
+    backgroundColor: '#ffffff',
+    backgroundGradientFrom: '#ffffff',
+    backgroundGradientTo: '#ffffff',
+    decimalPlaces: 0,
+    color: (opacity = 1) => `rgba(11, 37, 100, ${opacity})`, // Navy
+    labelColor: (opacity = 1) => `rgba(107, 114, 128, ${opacity})`,
+    style: { borderRadius: 16 },
+    propsForDots: {
+      r: '4',
+      strokeWidth: '2',
+      stroke: '#2563EB',
+    },
+    propsForBackgroundLines: {
+      strokeDasharray: '4 4',
+      stroke: '#F3F4F6',
+    }
+  };
+
+  const barChartConfig = {
+    ...chartConfigBase,
+    color: (opacity = 1) => `rgba(37, 99, 235, ${opacity})`, // Primary Blue
+    labelColor: (opacity = 1) => `#111827`, // Pure high-contrast dark text
+    barPercentage: 0.6,
+  };
+
+  const pieChartData = [
+    { name: `High`, population: urgencyCounts.high, color: '#EF4444', legendFontColor: '#111827', legendFontSize: 13 },
+    { name: `Medium`, population: urgencyCounts.medium, color: '#F59E0B', legendFontColor: '#111827', legendFontSize: 13 },
+    { name: `Low`, population: urgencyCounts.low, color: '#10B981', legendFontColor: '#111827', legendFontSize: 13 },
+  ];
+
+  const topCategories = processedCategories.slice(0, 5);
+  const barChartData = {
+    labels: topCategories.map(c => c.label.split('/')[0]),
+    datasets: [{ data: topCategories.map(c => c.count) }]
+  };
+
+
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -253,39 +324,70 @@ export default function AdminAnalytics({ navigation }) {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
+          {/* Dynamic Insight Card */}
+          <View style={[styles.insightCard, { backgroundColor: operationalInsight.bg, borderColor: operationalInsight.bg }]}>
+            <View style={styles.insightHeaderRow}>
+              <View style={[styles.insightIconWrapper, { backgroundColor: '#FFFFFF' }]}>
+                <Feather name={operationalInsight.icon} size={16} color={operationalInsight.color} />
+              </View>
+              <View style={[styles.insightBadge, { backgroundColor: operationalInsight.color }]}>
+                <Text style={styles.insightBadgeText}>{operationalInsight.badge}</Text>
+              </View>
+            </View>
+            <Text style={[styles.insightText, { color: '#374151' }]}>
+              {operationalInsight.text}
+            </Text>
+          </View>
+
           {/* Overview Grid Card */}
           <View style={styles.kpiGrid}>
-            <View style={styles.kpiCard}>
+            <TouchableOpacity 
+              style={styles.kpiCard}
+              onPress={() => navigation.navigate('AdminQueue', { initialFilter: 'all' })}
+              activeOpacity={0.8}
+            >
               <View style={[styles.kpiIconBox, { backgroundColor: '#EFF6FF' }]}>
                 <Feather name="file-text" size={20} color="#2563EB" />
               </View>
               <Text style={styles.kpiVal}>{totalCount}</Text>
               <Text style={styles.kpiLabel}>Total Cases</Text>
-            </View>
+            </TouchableOpacity>
 
-            <View style={styles.kpiCard}>
+            <TouchableOpacity 
+              style={styles.kpiCard}
+              onPress={() => navigation.navigate('AdminQueue', { initialFilter: 'submitted' })}
+              activeOpacity={0.8}
+            >
               <View style={[styles.kpiIconBox, { backgroundColor: '#FFF7ED' }]}>
                 <Feather name="clock" size={20} color="#D97706" />
               </View>
               <Text style={styles.kpiVal}>{statusCounts.active}</Text>
               <Text style={styles.kpiLabel}>Active Queue</Text>
-            </View>
+            </TouchableOpacity>
 
-            <View style={styles.kpiCard}>
+            <TouchableOpacity 
+              style={styles.kpiCard}
+              onPress={() => navigation.navigate('AdminQueue', { initialFilter: 'resolved' })}
+              activeOpacity={0.8}
+            >
               <View style={[styles.kpiIconBox, { backgroundColor: '#ECFDF5' }]}>
                 <Feather name="check-circle" size={20} color="#10B981" />
               </View>
               <Text style={styles.kpiVal}>{statusCounts.resolved}</Text>
               <Text style={styles.kpiLabel}>Cases Resolved</Text>
-            </View>
+            </TouchableOpacity>
 
-            <View style={styles.kpiCard}>
+            <TouchableOpacity 
+              style={styles.kpiCard}
+              onPress={() => navigation.navigate('AdminQueue', { initialFilter: 'declined' })}
+              activeOpacity={0.8}
+            >
               <View style={[styles.kpiIconBox, { backgroundColor: '#FEF2F2' }]}>
                 <Feather name="x-circle" size={20} color="#EF4444" />
               </View>
               <Text style={styles.kpiVal}>{statusCounts.declined}</Text>
               <Text style={styles.kpiLabel}>Cases Declined</Text>
-            </View>
+            </TouchableOpacity>
           </View>
 
           {/* Premium Circular Resolution Rate Gauge */}
@@ -344,153 +446,90 @@ export default function AdminAnalytics({ navigation }) {
             </View>
           </View>
 
-          {/* Custom SVG Weekly Trend Area Curve Chart */}
+          {/* Custom SVG Weekly Trend Area Curve Chart -> Now React Native Chart Kit LineChart */}
           <View style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Weekly Ingestion Trend</Text>
             <Text style={styles.sectionSubtitle}>
               Emergency alerts filed per day over the active time range.
             </Text>
 
-            <View style={styles.chartWrapper}>
-              <Svg width={CHART_WIDTH} height={CHART_HEIGHT}>
-                <Defs>
-                  {/* Fill Gradient */}
-                  <LinearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
-                    <Stop offset="0" stopColor="#0B2564" stopOpacity="0.3" />
-                    <Stop offset="1" stopColor="#0B2564" stopOpacity="0.0" />
-                  </LinearGradient>
-                </Defs>
-
-                {/* Grid guidelines */}
-                {[0, 0.5, 1].map((pct, idx) => {
-                  const y = 20 + pct * (CHART_HEIGHT - 45);
-                  return (
-                    <Path
-                      key={idx}
-                      d={`M 32 ${y} H ${CHART_WIDTH - 32}`}
-                      stroke="#F3F4F6"
-                      strokeWidth="1"
-                      strokeDasharray="4 4"
-                    />
-                  );
-                })}
-
-                {/* Area under the trend curve */}
-                <Path d={svgCoords.areaPath} fill="url(#chartGrad)" />
-
-                {/* Core trend spline line */}
-                <Path d={svgCoords.linePath} fill="none" stroke="#0F2C59" strokeWidth="3" />
-
-                {/* Interactive Points / Tooltip Values */}
-                {svgCoords.points.map((pt, idx) => {
-                  const val = trend.counts[idx];
-                  return (
-                    <React.Fragment key={idx}>
-                      <Circle cx={pt.x} cy={pt.y} r="4.5" fill="#FFFFFF" stroke="#0F2C59" strokeWidth="2.5" />
-                      {val > 0 && (
-                        <SvgText
-                          x={pt.x}
-                          y={pt.y - 10}
-                          fontSize="9"
-                          fontWeight="700"
-                          fill="#0F2C59"
-                          textAnchor="middle"
-                        >
-                          {val}
-                        </SvgText>
-                      )}
-                    </React.Fragment>
-                  );
-                })}
-
-                {/* Day labels at the bottom */}
-                {trend.labels.map((lbl, idx) => {
-                  const x = svgCoords.paddingLeftRight + (idx * (CHART_WIDTH - svgCoords.paddingLeftRight * 2)) / 6;
-                  return (
-                    <SvgText
-                      key={idx}
-                      x={x}
-                      y={CHART_HEIGHT - 6}
-                      fontSize="9"
-                      fontWeight="bold"
-                      fill="#9CA3AF"
-                      textAnchor="middle"
-                    >
-                      {lbl}
-                    </SvgText>
-                  );
-                })}
-              </Svg>
+            <View style={{ alignItems: 'center', marginTop: 12 }}>
+              <LineChart
+                data={{
+                  labels: trend.labels,
+                  datasets: [{
+                    data: trend.counts,
+                    color: (opacity = 1) => `rgba(37, 99, 235, ${opacity})`,
+                    strokeWidth: 3
+                  }]
+                }}
+                width={CHART_WIDTH}
+                height={220}
+                yAxisLabel=""
+                yAxisSuffix=""
+                yAxisInterval={1}
+                chartConfig={{
+                  ...chartConfigBase,
+                  backgroundGradientFrom: '#F8FAFC',
+                  backgroundGradientTo: '#FFFFFF',
+                  propsForDots: {
+                    r: '5',
+                    strokeWidth: '2.5',
+                    stroke: '#FFFFFF',
+                  }
+                }}
+                withVerticalLines={false}
+                bezier
+                style={{
+                  marginVertical: 8,
+                  borderRadius: 16,
+                  paddingRight: 10,
+                }}
+              />
             </View>
           </View>
 
-          {/* Urgent Distribution & Priority Ratio */}
+          {/* Urgent Distribution & Priority Ratio -> Pie Chart */}
           <View style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Priority Urgency Breakdown</Text>
             <Text style={styles.sectionSubtitle}>
               Ratio distribution of incident urgencies designated to reports.
             </Text>
 
-            <View style={styles.priorityContainer}>
-              <View style={styles.priorityRow}>
-                <View style={styles.priorityItem}>
-                  <Text style={[styles.priorityVal, { color: '#EF4444' }]}>
-                    {urgencyCounts.high}
-                  </Text>
-                  <Text style={styles.priorityLabel}>High Priority</Text>
-                </View>
-                <View style={styles.priorityItem}>
-                  <Text style={[styles.priorityVal, { color: '#F59E0B' }]}>
-                    {urgencyCounts.medium}
-                  </Text>
-                  <Text style={styles.priorityLabel}>Medium Priority</Text>
-                </View>
-                <View style={styles.priorityItem}>
-                  <Text style={[styles.priorityVal, { color: '#10B981' }]}>
-                    {urgencyCounts.low}
-                  </Text>
-                  <Text style={styles.priorityLabel}>Low Priority</Text>
-                </View>
+            <View style={styles.pieSectionRow}>
+              <View style={styles.pieChartWrapper}>
+                <PieChart
+                  data={pieChartData}
+                  width={SCREEN_WIDTH * 0.4}
+                  height={120}
+                  chartConfig={chartConfigBase}
+                  accessor={"population"}
+                  backgroundColor={"transparent"}
+                  paddingLeft={"15"}
+                  center={[0, 0]}
+                  hasLegend={false}
+                  absolute
+                />
               </View>
 
-              {/* Stacked Ratio Progress Bar */}
-              {totalCount > 0 ? (
-                <View style={styles.ratioBarOuter}>
-                  <View
-                    style={[
-                      styles.ratioBarSegment,
-                      {
-                        backgroundColor: '#EF4444',
-                        width: `${(urgencyCounts.high / totalCount) * 100}%`,
-                        borderBottomLeftRadius: 5,
-                        borderTopLeftRadius: 5,
-                      },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.ratioBarSegment,
-                      {
-                        backgroundColor: '#F59E0B',
-                        width: `${(urgencyCounts.medium / totalCount) * 100}%`,
-                      },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.ratioBarSegment,
-                      {
-                        backgroundColor: '#10B981',
-                        width: `${(urgencyCounts.low / totalCount) * 100}%`,
-                        borderBottomRightRadius: 5,
-                        borderTopRightRadius: 5,
-                      },
-                    ]}
-                  />
-                </View>
-              ) : (
-                <View style={[styles.ratioBarOuter, { backgroundColor: '#F3F4F6' }]} />
-              )}
+              <View style={styles.customPieLegendColumn}>
+                {pieChartData.map((item, index) => {
+                  const theme = getUrgencyTheme(item.name);
+                  const totalUrgency = urgencyCounts.high + urgencyCounts.medium + urgencyCounts.low;
+                  const pct = totalUrgency > 0 ? (item.population / totalUrgency) * 100 : 0;
+                  return (
+                    <View key={index} style={[styles.legendChipItem, { backgroundColor: theme.bg, borderColor: theme.border }]}>
+                      <View style={styles.legendChipLeft}>
+                        <View style={[styles.legendDotKey, { backgroundColor: item.color }]} />
+                        <Text style={[styles.legendLabelName, { color: theme.text }]}>{theme.label}</Text>
+                      </View>
+                      <Text style={[styles.legendLabelPercentage, { color: theme.text }]}>
+                        {item.population} cases • {pct.toFixed(0)}%
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
             </View>
           </View>
 
@@ -503,7 +542,12 @@ export default function AdminAnalytics({ navigation }) {
 
             <View style={styles.categoryList}>
               {processedCategories.map((cat, idx) => (
-                <View key={idx} style={styles.categoryRow}>
+                <TouchableOpacity 
+                  key={idx} 
+                  style={styles.categoryRow}
+                  activeOpacity={0.7}
+                  onPress={() => navigation.navigate('AdminQueue', { initialSearch: cat.name })}
+                >
                   <View style={styles.categoryLeft}>
                     <View style={[styles.categoryIconBox, { backgroundColor: cat.bg }]}>
                       <Feather name={cat.icon} size={15} color={cat.color} />
@@ -528,8 +572,9 @@ export default function AdminAnalytics({ navigation }) {
                     <Text style={styles.categoryPercentText}>
                       {cat.percentage.toFixed(0)}%
                     </Text>
+                    <Feather name="chevron-right" size={14} color="#9CA3AF" style={{ marginLeft: 6 }} />
                   </View>
-                </View>
+                </TouchableOpacity>
               ))}
             </View>
           </View>
@@ -825,5 +870,88 @@ const styles = StyleSheet.create({
     color: '#111827',
     minWidth: 32,
     textAlign: 'right',
+  },
+  insightCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 20,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.02,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  insightHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  insightIconWrapper: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  insightBadge: {
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+  },
+  insightBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  insightText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
+  pieSectionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+  },
+  pieChartWrapper: {
+    flex: 0.42,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  customPieLegendColumn: {
+    flex: 0.58,
+    paddingLeft: 8,
+  },
+  legendChipItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  legendChipLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  legendDotKey: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 6,
+  },
+  legendLabelName: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  legendLabelPercentage: {
+    fontSize: 10.5,
+    fontWeight: '800',
   },
 });

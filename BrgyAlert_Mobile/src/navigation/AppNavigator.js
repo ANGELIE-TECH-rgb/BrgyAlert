@@ -32,6 +32,7 @@ import ChatScreen from '../screens/common/ChatScreen';
 import NotificationsScreen from '../screens/common/NotificationsScreen';
 import CitizenSettings from '../screens/citizen/CitizenSettings';
 import AdminSettings from '../screens/admin/AdminSettings';
+import LocationRequiredModal from '../components/LocationRequiredModal';
 
 const Stack = createNativeStackNavigator();
 
@@ -301,6 +302,7 @@ export default function AppNavigator() {
           </>
         )}
       </Stack.Navigator>
+      <LocationRequiredModal />
     </NavigationContainer>
   );
 }

@@ -21,6 +21,7 @@ import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services/firebaseConfig';
 import AdminBottomTabNav from '../../components/AdminBottomTabNav';
 import TutorialOverlay from '../../components/TutorialOverlay';
+import IncidentCard from '../../components/IncidentCard';
 
 // Barangay Lepa center coordinates
 const BRGY_CENTER = { latitude: 14.6000, longitude: 120.9800 };
@@ -213,8 +214,8 @@ export default function AdminConsole({ navigation }) {
 
   // Color-codes marker pins by alert category
   const getPinColor = (category) => {
-    if (category === 'Fire' || category === 'Medical') return '#EF4444';      // Red — critical
-    if (category === 'Flooding' || category === 'Accident' || category === 'Traffic') return '#D97706'; // Amber
+    if (category === 'Fire' || category === 'Medical' || category === 'Crime') return '#EF4444';      // Red — critical
+    if (category === 'Flooding' || category === 'Accident' || category === 'Traffic' || category === 'Flood') return '#D97706'; // Amber
     return '#2563EB'; // Blue — general
   };
 
@@ -267,11 +268,51 @@ export default function AdminConsole({ navigation }) {
           </TouchableOpacity>
         </View>
 
+        {/* Urgent Action Banner or All Clear Status Card */}
+        {pendingReview > 0 ? (
+          <TouchableOpacity
+            style={styles.actionBanner}
+            onPress={() => navigation.navigate('AdminQueue', { initialFilter: 'submitted' })}
+            activeOpacity={0.9}
+          >
+            <View style={styles.actionBannerLeft}>
+              <View style={styles.alertIconWrapper}>
+                <Feather name="alert-triangle" size={18} color="#EF4444" />
+              </View>
+              <View style={styles.bannerTextContainer}>
+                <Text style={styles.bannerTitle}>Urgent Action Required</Text>
+                <Text style={styles.bannerSubTitle}>
+                  {pendingReview === 1
+                    ? '1 new incident report is awaiting triage.'
+                    : `${pendingReview} new incident reports are awaiting triage.`}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.actionBannerRight}>
+              <Text style={styles.actionBannerLink}>Review</Text>
+              <Feather name="chevron-right" size={16} color="#EF4444" />
+            </View>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.allClearCard}>
+            <View style={styles.allClearLeft}>
+              <View style={styles.allClearIconWrapper}>
+                <Feather name="check-circle" size={16} color="#10B981" />
+              </View>
+              <Text style={styles.allClearText}>All quiet. The incident queue is fully cleared!</Text>
+            </View>
+          </View>
+        )}
+
         {/* 2x2 Metrics Grid */}
         <View style={styles.metricsGrid}>
           
           {/* Card 1: Total Reports */}
-          <View style={styles.metricCard}>
+          <TouchableOpacity 
+            style={styles.metricCard}
+            onPress={() => navigation.navigate('AdminQueue', { initialFilter: 'all' })}
+            activeOpacity={0.8}
+          >
             <View style={styles.metricHeader}>
               <Text style={styles.metricTitle}>Total Reports</Text>
               <View style={[styles.metricIconWrapper, { backgroundColor: '#EFF6FF' }]}>
@@ -279,10 +320,18 @@ export default function AdminConsole({ navigation }) {
               </View>
             </View>
             <Text style={styles.metricValue}>{totalReports}</Text>
-          </View>
+            <View style={styles.metricFooter}>
+              <Text style={[styles.metricFooterText, { color: '#2563EB' }]}>View all logs</Text>
+              <Feather name="arrow-right" size={12} color="#2563EB" />
+            </View>
+          </TouchableOpacity>
 
           {/* Card 2: Pending Review */}
-          <View style={styles.metricCard}>
+          <TouchableOpacity 
+            style={styles.metricCard}
+            onPress={() => navigation.navigate('AdminQueue', { initialFilter: 'submitted' })}
+            activeOpacity={0.8}
+          >
             <View style={styles.metricHeader}>
               <Text style={styles.metricTitle}>Pending Review</Text>
               <View style={[styles.metricIconWrapper, { backgroundColor: '#FFF7ED' }]}>
@@ -290,15 +339,18 @@ export default function AdminConsole({ navigation }) {
               </View>
             </View>
             <Text style={styles.metricValue}>{pendingReview}</Text>
-            {pendingReview > 0 && (
-              <View style={styles.actionRequiredBadge}>
-                <Text style={styles.actionRequiredText}>ACTION REQUIRED</Text>
-              </View>
-            )}
-          </View>
+            <View style={styles.metricFooter}>
+              <Text style={[styles.metricFooterText, { color: '#EA580C' }]}>Triage now</Text>
+              <Feather name="arrow-right" size={12} color="#EA580C" />
+            </View>
+          </TouchableOpacity>
 
           {/* Card 3: Active Incidents */}
-          <View style={styles.metricCard}>
+          <TouchableOpacity 
+            style={styles.metricCard}
+            onPress={() => navigation.navigate('AdminQueue', { initialFilter: 'dispatched' })}
+            activeOpacity={0.8}
+          >
             <View style={styles.metricHeader}>
               <Text style={styles.metricTitle}>Active Incidents</Text>
               <View style={[styles.metricIconWrapper, { backgroundColor: '#FEF2F2' }]}>
@@ -306,10 +358,18 @@ export default function AdminConsole({ navigation }) {
               </View>
             </View>
             <Text style={styles.metricValue}>{activeIncidents}</Text>
-          </View>
+            <View style={styles.metricFooter}>
+              <Text style={[styles.metricFooterText, { color: '#EF4444' }]}>Monitor status</Text>
+              <Feather name="arrow-right" size={12} color="#EF4444" />
+            </View>
+          </TouchableOpacity>
 
           {/* Card 4: Resolved Today */}
-          <View style={styles.metricCard}>
+          <TouchableOpacity 
+            style={styles.metricCard}
+            onPress={() => navigation.navigate('AdminQueue', { initialFilter: 'resolved' })}
+            activeOpacity={0.8}
+          >
             <View style={styles.metricHeader}>
               <Text style={styles.metricTitle}>Resolved Today</Text>
               <View style={[styles.metricIconWrapper, { backgroundColor: '#ECFDF5' }]}>
@@ -317,8 +377,11 @@ export default function AdminConsole({ navigation }) {
               </View>
             </View>
             <Text style={styles.metricValue}>{resolvedToday}</Text>
-            {resolvedToday > 0 && <Text style={styles.trendText}>+15% from avg</Text>}
-          </View>
+            <View style={styles.metricFooter}>
+              <Text style={[styles.metricFooterText, { color: '#10B981' }]}>Check activity</Text>
+              <Feather name="arrow-right" size={12} color="#10B981" />
+            </View>
+          </TouchableOpacity>
 
         </View>
 
@@ -384,11 +447,11 @@ export default function AdminConsole({ navigation }) {
               <Text style={styles.legendTitle}>MAP LEGEND</Text>
               <View style={styles.legendRow}>
                 <View style={[styles.legendDot, { backgroundColor: '#EF4444' }]} />
-                <Text style={styles.legendText}>Fire / Medical</Text>
+                <Text style={styles.legendText}>Fire / Medical / Crime</Text>
               </View>
               <View style={styles.legendRow}>
                 <View style={[styles.legendDot, { backgroundColor: '#D97706' }]} />
-                <Text style={styles.legendText}>Traffic / Flooding</Text>
+                <Text style={styles.legendText}>Flood / Accident / Traffic</Text>
               </View>
               <View style={styles.legendRow}>
                 <View style={[styles.legendDot, { backgroundColor: '#2563EB' }]} />
@@ -413,7 +476,7 @@ export default function AdminConsole({ navigation }) {
         <View style={styles.logsSection}>
           <View style={styles.logsHeaderRow}>
             <Text style={styles.logsTitle}>Recent logs</Text>
-            <TouchableOpacity onPress={() => alert('See all Incidents logs')}>
+            <TouchableOpacity onPress={() => navigation.navigate('AdminQueue')}>
               <Text style={styles.seeAllText}>See all</Text>
             </TouchableOpacity>
           </View>
@@ -425,31 +488,13 @@ export default function AdminConsole({ navigation }) {
               <Text style={styles.emptyText}>No logs found.</Text>
             </View>
           ) : (
-            allAlerts.slice(0, 5).map((alert, idx) => {
-              const badge = getStatusBadgeStyle(alert.status);
-              
-              // Sequence code matching mockup style e.g. #INC-451
-              const serialCode = alert.id ? `#INC-${alert.id.substring(0, 3).toUpperCase()}` : `#INC-00${idx + 1}`;
-              const time = alert.createdAt ? (alert.createdAt.toDate ? alert.createdAt.toDate() : new Date(alert.createdAt)).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : '00:00';
-              const locationText = alert.location?.addressText ? (alert.location.addressText.split(',')[0]) : 'Purok 1';
-
-              return (
-                <TouchableOpacity 
-                  key={alert.id}
-                  style={styles.logCard}
-                  onPress={() => navigation.navigate('IncidentDetail', { alertId: alert.id })}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.logCardLeft}>
-                    <Text style={styles.logCode}>{serialCode}</Text>
-                    <Text style={styles.logSubText}>{locationText} • {time}</Text>
-                  </View>
-                  <View style={[styles.statusTag, { backgroundColor: badge.bg }]}>
-                    <Text style={[styles.statusTagText, { color: badge.text }]}>{badge.label}</Text>
-                  </View>
-                </TouchableOpacity>
-              );
-            })
+            allAlerts.slice(0, 3).map((alert) => (
+              <IncidentCard
+                key={alert.id}
+                incident={alert}
+                onPress={() => navigation.navigate('IncidentDetail', { alertId: alert.id })}
+              />
+            ))
           )}
         </View>
 
@@ -685,6 +730,19 @@ const styles = StyleSheet.create({
     elevation: 2,
     position: 'relative',
   },
+  metricFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 0.5,
+    borderTopColor: '#F3F4F6',
+  },
+  metricFooterText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
   metricHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -710,24 +768,95 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#0B2564',
   },
-  actionRequiredBadge: {
-    backgroundColor: '#FFF0F2',
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-    alignSelf: 'flex-start',
-    marginTop: 8,
+  actionBanner: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+    borderRadius: 20,
+    padding: 14,
+    marginHorizontal: 24,
+    marginBottom: 20,
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
   },
-  actionRequiredText: {
-    color: '#EF4444',
-    fontSize: 9,
+  actionBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  alertIconWrapper: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: '#FEE2E2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  bannerTextContainer: {
+    flex: 1,
+  },
+  bannerTitle: {
+    fontSize: 14,
     fontWeight: '700',
+    color: '#991B1B',
   },
-  trendText: {
+  bannerSubTitle: {
     fontSize: 11,
-    color: '#2563EB',
+    color: '#EF4444',
+    marginTop: 2,
+    fontWeight: '600',
+  },
+  actionBannerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  actionBannerLink: {
+    fontSize: 12,
     fontWeight: '700',
-    marginTop: 8,
+    color: '#EF4444',
+    marginRight: 4,
+  },
+  allClearCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#DCFCE7',
+    borderRadius: 20,
+    padding: 14,
+    marginHorizontal: 24,
+    marginBottom: 20,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.03,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  allClearLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  allClearIconWrapper: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    backgroundColor: '#DCFCE7',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  allClearText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#166534',
   },
   mapCard: {
     backgroundColor: '#FFFFFF',
@@ -810,36 +939,42 @@ const styles = StyleSheet.create({
   },
   legendOverlay: {
     position: 'absolute',
-    bottom: 8,
-    left: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    borderRadius: 10,
-    padding: 8,
+    bottom: 12,
+    left: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    borderRadius: 12,
+    padding: 10,
     borderWidth: 1,
-    borderColor: '#F3F4F6',
-    width: 140,
+    borderColor: 'rgba(229, 231, 235, 0.8)',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+    width: 145,
   },
   legendTitle: {
     fontSize: 9,
-    fontWeight: '700',
-    color: '#4B5563',
-    marginBottom: 4,
+    fontWeight: '800',
+    color: '#374151',
+    letterSpacing: 0.5,
+    marginBottom: 6,
   },
   legendRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 3,
+    marginBottom: 5,
   },
   legendDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    marginRight: 4,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    marginRight: 6,
   },
   legendText: {
-    fontSize: 8,
-    color: '#6B7280',
-    fontWeight: '500',
+    fontSize: 8.5,
+    color: '#4B5563',
+    fontWeight: '600',
   },
   logsSection: {
     marginHorizontal: 24,
