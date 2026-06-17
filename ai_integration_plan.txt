@@ -23,7 +23,7 @@ using Google Gemini's free-tier developer platform.
 2. CORE AI FEATURES TO IMPLEMENT
 ------------------------------------------------------------------------
 
-A. AUTO-CATEGORIZATION & URGENCY PREDICTOR (Citizen Side)
+A. AUTO-CATEGORIZATION & URGENCY PREDICTOR (Citizen Side)   DONE
    * How it works: As the citizen types incident details in the Report Wizard,
      the AI analyzes the text in real-time.
    * Outputs:
@@ -32,27 +32,47 @@ A. AUTO-CATEGORIZATION & URGENCY PREDICTOR (Citizen Side)
    * UI Integration: A clean suggestion chip appears above the Category
      picker saying: "AI recommends: Fire (Critical) - Tap to apply".
 
-B. LIVE INCIDENT SUMMARIZER (Admin Queue)
+B. LIVE INCIDENT SUMMARIZER (Admin Queue)   DONE
    * How it works: Long, messy details are summarized into a concise
      one-line header for the admin queue/map list.
    * Output: A 10-word summary emphasizing the threat level and locations.
    * UI Integration: Shown in the command console queue item previews
      to allow fast scanning.
 
-C. SMART CHAT REPLIES CO-PILOT (Admin Side)
+C. SMART CHAT REPLIES CO-PILOT (Admin Side)   DONE
    * How it works: In the ChatScreen, the AI reads the message history and
      suggests three quick reply buttons (e.g., "Responders are on the way,"
      "Please move to higher ground," "Can you confirm if anyone is injured?").
+
+D. AI FAKE/SPAM INCIDENT DETECTION (Security & Validation)
+   * How it works: Evaluates the text description of submitted reports for spam,
+     keyboard mashes (gibberish), tests, or jokes.
+   * UI Integration: Flags fake alerts with `aiFlaggedFake: true` in Firestore, rendering
+     a yellow warning tag in the admin queue card and a detail banner.
+
+E. MULTIMODAL IMAGE MATCH VALIDATOR (Multimodal Security)
+   * How it works: Evaluates if the attached evidence images are consistent with the
+     reported incident type (e.g. flagging a meme or random photo for a fire report).
+   * UI Integration: Flags mismatched images and compiles explanations directly into
+     the admin warning detail card.
+
+F. PROPOSED FUTURE AI FEATURE IMPROVEMENTS
+   * AI Emergency Guides / First Aid: Provides real-time Tagalog safety instructions 
+     tailored to the citizen's report while they wait for responders.
+   * Action Recommendations: Gives admin operators custom action checklists based on severity
+     (e.g., "Evacuate zone X," "Call hotline Y").
+   * Smart Semantic Search: Allows operators to search the command queue using natural language queries.
+   * Auto-Translation / Dialect Support: Automatically translates regional dialects to standard Tagalog/English.
 
 ------------------------------------------------------------------------
 3. STEP-BY-STEP IMPLEMENTATION PLAN
 ------------------------------------------------------------------------
 
-STEP 1: INSTALL DEPENDENCY
+STEP 1: [DONE] INSTALL DEPENDENCY
 * Install the official Google Generative AI JS SDK in BrgyAlert_Mobile:
   npm install @google/generative-ai
 
-STEP 2: CREATE AI SERVICE MODULE [NEW FILE: src/services/aiService.js]
+STEP 2: [DONE] CREATE AI SERVICE MODULE [NEW FILE: src/services/aiService.js]
 * Initialize the client and export prompt functions:
   -------------------------------------------------------------
   import { GoogleGenAI } from '@google/generative-ai';
@@ -80,13 +100,20 @@ STEP 2: CREATE AI SERVICE MODULE [NEW FILE: src/services/aiService.js]
   }
   -------------------------------------------------------------
 
-STEP 3: INTEGRATE WITH CITIZEN REPORT WIZARD [MODIFY: src/screens/citizen/ReportWizard.js]
+STEP 3: [DONE] INTEGRATE WITH CITIZEN REPORT WIZARD [MODIFY: src/screens/citizen/ReportWizard.js]
 * Add a debounced effect (e.g. waits 1.5 seconds after typing stops) to run `predictIncidentAttributes(details)`.
 * Show an AI Suggestion Chip if recommendation differs from current selections.
 * On tap, automatically select the suggested Category and Urgency states.
 
-STEP 4: INTEGRATE INCIDENT SUMMARIZER [MODIFY: src/screens/admin/IncidentDetail.js]
+STEP 4: [DONE] INTEGRATE INCIDENT SUMMARIZER [MODIFY: src/screens/admin/IncidentDetail.js]
 * When a report is loaded, request `generateIncidentSummary` and save it to the alert document in Firestore under `aiSummary` so it does not need to run repeatedly.
 * Render the `aiSummary` in the dashboard queue cards.
 
+STEP 5: [DONE] INTEGRATE AI FAKE & MULTIMODAL IMAGE VALIDATION [MODIFY: src/services/aiService.js, src/screens/citizen/ReportWizard.js, src/components/IncidentCard.js, src/screens/admin/IncidentDetail.js]
+* Export `analyzeIncidentValidity(details)` and `analyzeIncidentImages(details, category, base64Images)` in `aiService.js` targeting `gemini-2.5-flash`.
+* Read local images as base64 in `ReportWizard.js` and run text/image checks concurrently on online submission.
+* Save `aiFlaggedFake: true`, combined reasons in `aiFakeReason`, and highest confidence in `aiValidityConfidence` to Firestore.
+* Render warnings in `IncidentCard.js` list cards and `IncidentDetail.js` banners with a "Decline Invalid Report" quick action.
+
 ========================================================================
+

@@ -28,6 +28,7 @@ import { db, storage } from '../../services/firebaseConfig';
 import { getCurrentLocation } from '../../services/locationService';
 import { selectImageFromLibrary, captureImageWithCamera } from '../../services/mediaService';
 import GestureModal from '../../components/GestureModal';
+import { predictIncidentAttributes, generateIncidentSummary, analyzeIncidentValidity, analyzeIncidentImages } from '../../services/aiService';
 
 const INCIDENT_TYPES = [
   'Physical Abuse',
@@ -51,6 +52,18 @@ const CATEGORY_SMS_CODES = {
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
+// Helper to convert Blob to base64 string natively
+const blobToBase64 = (blob) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => {
+      resolve(reader.result.split(',')[1]);
+    };
+    reader.readAsDataURL(blob);
+  });
+};
+
 export default function ReportWizard({ navigation }) {
   const { user, userProfile } = useAuth();
   const insets = useSafeAreaInsets();
@@ -69,6 +82,59 @@ export default function ReportWizard({ navigation }) {
   const [loadingLocation, setLoadingLocation] = useState(true);
   const [currentTimeText, setCurrentTimeText] = useState('');
   const [isCertified, setIsCertified] = useState(false);
+
+  // AI Integration States
+  const [urgency, setUrgency] = useState('medium');
+  const [aiPrediction, setAiPrediction] = useState(null);
+  const [loadingAi, setLoadingAi] = useState(false);
+
+  // Debounced AI prediction based on incident description details input
+  useEffect(() => {
+    if (!description || description.trim().length < 10 || !isOnline) {
+      setAiPrediction(null);
+      return;
+    }
+
+    setLoadingAi(true);
+    const timer = setTimeout(async () => {
+      try {
+        const prediction = await predictIncidentAttributes(description);
+        if (prediction) {
+          // Validate category returned maps cleanly to options
+          let predictedCat = prediction.category;
+          if (predictedCat === 'Flood') predictedCat = 'Flooding';
+          
+          setAiPrediction({
+            ...prediction,
+            category: predictedCat
+          });
+        }
+      } catch (err) {
+        console.log('[ReportWizard] Error fetching AI predictions:', err);
+      } finally {
+        setLoadingAi(false);
+      }
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [description, isOnline]);
+
+  const handleApplyAiRecommendation = () => {
+    if (!aiPrediction) return;
+    
+    // Auto-select Suggested Category
+    if (INCIDENT_TYPES.includes(aiPrediction.category)) {
+      setIncidentType(aiPrediction.category);
+    }
+    
+    // Auto-select Suggested Urgency
+    if (aiPrediction.urgency) {
+      setUrgency(aiPrediction.urgency.toLowerCase());
+    }
+    
+    // Clear the chip once applied to avoid redundancy
+    setAiPrediction(null);
+  };
 
   // Dynamic Progress Calculations
   const getStep1Progress = () => {
@@ -243,10 +309,68 @@ export default function ReportWizard({ navigation }) {
     if (isOnline) {
       try {
         const uploadUrls = [];
-        for (let i = 0; i < evidenceUris.length; i++) {
-          const url = await uploadEvidenceImage(evidenceUris[i], i);
+        const base64Images = [];
+
+        // Concurrently read images as base64 for Gemini and upload to Firebase Storage
+        await Promise.all(evidenceUris.map(async (uri, i) => {
+          // Upload to storage
+          const url = await uploadEvidenceImage(uri, i);
           uploadUrls.push(url);
+
+          // Convert to base64 for Gemini multimodal input
+          try {
+            const response = await fetch(uri);
+            const blob = await response.blob();
+            const b64 = await blobToBase64(blob);
+            base64Images.push({
+              data: b64,
+              mimeType: 'image/jpeg'
+            });
+          } catch (b64Err) {
+            console.log(`[ReportWizard] Failed converting image ${i} to base64:`, b64Err);
+          }
+        }));
+
+        // Pre-generate incident summary, text validity, and image validity using Gemini AI
+        let generatedSummary = '';
+        let validityResult = { isFake: false, confidence: 'Low', reasoning: '' };
+        let imageValidityResult = { imageMatches: true, confidence: 'Low', reasoning: '' };
+
+        try {
+          const [summary, textVal, imgVal] = await Promise.all([
+            generateIncidentSummary(description),
+            analyzeIncidentValidity(description),
+            base64Images.length > 0
+              ? analyzeIncidentImages(description, incidentType, base64Images)
+              : Promise.resolve({ imageMatches: true, confidence: 'Low', reasoning: '' })
+          ]);
+          generatedSummary = summary;
+          validityResult = textVal;
+          imageValidityResult = imgVal;
+        } catch (aiErr) {
+          console.log('[ReportWizard] AI submission analysis failed:', aiErr);
         }
+
+        // Combine validity results
+        const isFlaggedFake = validityResult.isFake || !imageValidityResult.imageMatches;
+        
+        let combinedReason = '';
+        if (validityResult.isFake && validityResult.reasoning) {
+          combinedReason += `Text: ${validityResult.reasoning}`;
+        }
+        if (!imageValidityResult.imageMatches && imageValidityResult.reasoning) {
+          if (combinedReason) combinedReason += ' | ';
+          combinedReason += `Larawan: ${imageValidityResult.reasoning}`;
+        }
+
+        // Determine highest confidence
+        let combinedConfidence = 'Low';
+        if (validityResult.confidence === 'High' || imageValidityResult.confidence === 'High') {
+          combinedConfidence = 'High';
+        } else if (validityResult.confidence === 'Medium' || imageValidityResult.confidence === 'Medium') {
+          combinedConfidence = 'Medium';
+        }
+
         const payload = {
           userId: user.uid,
           reporterName: userProfile?.fullName || 'Anonymous Citizen',
@@ -261,9 +385,13 @@ export default function ReportWizard({ navigation }) {
           },
           source: 'online_app',
           status: 'submitted',
-          urgency: 'medium',
+          urgency: urgency, // Use dynamically set urgency state from AI prediction
           mediaUrls: uploadUrls,
           assignedResponders: [],
+          aiSummary: generatedSummary || '',
+          aiFlaggedFake: !!isFlaggedFake,
+          aiFakeReason: combinedReason || '',
+          aiValidityConfidence: combinedConfidence,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
         };
@@ -342,6 +470,27 @@ export default function ReportWizard({ navigation }) {
             <Text style={styles.errorText}>{errorMsg}</Text>
           </View>
         ) : null}
+
+        {/* AI Suggestion Chip */}
+        {loadingAi && (
+          <View style={styles.aiLoadingContainer}>
+            <ActivityIndicator size="small" color="#2563EB" style={{ marginRight: 8 }} />
+            <Text style={styles.aiLoadingText}>AI is analyzing description...</Text>
+          </View>
+        )}
+
+        {!loadingAi && aiPrediction && (aiPrediction.category !== incidentType || aiPrediction.urgency.toLowerCase() !== urgency) && (
+          <TouchableOpacity 
+            style={styles.aiSuggestionChip}
+            onPress={handleApplyAiRecommendation}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="sparkles" size={14} color="#2563EB" style={{ marginRight: 6 }} />
+            <Text style={styles.aiSuggestionText}>
+              AI recommends: <Text style={styles.aiSuggestionBold}>{aiPrediction.category} ({aiPrediction.urgency})</Text> — Tap to apply
+            </Text>
+          </TouchableOpacity>
+        )}
 
         {/* Incident Type Picker */}
         <Text style={styles.label}>Incident Type <Text style={styles.req}>*</Text></Text>
@@ -1084,5 +1233,42 @@ const styles = StyleSheet.create({
   fullImage: {
     width: '90%',
     height: '75%',
+  },
+  aiSuggestionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 16,
+    shadowColor: '#0F2C59',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  aiSuggestionText: {
+    fontSize: 12,
+    color: '#1E40AF',
+    flex: 1,
+    lineHeight: 16,
+    fontWeight: '600',
+  },
+  aiSuggestionBold: {
+    fontWeight: '800',
+  },
+  aiLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingHorizontal: 4,
+  },
+  aiLoadingText: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '600',
   },
 });

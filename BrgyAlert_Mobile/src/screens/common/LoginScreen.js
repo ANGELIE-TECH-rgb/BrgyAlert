@@ -98,7 +98,7 @@ export default function LoginScreen({ navigation }) {
     try {
       await login(email.trim(), password);
       await resetLoginAttempts();
-      
+
       if (rememberMe) {
         await AsyncStorage.setItem('rememberedEmail', email.trim());
       } else {
@@ -280,11 +280,11 @@ export default function LoginScreen({ navigation }) {
         transparent={true}
         animationType="fade"
         visible={isSubmitting}
-        onRequestClose={() => {}}
+        onRequestClose={() => { }}
       >
         <View style={styles.loadingOverlay}>
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#0B2564" />
+            <ActivityIndicator size="large" color="#FFFFFF" />
             <Text style={styles.loadingText}>Signing in...</Text>
             <Text style={styles.loadingSubtext}>Please wait while we verify your credentials</Text>
           </View>
@@ -489,27 +489,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingContainer: {
-    backgroundColor: '#FFFFFF',
-    padding: 24,
-    borderRadius: 20,
     alignItems: 'center',
-    width: 280,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 5,
+    justifyContent: 'center',
   },
   loadingText: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#0B2564',
+    color: '#FFFFFF',
     marginTop: 16,
     textAlign: 'center',
   },
   loadingSubtext: {
-    fontSize: 12,
-    color: '#718096',
+    fontSize: 13,
+    color: '#E2E8F0',
     marginTop: 8,
     textAlign: 'center',
   },

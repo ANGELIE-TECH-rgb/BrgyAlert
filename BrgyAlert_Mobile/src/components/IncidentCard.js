@@ -59,15 +59,38 @@ export default function IncidentCard({ incident, onPress }) {
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
       {/* Top Row: Report ID and Status Tag */}
       <View style={styles.topRow}>
-        <Text style={styles.reportId}>Report #{displayId}</Text>
+        <Text style={styles.reportId}>Report #{displayId} • {incident.category || 'Incident'}</Text>
         <View style={[styles.statusTag, { backgroundColor: tagBg }]}>
           <Text style={[styles.statusText, { color: tagColor }]}>{statusText}</Text>
         </View>
       </View>
 
+      {/* AI Warning Badge for potentially fake/spam reports */}
+      {incident.aiFlaggedFake && (
+        <View style={styles.aiWarningBadge}>
+          <Feather name="alert-triangle" size={12} color="#D97706" style={{ marginRight: 4 }} />
+          <Text style={styles.aiWarningText}>AI Warning: Potential Fake Report</Text>
+        </View>
+      )}
+
       {/* Middle Row: Description and Right Chevron */}
       <View style={styles.middleRow}>
-        <Text style={styles.detailsText}>{displayDesc}</Text>
+        <View style={{ flex: 1, paddingRight: 8 }}>
+          {incident.aiSummary ? (
+            <>
+              <Text style={styles.aiSummaryText} numberOfLines={1}>
+                {incident.aiSummary}
+              </Text>
+              <Text style={styles.detailsTextSecondary} numberOfLines={2}>
+                {displayDesc}
+              </Text>
+            </>
+          ) : (
+            <Text style={styles.detailsText} numberOfLines={2}>
+              {displayDesc}
+            </Text>
+          )}
+        </View>
         <Feather name="chevron-right" size={20} color="#9CA3AF" />
       </View>
 
@@ -123,8 +146,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#1F2937',
-    flex: 1,
-    paddingRight: 8,
+    lineHeight: 22,
+  },
+  aiSummaryText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0F2C59',
+    marginBottom: 4,
+  },
+  detailsTextSecondary: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#4B5563',
+    lineHeight: 18,
   },
   bottomRow: {
     flexDirection: 'row',
@@ -134,6 +168,23 @@ const styles = StyleSheet.create({
   timestampText: {
     fontSize: 12,
     color: '#6B7280',
+  },
+  aiWarningBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF9E6',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    borderRadius: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+  },
+  aiWarningText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#D97706',
   },
 });
 

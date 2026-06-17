@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   StyleSheet, 
   Text, 
@@ -17,12 +17,13 @@ import {
 } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
+import { Feather, Ionicons } from '@expo/vector-icons';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import { doc, onSnapshot, updateDoc, serverTimestamp, query, collection, where, getDocs, writeBatch } from 'firebase/firestore';
 import { db } from '../../services/firebaseConfig';
 import { useAuth } from '../../context/AuthContext';
 import GestureModal from '../../components/GestureModal';
+import { generateIncidentSummary } from '../../services/aiService';
 
 const STATUS_STEPS = [
   { key: 'submitted', label: 'Report Submitted', desc: 'Report has been successfully recorded in the system.' },
@@ -63,6 +64,9 @@ export default function IncidentDetail({ route, navigation }) {
   // Dynamic reporter profile lookup
   const [reporterProfile, setReporterProfile] = useState(null);
 
+  // Safety ref to prevent duplicate background AI runs
+  const generatingSummaryRef = useRef(false);
+
   // Subscribe to real-time updates for this alert
   useEffect(() => {
     if (!alertId) {
@@ -73,9 +77,24 @@ export default function IncidentDetail({ route, navigation }) {
 
     const docRef = doc(db, 'alerts', alertId);
     
-    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+    const unsubscribe = onSnapshot(docRef, async (docSnap) => {
       if (docSnap.exists()) {
-        setIncident(docSnap.data());
+        const data = docSnap.data();
+        setIncident(data);
+
+        // Auto-heal missing AI summaries (e.g., offline SMS reports)
+        if (!data.aiSummary && data.details && !generatingSummaryRef.current) {
+          generatingSummaryRef.current = true;
+          try {
+            console.log('[IncidentDetail] Auto-healing missing incident summary via Gemini...');
+            const summary = await generateIncidentSummary(data.details);
+            if (summary) {
+              await updateDoc(docRef, { aiSummary: summary });
+            }
+          } catch (sumErr) {
+            console.log('[IncidentDetail] Background summary healing failed:', sumErr);
+          }
+        }
       } else {
         setErrorMsg('Report not found in database.');
       }
@@ -343,6 +362,36 @@ export default function IncidentDetail({ route, navigation }) {
               </View>
             )}
 
+            {/* ─── AI FAKE WARNING BANNER ─────────────────────────────── */}
+            {incident.aiFlaggedFake && !isDeclined && (
+              <View style={styles.aiFakeBanner}>
+                <View style={styles.aiFakeBannerHeader}>
+                  <Feather name="alert-triangle" size={18} color="#D97706" style={{ marginRight: 8 }} />
+                  <Text style={styles.aiFakeBannerTitle}>AI Warning: Potential Fake Report</Text>
+                </View>
+                <Text style={styles.aiFakeBannerSubtitle}>
+                  AI analyzed this report and identified that it might be spam, fake, or a test.
+                </Text>
+                {incident.aiFakeReason ? (
+                  <View style={styles.aiFakeReasonBox}>
+                    <Text style={styles.aiFakeReasonLabel}>AI Reasoning:</Text>
+                    <Text style={styles.aiFakeReasonText}>"{incident.aiFakeReason}"</Text>
+                  </View>
+                ) : null}
+                <TouchableOpacity
+                  style={styles.aiFakeDeclineBtn}
+                  onPress={() => {
+                    setDeclineReason(`AI Flagged: ${incident.aiFakeReason || 'Potential Fake Report'}`);
+                    setDeclineModalVisible(true);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Feather name="x-circle" size={16} color="#FFFFFF" style={{ marginRight: 8 }} />
+                  <Text style={styles.aiFakeDeclineBtnText}>Decline Invalid Report</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
             {/* ─── ACTION PANEL ─────────────────────────────────────────── */}
             <View style={styles.actionCard}>
               <View style={styles.reviewHeaderRow}>
@@ -378,6 +427,17 @@ export default function IncidentDetail({ route, navigation }) {
                 <Feather name="alert-triangle" size={18} color="#0F2C59" style={{ marginRight: 8 }} />
                 <Text style={styles.reviewHeader}>Incident Details</Text>
               </View>
+
+              {incident.aiSummary ? (
+                <View style={styles.aiSummaryRow}>
+                  <View style={styles.aiSummaryHeader}>
+                    <Ionicons name="sparkles" size={12} color="#2563EB" style={{ marginRight: 4 }} />
+                    <Text style={styles.aiSummaryTitle}>AI Brief Summary</Text>
+                  </View>
+                  <Text style={styles.aiSummaryText}>"{incident.aiSummary}"</Text>
+                </View>
+              ) : null}
+
               <View style={styles.reviewRow}>
                 <Text style={styles.reviewLabel}>Incident Type</Text>
                 <Text style={styles.reviewValue}>{incident.category}</Text>
@@ -752,6 +812,40 @@ const styles = StyleSheet.create({
   declineReasonLabel: { fontSize: 11, fontWeight: '700', color: '#9CA3AF', marginBottom: 4 },
   declineReasonText: { fontSize: 14, color: '#1F2937', fontWeight: '600', lineHeight: 20, fontStyle: 'italic' },
 
+  // ── AI Fake Banner ───────────────────────────────────────────────────
+  aiFakeBanner: {
+    backgroundColor: '#FFF9E6',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  aiFakeBannerHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  aiFakeBannerTitle: { fontSize: 15, fontWeight: '700', color: '#D97706' },
+  aiFakeBannerSubtitle: { fontSize: 13, color: '#B45309', lineHeight: 18, fontWeight: '500' },
+  aiFakeReasonBox: {
+    marginTop: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  aiFakeReasonLabel: { fontSize: 11, fontWeight: '700', color: '#9CA3AF', marginBottom: 4 },
+  aiFakeReasonText: { fontSize: 14, color: '#1F2937', fontWeight: '600', lineHeight: 20, fontStyle: 'italic' },
+  aiFakeDeclineBtn: {
+    marginTop: 14,
+    backgroundColor: '#EF4444',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  aiFakeDeclineBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+
   // ── Action card ───────────────────────────────────────────────────────
   actionCard: {
     backgroundColor: '#FFFFFF', borderRadius: 20, padding: 18,
@@ -1081,5 +1175,38 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: '#6B7280',
+  },
+  aiSummaryRow: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 16,
+    padding: 14,
+    marginTop: 8,
+    marginBottom: 16,
+    shadowColor: '#0F2C59',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  aiSummaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  aiSummaryTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#1E40AF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  aiSummaryText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1E3A8A',
+    fontStyle: 'italic',
+    lineHeight: 18,
   },
 });

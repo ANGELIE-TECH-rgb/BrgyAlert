@@ -40,6 +40,7 @@ export default function AppNavigator() {
 
   const [showSplash, setShowSplash] = useState(true);
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState(null);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
 
   // Check Onboarding state on mount
   useEffect(() => {
@@ -55,13 +56,20 @@ export default function AppNavigator() {
     checkOnboarding();
   }, []);
 
-  // Force splash screen to show for at least 3 seconds
+  // Force splash screen to show for at least 3 seconds on app startup
   useEffect(() => {
     const timer = setTimeout(() => {
       setShowSplash(false);
     }, 3000);
     return () => clearTimeout(timer);
   }, []);
+
+  // Complete initial loading sequence once splash timer, auth states, and onboarding checks settle
+  useEffect(() => {
+    if (!showSplash && !loading && hasSeenOnboarding !== null) {
+      setIsInitialLoad(false);
+    }
+  }, [showSplash, loading, hasSeenOnboarding]);
 
   // App-wide Notification and Firestore Event Sync Listener
   useEffect(() => {
@@ -75,7 +83,7 @@ export default function AppNavigator() {
     let isFirstLoad = true;
 
     const isAdmin = userProfile.role === 'admin' || userProfile.role === 'responder';
-    let unsubscribeAlerts = () => {};
+    let unsubscribeAlerts = () => { };
 
     const setupListener = async () => {
       const activeUnreadNotifs = {};
@@ -243,8 +251,8 @@ export default function AppNavigator() {
     return () => unsubscribeAlerts();
   }, [user, userProfile]);
 
-  // Render animated Splash Screen if loading auth states, onboarding values, or waiting for splash timer
-  if (showSplash || loading || hasSeenOnboarding === null) {
+  // Render animated Splash Screen only during initial app startup
+  if (isInitialLoad) {
     return <SplashScreen />;
   }
 
