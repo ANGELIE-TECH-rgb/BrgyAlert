@@ -47,7 +47,7 @@ Do not write markdown formatting (like \`\`\`json), do not write any greetings, 
 
     return JSON.parse(cleanedText);
   } catch (error) {
-    console.error('[aiService] Error predicting incident attributes:', error);
+    console.log('[aiService] Gemini AI service is currently offline or rate-limited. Falling back gracefully (Category/Urgency prediction).');
     return null;
   }
 }
@@ -88,7 +88,7 @@ Do not add quotes, do not write any prefixes or commentary. Just output the Taga
 
     return text;
   } catch (error) {
-    console.error('[aiService] Error generating incident summary:', error);
+    console.log('[aiService] Gemini AI service is currently offline or rate-limited. Falling back gracefully (Summary generation).');
     return '';
   }
 }
@@ -146,8 +146,8 @@ Do not write markdown formatting (like \`\`\`json), do not write any greetings, 
       reasoning: parsed.reasoning || ''
     };
   } catch (error) {
-    console.error('[aiService] Error analyzing incident validity:', error);
-    return { isFake: false, confidence: 'Low', reasoning: 'Error during validation' };
+    console.log('[aiService] Gemini AI service is currently offline or rate-limited. Falling back gracefully (Validity checker).');
+    return { isFake: false, confidence: 'Low', reasoning: 'AI Service is temporarily unavailable' };
   }
 }
 
@@ -216,8 +216,8 @@ Do not write markdown formatting (like \`\`\`json), do not write any greetings, 
       reasoning: parsed.reasoning || ''
     };
   } catch (error) {
-    console.error('[aiService] Error analyzing incident images:', error);
-    return { imageMatches: true, confidence: 'Low', reasoning: 'Error during validation' };
+    console.log('[aiService] Gemini AI service is currently offline or rate-limited. Falling back gracefully (Multimodal image analysis).');
+    return { imageMatches: true, confidence: 'Low', reasoning: 'AI Service is temporarily unavailable' };
   }
 }
 

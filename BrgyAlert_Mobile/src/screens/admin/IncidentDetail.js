@@ -23,7 +23,7 @@ import { doc, onSnapshot, updateDoc, serverTimestamp, query, collection, where, 
 import { db } from '../../services/firebaseConfig';
 import { useAuth } from '../../context/AuthContext';
 import GestureModal from '../../components/GestureModal';
-import { generateIncidentSummary } from '../../services/aiService';
+import { generateIncidentSummary, analyzeIncidentValidity } from '../../services/aiService';
 
 const STATUS_STEPS = [
   { key: 'submitted', label: 'Report Submitted', desc: 'Report has been successfully recorded in the system.' },
@@ -82,17 +82,35 @@ export default function IncidentDetail({ route, navigation }) {
         const data = docSnap.data();
         setIncident(data);
 
-        // Auto-heal missing AI summaries (e.g., offline SMS reports)
-        if (!data.aiSummary && data.details && !generatingSummaryRef.current) {
+        // Auto-heal missing AI summaries and validity checks (e.g., offline SMS reports)
+        if (data.details && (!data.aiSummary || data.aiFlaggedFake === undefined) && !generatingSummaryRef.current) {
           generatingSummaryRef.current = true;
           try {
-            console.log('[IncidentDetail] Auto-healing missing incident summary via Gemini...');
-            const summary = await generateIncidentSummary(data.details);
-            if (summary) {
-              await updateDoc(docRef, { aiSummary: summary });
+            console.log('[IncidentDetail] Auto-healing missing AI fields via Gemini...');
+            
+            // Run validation and summary checks concurrently
+            const [summary, validity] = await Promise.all([
+              !data.aiSummary ? generateIncidentSummary(data.details) : Promise.resolve(data.aiSummary),
+              data.aiFlaggedFake === undefined ? analyzeIncidentValidity(data.details) : Promise.resolve(null)
+            ]);
+
+            const updatePayload = {};
+            if (!data.aiSummary && summary) {
+              updatePayload.aiSummary = summary;
+            }
+            if (data.aiFlaggedFake === undefined && validity) {
+              updatePayload.aiFlaggedFake = !!validity.isFake;
+              updatePayload.aiFakeReason = validity.reasoning || '';
+              updatePayload.aiValidityConfidence = validity.confidence || 'Low';
+            }
+
+            if (Object.keys(updatePayload).length > 0) {
+              await updateDoc(docRef, updatePayload);
             }
           } catch (sumErr) {
-            console.log('[IncidentDetail] Background summary healing failed:', sumErr);
+            console.log('[IncidentDetail] Background AI healing failed:', sumErr);
+          } finally {
+            generatingSummaryRef.current = false;
           }
         }
       } else {

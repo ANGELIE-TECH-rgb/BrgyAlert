@@ -19,9 +19,19 @@ import { Feather, AntDesign, Ionicons } from '@expo/vector-icons';
 import GoogleIcon from '../../components/GoogleIcon';
 import { checkLoginStatus, recordFailedLogin, resetLoginAttempts } from '../../services/rateLimiter';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import NetInfo from '@react-native-community/netinfo';
 
 export default function LoginScreen({ navigation }) {
   const { login, loginWithGoogle } = useAuth();
+  const [isOnline, setIsOnline] = useState(true);
+
+  // Monitor network state
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      setIsOnline(!!state.isConnected);
+    });
+    return () => unsubscribe();
+  }, []);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -78,6 +88,18 @@ export default function LoginScreen({ navigation }) {
   }, [lockoutTime]);
 
   const handleLogin = async () => {
+    if (!isOnline) {
+      Alert.alert(
+        'Connection Error',
+        'You are offline. To sign in, please connect to the internet, or file an offline ulat via SMS.',
+        [
+          { text: 'File Offline Report', onPress: () => navigation.navigate('ReportWizard') },
+          { text: 'Cancel', style: 'cancel' }
+        ]
+      );
+      return;
+    }
+
     const status = await checkLoginStatus();
     if (status.locked) {
       setLockoutTime(status.secondsRemaining);
@@ -121,6 +143,10 @@ export default function LoginScreen({ navigation }) {
   };
 
   const handleGoogleLogin = async () => {
+    if (!isOnline) {
+      Alert.alert('Connection Error', 'Google Login requires an active internet connection.');
+      return;
+    }
     const status = await checkLoginStatus();
     if (status.locked) {
       setLockoutTime(status.secondsRemaining);
@@ -145,6 +171,26 @@ export default function LoginScreen({ navigation }) {
             <Text style={styles.title}>Sign in to your Account</Text>
             <Text style={styles.subtitle}>Enter your email and password to login</Text>
           </View>
+
+          {/* Offline Mode Alert Banner */}
+          {!isOnline && (
+            <TouchableOpacity
+              style={styles.offlineBanner}
+              onPress={() => navigation.navigate('ReportWizard')}
+              activeOpacity={0.8}
+            >
+              <View style={styles.offlineBannerContent}>
+                <Feather name="wifi-off" size={20} color="#D97706" />
+                <View style={{ marginLeft: 10, flex: 1 }}>
+                  <Text style={styles.offlineBannerTitle}>No Internet Connection</Text>
+                  <Text style={styles.offlineBannerSubtitle}>
+                    Tap here to submit an <Text style={styles.offlineBannerBold}>Offline SMS Report</Text>
+                  </Text>
+                </View>
+                <Feather name="chevron-right" size={20} color="#D97706" />
+              </View>
+            </TouchableOpacity>
+          )}
 
           {/* Form */}
           <View style={styles.formContainer}>
@@ -504,5 +550,37 @@ const styles = StyleSheet.create({
     color: '#E2E8F0',
     marginTop: 8,
     textAlign: 'center',
+  },
+  offlineBanner: {
+    backgroundColor: '#FFF9E6',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    shadowColor: '#D97706',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  offlineBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  offlineBannerTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#D97706',
+  },
+  offlineBannerSubtitle: {
+    fontSize: 13,
+    color: '#B45309',
+    marginTop: 2,
+  },
+  offlineBannerBold: {
+    fontWeight: '700',
+    textDecorationLine: 'underline',
   },
 });

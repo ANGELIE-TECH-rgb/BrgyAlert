@@ -2,12 +2,16 @@ import React from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, StatusBar } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../../context/AuthContext';
 
 export default function ReportSuccess({ route, navigation }) {
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const { reportId = 'NEW', estimatedTime = '15 - 30 Minutes' } = route.params || {};
 
+  const isOffline = reportId === 'OFFLINE_SMS';
   const displayId = reportId.length > 8 ? reportId.substring(0, 8).toUpperCase() : reportId;
+  const homeRoute = user ? 'CitizenHome' : 'Login';
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -17,7 +21,7 @@ export default function ReportSuccess({ route, navigation }) {
       <View style={styles.navHeader}>
         <TouchableOpacity 
           style={styles.backButton} 
-          onPress={() => navigation.navigate('CitizenHome')}
+          onPress={() => navigation.navigate(homeRoute)}
         >
           <Feather name="arrow-left" size={20} color="#1F2937" />
         </TouchableOpacity>
@@ -30,51 +34,77 @@ export default function ReportSuccess({ route, navigation }) {
         <View style={styles.iconOuterRing}>
           <View style={styles.iconMiddleRing}>
             <View style={styles.iconInnerCircle}>
-              <Ionicons name="shield-checkmark" size={56} color="#2563EB" />
+              <Ionicons 
+                name={isOffline ? "chatbubble-ellipses" : "shield-checkmark"} 
+                size={56} 
+                color="#2563EB" 
+              />
             </View>
           </View>
         </View>
 
         {/* Success Title */}
-        <Text style={styles.title}>Report Successfully Submitted</Text>
+        <Text style={styles.title}>
+          {isOffline ? 'SMS Report Compiled' : 'Report Successfully Submitted'}
+        </Text>
         
         {/* Subtitle */}
         <Text style={styles.subtitle}>
-          Thank you for helping keep our community safe. Your report (Report #{displayId}) has been received and is being reviewed by the Barangay Command Center.
+          {isOffline 
+            ? 'We have compiled your report details into an SMS. Please make sure to press SEND on the native messaging screen to transmit it.'
+            : `Thank you for helping keep our community safe. Your report (Report #${displayId}) has been received and is being reviewed by the Barangay Command Center.`
+          }
         </Text>
 
-        {/* Estimated Review Time Card */}
+        {/* Transmission Card */}
         <View style={styles.timeCard}>
           <View style={styles.clockIconWrapper}>
-            <Feather name="clock" size={20} color="#2563EB" />
+            <Feather name={isOffline ? "message-square" : "clock"} size={20} color="#2563EB" />
           </View>
           <View style={styles.timeTextWrapper}>
-            <Text style={styles.timeLabel}>ESTIMATED REVIEW TIME</Text>
-            <Text style={styles.timeValue}>{estimatedTime}</Text>
+            <Text style={styles.timeLabel}>
+              {isOffline ? 'TRANSMISSION CHANNEL' : 'ESTIMATED REVIEW TIME'}
+            </Text>
+            <Text style={styles.timeValue}>
+              {isOffline ? 'Native SMS Client' : estimatedTime}
+            </Text>
           </View>
         </View>
       </View>
 
       {/* Footer Buttons */}
       <View style={styles.footer}>
-        <TouchableOpacity 
-          style={styles.primaryButton}
-          onPress={() => {
-            if (reportId === 'OFFLINE_SMS') {
-              navigation.navigate('CitizenHome');
-            } else {
-              navigation.navigate('StatusTracker', { alertId: reportId });
-            }
-          }}
-        >
-          <Text style={styles.primaryButtonText}>View my Report</Text>
-        </TouchableOpacity>
+        {user ? (
+          <TouchableOpacity 
+            style={styles.primaryButton}
+            onPress={() => {
+              if (isOffline) {
+                navigation.navigate('CitizenReports');
+              } else {
+                navigation.navigate('StatusTracker', { alertId: reportId });
+              }
+            }}
+          >
+            <Text style={styles.primaryButtonText}>
+              {isOffline ? 'View my Reports' : 'View my Report'}
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity 
+            style={styles.primaryButton}
+            onPress={() => navigation.navigate('Login')}
+          >
+            <Text style={styles.primaryButtonText}>Go to Sign In</Text>
+          </TouchableOpacity>
+        )}
 
         <TouchableOpacity 
           style={styles.textButton}
-          onPress={() => navigation.navigate('CitizenHome')}
+          onPress={() => navigation.navigate(homeRoute)}
         >
-          <Text style={styles.textButtonText}>Back to Home</Text>
+          <Text style={styles.textButtonText}>
+            {user ? 'Back to Home' : 'Back to Login'}
+          </Text>
         </TouchableOpacity>
       </View>
     </View>

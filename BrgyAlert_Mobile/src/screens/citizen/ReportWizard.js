@@ -286,7 +286,8 @@ export default function ReportWizard({ navigation }) {
       const response = await fetch(uri);
       const blob = await response.blob();
       
-      const fileRef = ref(storage, `evidences/${user.uid}_${Date.now()}_${index}.jpg`);
+      const uid = user ? user.uid : 'guest';
+      const fileRef = ref(storage, `evidences/${uid}_${Date.now()}_${index}.jpg`);
       await uploadBytes(fileRef, blob);
       
       const downloadUrl = await getDownloadURL(fileRef);
@@ -372,7 +373,7 @@ export default function ReportWizard({ navigation }) {
         }
 
         const payload = {
-          userId: user.uid,
+          userId: user ? user.uid : 'guest',
           reporterName: userProfile?.fullName || 'Anonymous Citizen',
           phoneNumber: userProfile?.phoneNumber || '',
           category: incidentType,

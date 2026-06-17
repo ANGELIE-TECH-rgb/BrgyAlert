@@ -270,6 +270,8 @@ export default function AppNavigator() {
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="Register" component={RegisterScreen} />
             <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+            <Stack.Screen name="ReportWizard" component={ReportWizard} />
+            <Stack.Screen name="ReportSuccess" component={ReportSuccess} />
           </>
         ) : userProfile?.role === 'responder' || userProfile?.role === 'admin' ? (
           // Admin / Responder stack
