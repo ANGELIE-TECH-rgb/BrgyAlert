@@ -1,0 +1,92 @@
+========================================================================
+                      BRGYALERT — AI INTEGRATION PLAN
+========================================================================
+
+This document preserves the blueprint, implementation steps, and architectural
+decisions for integrating Large Language Model (LLM) intelligence into BrgyAlert
+using Google Gemini's free-tier developer platform.
+
+------------------------------------------------------------------------
+1. RECOMMENDED LLM CONFIGURATION (FREE TIER)
+------------------------------------------------------------------------
+* Provider: Google AI Studio (Gemini API)
+* Model: Gemini 1.5 Flash
+* Cost: 100% Free
+* Rate Limits:
+  - 15 Requests Per Minute (RPM)
+  - 1,500 Requests Per Day (RPD)
+  - 1 Million Tokens Per Minute (TPM)
+* Setup Requirement: A Gemini API Key loaded via .env:
+  EXPO_PUBLIC_GEMINI_API_KEY=your_gemini_api_key_here
+
+------------------------------------------------------------------------
+2. CORE AI FEATURES TO IMPLEMENT
+------------------------------------------------------------------------
+
+A. AUTO-CATEGORIZATION & URGENCY PREDICTOR (Citizen Side)
+   * How it works: As the citizen types incident details in the Report Wizard,
+     the AI analyzes the text in real-time.
+   * Outputs:
+     - Category Suggestion: e.g., "Fire", "Medical", "Flood", "Crime", etc.
+     - Urgency Recommendation: "Low", "Medium", "High", "Critical".
+   * UI Integration: A clean suggestion chip appears above the Category
+     picker saying: "AI recommends: Fire (Critical) - Tap to apply".
+
+B. LIVE INCIDENT SUMMARIZER (Admin Queue)
+   * How it works: Long, messy details are summarized into a concise
+     one-line header for the admin queue/map list.
+   * Output: A 10-word summary emphasizing the threat level and locations.
+   * UI Integration: Shown in the command console queue item previews
+     to allow fast scanning.
+
+C. SMART CHAT REPLIES CO-PILOT (Admin Side)
+   * How it works: In the ChatScreen, the AI reads the message history and
+     suggests three quick reply buttons (e.g., "Responders are on the way,"
+     "Please move to higher ground," "Can you confirm if anyone is injured?").
+
+------------------------------------------------------------------------
+3. STEP-BY-STEP IMPLEMENTATION PLAN
+------------------------------------------------------------------------
+
+STEP 1: INSTALL DEPENDENCY
+* Install the official Google Generative AI JS SDK in BrgyAlert_Mobile:
+  npm install @google/generative-ai
+
+STEP 2: CREATE AI SERVICE MODULE [NEW FILE: src/services/aiService.js]
+* Initialize the client and export prompt functions:
+  -------------------------------------------------------------
+  import { GoogleGenAI } from '@google/generative-ai';
+  const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+  const genAI = new GoogleGenAI({ apiKey });
+  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+  export async function predictIncidentAttributes(details) {
+    const prompt = `Analyze this emergency incident details: "${details}".
+    Predict:
+    1. Category (Must be one of: Fire, Medical, Flood, Crime, Accident, General)
+    2. Urgency (Must be one of: Low, Medium, High, Critical)
+    3. Short Reasoning (Max 1 sentence)
+    Return response STRICTLY in JSON format:
+    { "category": "...", "urgency": "...", "reasoning": "..." }`;
+    
+    const result = await model.generateContent(prompt);
+    return JSON.parse(result.response.text());
+  }
+
+  export async function generateIncidentSummary(details) {
+    const prompt = `Summarize this incident details into a concise, active-voice summary of 10 words or less: "${details}"`;
+    const result = await model.generateContent(prompt);
+    return result.response.text().trim();
+  }
+  -------------------------------------------------------------
+
+STEP 3: INTEGRATE WITH CITIZEN REPORT WIZARD [MODIFY: src/screens/citizen/ReportWizard.js]
+* Add a debounced effect (e.g. waits 1.5 seconds after typing stops) to run `predictIncidentAttributes(details)`.
+* Show an AI Suggestion Chip if recommendation differs from current selections.
+* On tap, automatically select the suggested Category and Urgency states.
+
+STEP 4: INTEGRATE INCIDENT SUMMARIZER [MODIFY: src/screens/admin/IncidentDetail.js]
+* When a report is loaded, request `generateIncidentSummary` and save it to the alert document in Firestore under `aiSummary` so it does not need to run repeatedly.
+* Render the `aiSummary` in the dashboard queue cards.
+
+========================================================================

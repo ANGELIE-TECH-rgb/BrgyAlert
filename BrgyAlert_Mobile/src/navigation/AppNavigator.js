@@ -1,11 +1,16 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { collection, query, where, onSnapshot, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebaseConfig';
 import { registerForNotificationsAsync, sendAndSaveNotification, getActiveChat } from '../services/notificationService';
 import { useAuth } from '../context/AuthContext';
+
+// Import Splash & Welcome Screens
+import SplashScreen from '../screens/common/SplashScreen';
+import WelcomeScreen from '../screens/common/WelcomeScreen';
 
 // Import Screens
 import LoginScreen from '../screens/common/LoginScreen';
@@ -32,6 +37,31 @@ const Stack = createNativeStackNavigator();
 
 export default function AppNavigator() {
   const { user, userProfile, loading } = useAuth();
+
+  const [showSplash, setShowSplash] = useState(true);
+  const [hasSeenOnboarding, setHasSeenOnboarding] = useState(null);
+
+  // Check Onboarding state on mount
+  useEffect(() => {
+    const checkOnboarding = async () => {
+      try {
+        const val = await AsyncStorage.getItem('hasSeenOnboarding');
+        setHasSeenOnboarding(val === 'true');
+      } catch (err) {
+        console.log('Error checking onboarding state:', err);
+        setHasSeenOnboarding(true); // Fallback to true if read error to avoid lockout
+      }
+    };
+    checkOnboarding();
+  }, []);
+
+  // Force splash screen to show for at least 3 seconds
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowSplash(false);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, []);
 
   // App-wide Notification and Firestore Event Sync Listener
   useEffect(() => {
@@ -213,13 +243,14 @@ export default function AppNavigator() {
     return () => unsubscribeAlerts();
   }, [user, userProfile]);
 
-  // Show a premium loading indicator while checking auth state
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#0F2C59" />
-      </View>
-    );
+  // Render animated Splash Screen if loading auth states, onboarding values, or waiting for splash timer
+  if (showSplash || loading || hasSeenOnboarding === null) {
+    return <SplashScreen />;
+  }
+
+  // Render Onboarding Welcome Screen for strictly new app installations
+  if (!hasSeenOnboarding) {
+    return <WelcomeScreen onFinish={() => setHasSeenOnboarding(true)} />;
   }
 
   return (
