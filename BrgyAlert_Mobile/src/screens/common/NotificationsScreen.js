@@ -15,6 +15,9 @@ import { Feather } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services/firebaseConfig';
 import { markAsRead, markAllAsRead } from '../../services/notificationService';
+import NetInfo from '@react-native-community/netinfo';
+import SkeletonLoader from '../../components/SkeletonLoader';
+import ConnectionBlocker from '../../components/ConnectionBlocker';
 
 export default function NotificationsScreen({ navigation }) {
   const { user, userProfile } = useAuth();
@@ -23,6 +26,15 @@ export default function NotificationsScreen({ navigation }) {
 
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isOnline, setIsOnline] = useState(true);
+
+  // Monitor Network Connectivity State
+  useEffect(() => {
+    const unsubscribeNet = NetInfo.addEventListener((state) => {
+      setIsOnline(state.isConnected ?? false);
+    });
+    return () => unsubscribeNet();
+  }, []);
 
   // Subscribe to user notifications in real-time
   useEffect(() => {
@@ -160,9 +172,7 @@ export default function NotificationsScreen({ navigation }) {
 
       {/* Content Area */}
       {loading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#0F2C59" />
-        </View>
+        <SkeletonLoader type="notification" count={5} />
       ) : notifications.length === 0 ? (
         <View style={styles.centered}>
           <View style={styles.emptyIconWrapper}>
@@ -216,6 +226,9 @@ export default function NotificationsScreen({ navigation }) {
           }}
         />
       )}
+
+      {/* Connection Loss Blocker for Citizens */}
+      {!isAdmin && !isOnline && <ConnectionBlocker navigation={navigation} />}
     </View>
   );
 }

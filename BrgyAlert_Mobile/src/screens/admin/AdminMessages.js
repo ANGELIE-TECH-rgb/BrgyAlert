@@ -15,6 +15,7 @@ import { Feather } from '@expo/vector-icons';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import { db } from '../../services/firebaseConfig';
 import AdminBottomTabNav from '../../components/AdminBottomTabNav';
+import SkeletonLoader from '../../components/SkeletonLoader';
 
 export default function AdminMessages({ navigation }) {
   const insets = useSafeAreaInsets();
@@ -305,10 +306,7 @@ export default function AdminMessages({ navigation }) {
 
       {/* List / Content */}
       {loading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#0B2564" />
-          <Text style={styles.loadingText}>Syncing conversations...</Text>
-        </View>
+        <SkeletonLoader type="thread" count={4} />
       ) : chatThreads.length === 0 ? (
         <View style={styles.centerContainer}>
           <View style={styles.emptyIconWrapper}>

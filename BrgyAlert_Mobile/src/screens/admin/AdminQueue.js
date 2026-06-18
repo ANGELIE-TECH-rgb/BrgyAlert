@@ -20,6 +20,7 @@ import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services/firebaseConfig';
 import AdminBottomTabNav from '../../components/AdminBottomTabNav';
 import TutorialOverlay from '../../components/TutorialOverlay';
+import SkeletonLoader from '../../components/SkeletonLoader';
 
 export default function AdminQueue({ route, navigation }) {
   const { userProfile } = useAuth();
@@ -343,9 +344,8 @@ export default function AdminQueue({ route, navigation }) {
 
       {/* List / Content */}
       {loading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#0F2C59" />
-          <Text style={styles.loadingText}>Fetching incidents...</Text>
+        <View style={{ paddingHorizontal: 24, paddingTop: 8 }}>
+          <SkeletonLoader type="card" count={3} />
         </View>
       ) : filteredAlerts.length === 0 ? (
         <View style={styles.centerContainer}>

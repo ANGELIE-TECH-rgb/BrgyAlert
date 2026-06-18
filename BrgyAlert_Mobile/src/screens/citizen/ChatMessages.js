@@ -19,6 +19,9 @@ import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services/firebaseConfig';
 import BottomTabNav from '../../components/BottomTabNav';
 import TutorialOverlay from '../../components/TutorialOverlay';
+import NetInfo from '@react-native-community/netinfo';
+import SkeletonLoader from '../../components/SkeletonLoader';
+import ConnectionBlocker from '../../components/ConnectionBlocker';
 
 export default function ChatMessages({ navigation }) {
   const { user } = useAuth();
@@ -27,7 +30,16 @@ export default function ChatMessages({ navigation }) {
 
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isOnline, setIsOnline] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Monitor Network Connectivity State
+  useEffect(() => {
+    const unsubscribeNet = NetInfo.addEventListener((state) => {
+      setIsOnline(state.isConnected ?? false);
+    });
+    return () => unsubscribeNet();
+  }, []);
   const [readFilter, setReadFilter] = useState('all'); // all | unread | read
   const [showTutorial, setShowTutorial] = useState(false);
 
@@ -295,10 +307,7 @@ export default function ChatMessages({ navigation }) {
 
       {/* List / Content */}
       {loading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#0F2C59" />
-          <Text style={styles.loadingText}>Syncing message threads...</Text>
-        </View>
+        <SkeletonLoader type="thread" count={4} />
       ) : alerts.length === 0 ? (
         <View style={styles.centerContainer}>
           <View style={styles.emptyIconWrapper}>
@@ -340,6 +349,9 @@ export default function ChatMessages({ navigation }) {
           <Rect width="100" height="100" fill="url(#fadeGrad)" />
         </Svg>
       </View>
+
+      {/* Connection Loss Blocker for Citizens */}
+      {!isOnline && <ConnectionBlocker navigation={navigation} />}
 
       {/* Floating Bottom Tab Nav Bar */}
       <BottomTabNav />

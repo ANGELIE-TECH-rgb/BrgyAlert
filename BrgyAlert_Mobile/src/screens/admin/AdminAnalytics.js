@@ -24,6 +24,7 @@ import Svg, {
 import { LineChart, BarChart, PieChart } from 'react-native-chart-kit';
 import { db } from '../../services/firebaseConfig';
 import AdminBottomTabNav from '../../components/AdminBottomTabNav';
+import SkeletonLoader from '../../components/SkeletonLoader';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CHART_WIDTH = SCREEN_WIDTH - 96; // Accounting for 24px screen padding + 20px card padding + safety margin on each side
@@ -315,9 +316,8 @@ export default function AdminAnalytics({ navigation }) {
       </View>
 
       {loading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#0B2564" />
-          <Text style={styles.loadingText}>Loading analytics data...</Text>
+        <View style={{ paddingHorizontal: 24, paddingTop: 8 }}>
+          <SkeletonLoader type="analytics" />
         </View>
       ) : (
         <ScrollView

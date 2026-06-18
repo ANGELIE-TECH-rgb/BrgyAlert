@@ -23,6 +23,7 @@ import { doc, onSnapshot, updateDoc, serverTimestamp, query, collection, where, 
 import { db } from '../../services/firebaseConfig';
 import { useAuth } from '../../context/AuthContext';
 import GestureModal from '../../components/GestureModal';
+import SkeletonLoader from '../../components/SkeletonLoader';
 import { generateIncidentSummary, analyzeIncidentValidity } from '../../services/aiService';
 
 const STATUS_STEPS = [
@@ -346,10 +347,7 @@ export default function IncidentDetail({ route, navigation }) {
       </View>
 
       {loading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#0F2C59" />
-          <Text style={styles.loadingText}>Syncing details...</Text>
-        </View>
+        <SkeletonLoader type="detail" />
       ) : errorMsg ? (
         <View style={styles.centerContainer}>
           <Text style={styles.errorText}>⚠️ {errorMsg}</Text>

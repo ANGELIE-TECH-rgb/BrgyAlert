@@ -20,6 +20,9 @@ import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services/firebaseConfig';
 import BottomTabNav from '../../components/BottomTabNav';
 import TutorialOverlay from '../../components/TutorialOverlay';
+import NetInfo from '@react-native-community/netinfo';
+import SkeletonLoader from '../../components/SkeletonLoader';
+import ConnectionBlocker from '../../components/ConnectionBlocker';
 
 export default function CitizenReports({ navigation }) {
   const { user } = useAuth();
@@ -28,7 +31,16 @@ export default function CitizenReports({ navigation }) {
 
   const [allAlerts, setAllAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isOnline, setIsOnline] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Monitor Network Connectivity State
+  useEffect(() => {
+    const unsubscribeNet = NetInfo.addEventListener((state) => {
+      setIsOnline(state.isConnected ?? false);
+    });
+    return () => unsubscribeNet();
+  }, []);
   const [statusFilter, setStatusFilter] = useState('all'); // all | submitted | under_review | dispatched | resolved | declined
   const [showTutorial, setShowTutorial] = useState(false);
 
@@ -334,9 +346,8 @@ export default function CitizenReports({ navigation }) {
 
       {/* List / Content */}
       {loading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#0F2C59" />
-          <Text style={styles.loadingText}>Loading reports...</Text>
+        <View style={{ paddingHorizontal: 24, paddingTop: 8 }}>
+          <SkeletonLoader type="card" count={3} />
         </View>
       ) : filteredAlerts.length === 0 ? (
         <View style={styles.centerContainer}>
@@ -372,6 +383,9 @@ export default function CitizenReports({ navigation }) {
           <Rect width="100" height="100" fill="url(#fadeGrad)" />
         </Svg>
       </View>
+
+      {/* Connection Loss Blocker for Citizens */}
+      {!isOnline && <ConnectionBlocker navigation={navigation} />}
 
       {/* Floating Bottom Tab Nav Bar */}
       <BottomTabNav />

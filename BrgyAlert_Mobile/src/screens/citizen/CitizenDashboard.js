@@ -28,6 +28,8 @@ import { getCurrentLocation } from '../../services/locationService';
 import IncidentCard from '../../components/IncidentCard';
 import BottomTabNav from '../../components/BottomTabNav';
 import TutorialOverlay from '../../components/TutorialOverlay';
+import SkeletonLoader from '../../components/SkeletonLoader';
+import ConnectionBlocker from '../../components/ConnectionBlocker';
 
 export default function CitizenDashboard({ navigation }) {
   const { user, userProfile } = useAuth();
@@ -535,7 +537,7 @@ export default function CitizenDashboard({ navigation }) {
           </View>
 
           {loadingLogs ? (
-            <ActivityIndicator style={styles.logsLoader} color="#0F2C59" />
+            <SkeletonLoader type="card" count={2} />
           ) : recentLogs.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Feather name="folder-minus" size={36} color="#9CA3AF" style={styles.emptyIcon} />
@@ -780,8 +782,12 @@ export default function CitizenDashboard({ navigation }) {
         </View>
       </Modal>
 
+      {/* Connection Loss Blocker for Citizens */}
+      {!isOnline && <ConnectionBlocker navigation={navigation} />}
+
       {/* Custom Bottom Tab Pill */}
       <BottomTabNav />
+
 
       {/* Tutorial App Tour Overlay */}
       {showTutorial && (

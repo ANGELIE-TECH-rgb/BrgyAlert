@@ -20,6 +20,9 @@ import { doc, onSnapshot, query, collection, where, getDocs, writeBatch } from '
 import { db } from '../../services/firebaseConfig';
 import { useAuth } from '../../context/AuthContext';
 import TutorialOverlay from '../../components/TutorialOverlay';
+import NetInfo from '@react-native-community/netinfo';
+import SkeletonLoader from '../../components/SkeletonLoader';
+import ConnectionBlocker from '../../components/ConnectionBlocker';
 
 const STATUS_STEPS = [
   { key: 'submitted', label: 'Report Submitted', desc: 'Your report has been successfully recorded in the system.' },
@@ -36,6 +39,15 @@ export default function StatusTracker({ route, navigation }) {
   
   const [incident, setIncident] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isOnline, setIsOnline] = useState(true);
+
+  // Monitor Network Connectivity State
+  useEffect(() => {
+    const unsubscribeNet = NetInfo.addEventListener((state) => {
+      setIsOnline(state.isConnected ?? false);
+    });
+    return () => unsubscribeNet();
+  }, []);
   const [selectedImageUri, setSelectedImageUri] = useState(null);
   const [imageModalVisible, setImageModalVisible] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -235,10 +247,7 @@ export default function StatusTracker({ route, navigation }) {
       </View>
 
       {loading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#0F2C59" />
-          <Text style={styles.loadingText}>Syncing details...</Text>
-        </View>
+        <SkeletonLoader type="tracker" />
       ) : errorMsg ? (
         <View style={styles.centerContainer}>
           <Text style={styles.errorText}>⚠️ {errorMsg}</Text>
@@ -466,6 +475,9 @@ export default function StatusTracker({ route, navigation }) {
           onFinish={handleFinishTutorial}
         />
       )}
+
+      {/* Connection Loss Blocker for Citizens */}
+      {!isOnline && <ConnectionBlocker navigation={navigation} />}
     </View>
   );
 }

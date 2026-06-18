@@ -3,7 +3,7 @@ import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { collection, query, where, onSnapshot, getDocs } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, getDocs, writeBatch } from 'firebase/firestore';
 import { db } from '../services/firebaseConfig';
 import { registerForNotificationsAsync, sendAndSaveNotification, getActiveChat } from '../services/notificationService';
 import { useAuth } from '../context/AuthContext';
@@ -130,48 +130,7 @@ export default function AppNavigator() {
                 lastMessageAt: data.lastMessageAt,
               };
 
-              // 1. Startup Sync: notify on unread messages/pending alerts if notifications don't exist
-              if (isFirstLoad) {
-                if (isAdmin) {
-                  // Admin unread messages sync
-                  if ((data.unreadCountAdmin || 0) > 0 && !activeUnreadNotifs[`message_${alertId}`]) {
-                    sendAndSaveNotification(user.uid, {
-                      title: `💬 Message from ${data.reporterName || 'Citizen'}`,
-                      body: data.lastMessageText || 'New message received.',
-                      type: 'message',
-                      relatedId: alertId
-                    });
-                    activeUnreadNotifs[`message_${alertId}`] = true;
-                  }
-                  // Admin pending reports sync
-                  if (data.status === 'submitted' && !activeUnreadNotifs[`incident_${alertId}`]) {
-                    const locationText = data.location?.addressText || 'Unknown Location';
-                    const isPanic = data.urgency === 'critical' || (data.details && data.details.includes('PANIC BUTTON'));
-                    const notifType = isPanic ? 'emergency' : 'incident';
-                    
-                    sendAndSaveNotification(user.uid, {
-                      title: isPanic ? `🚨 CRITICAL PANIC ALERT!` : `🚨 NEW INCIDENT: ${data.category || 'General'}`,
-                      body: isPanic 
-                        ? `Panic button triggered by ${data.reporterName || 'Citizen'} at ${locationText}.` 
-                        : `Reported at ${locationText}. Urgency: ${(data.urgency || 'medium').toUpperCase()}.`,
-                      type: notifType,
-                      relatedId: alertId
-                    });
-                    activeUnreadNotifs[`incident_${alertId}`] = true;
-                  }
-                } else {
-                  // Citizen unread messages sync
-                  if ((data.unreadCountCitizen || 0) > 0 && !activeUnreadNotifs[`message_${alertId}`]) {
-                    sendAndSaveNotification(user.uid, {
-                      title: `💬 Message from Barangay Command Center`,
-                      body: data.lastMessageText || 'New message received.',
-                      type: 'message',
-                      relatedId: alertId
-                    });
-                    activeUnreadNotifs[`message_${alertId}`] = true;
-                  }
-                }
-              }
+              // previousAlerts is tracked for changes in modifications
 
               // 2. Real-time Trigger for brand new reports (Only Admin/Responder gets notified)
               if (isAdmin && !isFirstLoad) {
@@ -246,6 +205,28 @@ export default function AppNavigator() {
                 unreadCountCitizen: data.unreadCountCitizen || 0,
                 lastMessageAt: data.lastMessageAt,
               };
+            } else if (change.type === 'removed') {
+              // Delete cache entry
+              delete previousAlerts[alertId];
+
+              // Clean up any Firestore notifications pointing to this deleted alert ID
+              const cleanupNotifs = async () => {
+                try {
+                  const notifsRef = collection(db, 'users', user.uid, 'notifications');
+                  const notifsQ = query(notifsRef, where('relatedId', '==', alertId));
+                  const snap = await getDocs(notifsQ);
+                  if (!snap.empty) {
+                    const batch = writeBatch(db);
+                    snap.forEach((docSnap) => {
+                      batch.delete(docSnap.ref);
+                    });
+                    await batch.commit();
+                  }
+                } catch (err) {
+                  console.log('Error cleaning up notifications for deleted alert:', err);
+                }
+              };
+              cleanupNotifs();
             }
           });
 
