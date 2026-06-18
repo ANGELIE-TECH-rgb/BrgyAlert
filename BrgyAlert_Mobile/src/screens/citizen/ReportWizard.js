@@ -28,7 +28,7 @@ import { db, storage } from '../../services/firebaseConfig';
 import { getCurrentLocation } from '../../services/locationService';
 import { selectImageFromLibrary, captureImageWithCamera } from '../../services/mediaService';
 import GestureModal from '../../components/GestureModal';
-import { predictIncidentAttributes, generateIncidentSummary, analyzeIncidentValidity, analyzeIncidentImages } from '../../services/aiService';
+import { predictIncidentAttributes, processIncidentSubmissionAI, isAiRateLimited } from '../../services/aiService';
 
 const INCIDENT_TYPES = [
   'Physical Abuse',
@@ -87,37 +87,14 @@ export default function ReportWizard({ navigation }) {
   const [urgency, setUrgency] = useState('medium');
   const [aiPrediction, setAiPrediction] = useState(null);
   const [loadingAi, setLoadingAi] = useState(false);
+  const [aiLimitReached, setAiLimitReached] = useState(false);
 
-  // Debounced AI prediction based on incident description details input
+  // Check rate limit on mount
   useEffect(() => {
-    if (!description || description.trim().length < 10 || !isOnline) {
-      setAiPrediction(null);
-      return;
-    }
-
-    setLoadingAi(true);
-    const timer = setTimeout(async () => {
-      try {
-        const prediction = await predictIncidentAttributes(description);
-        if (prediction) {
-          // Validate category returned maps cleanly to options
-          let predictedCat = prediction.category;
-          if (predictedCat === 'Flood') predictedCat = 'Flooding';
-          
-          setAiPrediction({
-            ...prediction,
-            category: predictedCat
-          });
-        }
-      } catch (err) {
-        console.log('[ReportWizard] Error fetching AI predictions:', err);
-      } finally {
-        setLoadingAi(false);
-      }
-    }, 1500);
-
-    return () => clearTimeout(timer);
-  }, [description, isOnline]);
+    isAiRateLimited('citizen').then(limitReached => {
+      setAiLimitReached(limitReached);
+    });
+  }, []);
 
   const handleApplyAiRecommendation = () => {
     if (!aiPrediction) return;
@@ -255,7 +232,7 @@ export default function ReportWizard({ navigation }) {
     }
   };
 
-  const handleNextStep = () => {
+  const handleNextStep = async () => {
     if (!incidentType) {
       setErrorMsg('Please select an Incident Type.');
       return;
@@ -270,6 +247,35 @@ export default function ReportWizard({ navigation }) {
     }
 
     setErrorMsg('');
+
+    // Check rate limit first so we can set warning banner state
+    const limitReached = await isAiRateLimited('citizen');
+    setAiLimitReached(limitReached);
+
+    if (!limitReached && isOnline && description.trim().length >= 8) {
+      setLoadingAi(true);
+      setAiPrediction(null);
+      // Trigger categorization prediction on-demand during Step 1 -> Step 2 transition
+      predictIncidentAttributes(description, 'citizen')
+        .then(prediction => {
+          if (prediction) {
+            let predictedCat = prediction.category;
+            if (predictedCat === 'Flood') predictedCat = 'Flooding';
+            
+            setAiPrediction({
+              ...prediction,
+              category: predictedCat
+            });
+          }
+        })
+        .catch(err => {
+          console.log('[ReportWizard] Error fetching AI predictions on Next:', err);
+        })
+        .finally(() => {
+          setLoadingAi(false);
+        });
+    }
+
     setStep(2);
   };
 
@@ -376,44 +382,53 @@ export default function ReportWizard({ navigation }) {
           }
         }));
 
-        // Pre-generate incident summary, text validity, and image validity using Gemini AI
         let generatedSummary = '';
-        let validityResult = { isFake: false, confidence: 'Low', reasoning: '' };
-        let imageValidityResult = { imageMatches: true, confidence: 'Low', reasoning: '' };
-
-        try {
-          const [summary, textVal, imgVal] = await Promise.all([
-            generateIncidentSummary(description),
-            analyzeIncidentValidity(description),
-            base64Images.length > 0
-              ? analyzeIncidentImages(description, incidentType, base64Images)
-              : Promise.resolve({ imageMatches: true, confidence: 'Low', reasoning: '' })
-          ]);
-          generatedSummary = summary;
-          validityResult = textVal;
-          imageValidityResult = imgVal;
-        } catch (aiErr) {
-          console.log('[ReportWizard] AI submission analysis failed:', aiErr);
-        }
-
-        // Combine validity results
-        const isFlaggedFake = validityResult.isFake || !imageValidityResult.imageMatches;
-        
+        let isFlaggedFake = false;
         let combinedReason = '';
-        if (validityResult.isFake && validityResult.reasoning) {
-          combinedReason += `Text: ${validityResult.reasoning}`;
-        }
-        if (!imageValidityResult.imageMatches && imageValidityResult.reasoning) {
-          if (combinedReason) combinedReason += ' | ';
-          combinedReason += `Larawan: ${imageValidityResult.reasoning}`;
-        }
-
-        // Determine highest confidence
         let combinedConfidence = 'Low';
-        if (validityResult.confidence === 'High' || imageValidityResult.confidence === 'High') {
-          combinedConfidence = 'High';
-        } else if (validityResult.confidence === 'Medium' || imageValidityResult.confidence === 'Medium') {
-          combinedConfidence = 'Medium';
+
+        // Check if rate limited first to avoid calling processIncidentSubmissionAI if we are already rate limited
+        const limitReached = await isAiRateLimited('citizen');
+        if (!limitReached) {
+          try {
+            const aiResult = await processIncidentSubmissionAI(description, incidentType, base64Images, 'citizen');
+            if (aiResult.rateLimited) {
+              setAiLimitReached(true);
+            } else {
+              generatedSummary = aiResult.summary;
+              isFlaggedFake = aiResult.isFake || !aiResult.imageMatches;
+              
+              let reasonParts = [];
+              if (aiResult.isFake && aiResult.textReasoning) {
+                reasonParts.push(`Text: ${aiResult.textReasoning}`);
+              }
+              if (!aiResult.imageMatches && aiResult.imageReasoning) {
+                reasonParts.push(`Larawan: ${aiResult.imageReasoning}`);
+              }
+              combinedReason = reasonParts.join(' | ');
+
+              // Determine highest confidence
+              let textConf = aiResult.textConfidence || 'Low';
+              let imgConf = aiResult.imageConfidence || 'Low';
+              if (textConf === 'High' || imgConf === 'High') {
+                combinedConfidence = 'High';
+              } else if (textConf === 'Medium' || imgConf === 'Medium') {
+                combinedConfidence = 'Medium';
+              }
+
+              // Update the urgency and category states with prediction if they weren't manual
+              if (aiResult.urgency) {
+                setUrgency(aiResult.urgency.toLowerCase());
+              }
+              if (aiResult.category && INCIDENT_TYPES.includes(aiResult.category)) {
+                setIncidentType(aiResult.category);
+              }
+            }
+          } catch (aiErr) {
+            console.log('[ReportWizard] Consolidated AI submission analysis failed:', aiErr);
+          }
+        } else {
+          setAiLimitReached(true);
         }
 
         const payload = {
@@ -482,6 +497,15 @@ export default function ReportWizard({ navigation }) {
         {errorMsg ? (
           <View style={styles.errorBanner}>
             <Text style={styles.errorText}>{errorMsg}</Text>
+          </View>
+        ) : null}
+
+        {aiLimitReached ? (
+          <View style={styles.aiLimitBanner}>
+            <Ionicons name="warning-outline" size={16} color="#B45309" style={{ marginRight: 8 }} />
+            <Text style={styles.aiLimitText}>
+              ⚠️ AI features are temporarily limited for this hour. Your report will be processed manually.
+            </Text>
           </View>
         ) : null}
 
@@ -651,6 +675,35 @@ export default function ReportWizard({ navigation }) {
             <Text style={styles.errorText}>{errorMsg}</Text>
           </View>
         ) : null}
+
+        {aiLimitReached ? (
+          <View style={styles.aiLimitBanner}>
+            <Ionicons name="warning-outline" size={16} color="#B45309" style={{ marginRight: 8 }} />
+            <Text style={styles.aiLimitText}>
+              ⚠️ AI features are temporarily limited for this hour. Your report will be processed manually.
+            </Text>
+          </View>
+        ) : null}
+
+        {loadingAi && (
+          <View style={styles.aiLoadingContainer}>
+            <ActivityIndicator size="small" color="#2563EB" style={{ marginRight: 8 }} />
+            <Text style={styles.aiLoadingText}>AI is analyzing description...</Text>
+          </View>
+        )}
+
+        {!loadingAi && aiPrediction && (aiPrediction.category !== incidentType || aiPrediction.urgency.toLowerCase() !== urgency) && (
+          <TouchableOpacity 
+            style={styles.aiSuggestionChip}
+            onPress={handleApplyAiRecommendation}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="sparkles" size={14} color="#2563EB" style={{ marginRight: 6 }} />
+            <Text style={styles.aiSuggestionText}>
+              AI recommends: <Text style={styles.aiSuggestionBold}>{aiPrediction.category} ({aiPrediction.urgency})</Text> — Tap to apply
+            </Text>
+          </TouchableOpacity>
+        )}
 
         {/* Read-Only Details Card */}
         <View style={styles.reviewCard}>
@@ -1284,5 +1337,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6B7280',
     fontWeight: '600',
+  },
+  aiLimitBanner: {
+    backgroundColor: '#FEF3C7',
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  aiLimitText: {
+    color: '#B45309',
+    fontSize: 14,
+    fontWeight: '500',
+    flex: 1,
   },
 });

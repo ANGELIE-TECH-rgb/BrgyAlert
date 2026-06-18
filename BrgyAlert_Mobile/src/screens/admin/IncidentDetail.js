@@ -24,7 +24,7 @@ import { db } from '../../services/firebaseConfig';
 import { useAuth } from '../../context/AuthContext';
 import GestureModal from '../../components/GestureModal';
 import SkeletonLoader from '../../components/SkeletonLoader';
-import { generateIncidentSummary, analyzeIncidentValidity } from '../../services/aiService';
+import { processIncidentSubmissionAI, isAiRateLimited } from '../../services/aiService';
 
 const STATUS_STEPS = [
   { key: 'submitted', label: 'Report Submitted', desc: 'Report has been successfully recorded in the system.' },
@@ -65,6 +65,15 @@ export default function IncidentDetail({ route, navigation }) {
   // Dynamic reporter profile lookup
   const [reporterProfile, setReporterProfile] = useState(null);
 
+  const [aiLimitReached, setAiLimitReached] = useState(false);
+
+  // Check initial rate limit status
+  useEffect(() => {
+    isAiRateLimited('admin').then(limitReached => {
+      setAiLimitReached(limitReached);
+    });
+  }, []);
+
   // Safety ref to prevent duplicate background AI runs
   const generatingSummaryRef = useRef(false);
 
@@ -87,26 +96,52 @@ export default function IncidentDetail({ route, navigation }) {
         if (data.details && (!data.aiSummary || data.aiFlaggedFake === undefined) && !generatingSummaryRef.current) {
           generatingSummaryRef.current = true;
           try {
-            console.log('[IncidentDetail] Auto-healing missing AI fields via Gemini...');
+            console.log('[IncidentDetail] Auto-healing missing AI fields via Gemini consolidated call...');
             
-            // Run validation and summary checks concurrently
-            const [summary, validity] = await Promise.all([
-              !data.aiSummary ? generateIncidentSummary(data.details) : Promise.resolve(data.aiSummary),
-              data.aiFlaggedFake === undefined ? analyzeIncidentValidity(data.details) : Promise.resolve(null)
-            ]);
+            // Check rate limit first
+            const limitReached = await isAiRateLimited('admin');
+            if (limitReached) {
+              setAiLimitReached(true);
+            } else {
+              setAiLimitReached(false);
+              const aiResult = await processIncidentSubmissionAI(data.details, data.category || 'General', [], 'admin');
+              
+              if (aiResult.rateLimited) {
+                setAiLimitReached(true);
+              } else {
+                const updatePayload = {};
+                if (!data.aiSummary && aiResult.summary) {
+                  updatePayload.aiSummary = aiResult.summary;
+                }
+                if (data.aiFlaggedFake === undefined) {
+                  updatePayload.aiFlaggedFake = !!aiResult.isFake;
+                  
+                  let reasonParts = [];
+                  if (aiResult.isFake && aiResult.textReasoning) {
+                    reasonParts.push(`Text: ${aiResult.textReasoning}`);
+                  }
+                  if (!aiResult.imageMatches && aiResult.imageReasoning) {
+                    reasonParts.push(`Larawan: ${aiResult.imageReasoning}`);
+                  }
+                  const combinedReason = reasonParts.join(' | ');
 
-            const updatePayload = {};
-            if (!data.aiSummary && summary) {
-              updatePayload.aiSummary = summary;
-            }
-            if (data.aiFlaggedFake === undefined && validity) {
-              updatePayload.aiFlaggedFake = !!validity.isFake;
-              updatePayload.aiFakeReason = validity.reasoning || '';
-              updatePayload.aiValidityConfidence = validity.confidence || 'Low';
-            }
+                  updatePayload.aiFakeReason = combinedReason || '';
 
-            if (Object.keys(updatePayload).length > 0) {
-              await updateDoc(docRef, updatePayload);
+                  let combinedConfidence = 'Low';
+                  let textConf = aiResult.textConfidence || 'Low';
+                  let imgConf = aiResult.imageConfidence || 'Low';
+                  if (textConf === 'High' || imgConf === 'High') {
+                    combinedConfidence = 'High';
+                  } else if (textConf === 'Medium' || imgConf === 'Medium') {
+                    combinedConfidence = 'Medium';
+                  }
+                  updatePayload.aiValidityConfidence = combinedConfidence;
+                }
+
+                if (Object.keys(updatePayload).length > 0) {
+                  await updateDoc(docRef, updatePayload);
+                }
+              }
             }
           } catch (sumErr) {
             console.log('[IncidentDetail] Background AI healing failed:', sumErr);
@@ -358,6 +393,19 @@ export default function IncidentDetail({ route, navigation }) {
       ) : (
         <>
           <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+
+            {/* ─── AI LIMIT WARNING BANNER ─────────────────────────────── */}
+            {aiLimitReached && (
+              <View style={styles.aiLimitBanner}>
+                <View style={styles.aiLimitBannerHeader}>
+                  <Ionicons name="warning-outline" size={18} color="#B45309" style={{ marginRight: 8 }} />
+                  <Text style={styles.aiLimitBannerTitle}>AI Triage Limit Reached</Text>
+                </View>
+                <Text style={styles.aiLimitBannerSubtitle}>
+                  ⚠️ Hourly AI triage limit reached. Automatic summaries and validity healing will resume next hour.
+                </Text>
+              </View>
+            )}
 
             {/* ─── DECLINED WARNING BANNER ─────────────────────────────── */}
             {isDeclined && (
@@ -1225,4 +1273,15 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     lineHeight: 18,
   },
+  aiLimitBanner: {
+    backgroundColor: '#FEF3C7',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+  },
+  aiLimitBannerHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  aiLimitBannerTitle: { fontSize: 15, fontWeight: '700', color: '#B45309' },
+  aiLimitBannerSubtitle: { fontSize: 13, color: '#B45309', lineHeight: 18, fontWeight: '500' },
 });

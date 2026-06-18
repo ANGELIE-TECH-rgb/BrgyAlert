@@ -106,12 +106,12 @@ export const requestLibraryPermission = async () => {
   }
 };
 
-// Compress image to save bandwidth (converts to ~200KB)
+// Compress image to save bandwidth (converts to ~200KB) and downscale to 512px for AI token reduction
 export const compressImage = async (uri) => {
   try {
     const manipResult = await ImageManipulator.manipulateAsync(
       uri,
-      [{ resize: { width: 1024 } }], // Resizes width to 1024px preserving aspect ratio
+      [{ resize: { width: 512 } }], // Resizes width to 512px preserving aspect ratio
       { compress: 0.65, format: ImageManipulator.SaveFormat.JPEG } // 65% quality compression
     );
     return manipResult.uri;

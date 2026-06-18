@@ -1,13 +1,84 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+/**
+ * Utility to check if AI requests are currently rate limited within the hourly sliding window, without registering a new request.
+ * @param {string} role 'citizen' | 'admin' | 'responder'
+ * @returns {Promise<boolean>} True if rate limited, false if allowed.
+ */
+export async function isAiRateLimited(role = 'citizen') {
+  try {
+    const isOwnerAdmin = role === 'admin' || role === 'responder';
+    const limit = isOwnerAdmin ? 15 : 3;
+    const storageKey = `ai_request_timestamps_${isOwnerAdmin ? 'admin' : 'citizen'}`;
+
+    const rawTimestamps = await AsyncStorage.getItem(storageKey);
+    let timestamps = rawTimestamps ? JSON.parse(rawTimestamps) : [];
+
+    const now = Date.now();
+    const oneHourAgo = now - 60 * 60 * 1000;
+
+    // Filter out timestamps older than 1 hour
+    timestamps = timestamps.filter(ts => ts > oneHourAgo);
+
+    return timestamps.length >= limit;
+  } catch (error) {
+    console.log('[aiService] Error checking AI rate limit state:', error);
+    return false;
+  }
+}
+
+/**
+ * Utility to verify and register AI requests within an hourly sliding window.
+ * Citizens: Max 3 requests/hour.
+ * Admins/Responders: Max 15 requests/hour.
+ * @param {string} role 'citizen' | 'admin' | 'responder'
+ * @returns {Promise<boolean>} True if request is permitted, false if rate limited.
+ */
+export async function checkAndRegisterAiRequest(role = 'citizen') {
+  try {
+    const isOwnerAdmin = role === 'admin' || role === 'responder';
+    const limit = isOwnerAdmin ? 15 : 3;
+    const storageKey = `ai_request_timestamps_${isOwnerAdmin ? 'admin' : 'citizen'}`;
+
+    const rawTimestamps = await AsyncStorage.getItem(storageKey);
+    let timestamps = rawTimestamps ? JSON.parse(rawTimestamps) : [];
+
+    const now = Date.now();
+    const oneHourAgo = now - 60 * 60 * 1000;
+
+    // Filter out timestamps older than 1 hour
+    timestamps = timestamps.filter(ts => ts > oneHourAgo);
+
+    if (timestamps.length >= limit) {
+      console.log(`[aiService] AI rate limit reached for role "${role}". Blocked request. (Active: ${timestamps.length}/${limit})`);
+      return false;
+    }
+
+    // Register current request
+    timestamps.push(now);
+    await AsyncStorage.setItem(storageKey, JSON.stringify(timestamps));
+    return true;
+  } catch (error) {
+    console.log('[aiService] Error checking/registering AI rate limit, permitting request:', error);
+    return true; // Fallback to allow request if AsyncStorage fails
+  }
+}
 
 /**
  * Predicts the incident category, urgency, and short reasoning based on incident details.
  * @param {string} details 
+ * @param {string} role
  * @returns {Promise<{ category: string, urgency: string, reasoning: string }|null>}
  */
-export async function predictIncidentAttributes(details) {
+export async function predictIncidentAttributes(details, role = 'citizen') {
   if (!details || details.trim().length < 8) {
     return null;
+  }
+
+  const allowed = await checkAndRegisterAiRequest(role);
+  if (!allowed) {
+    return null; // Return null so screen handles rate-limited fallback
   }
 
   try {
@@ -55,10 +126,16 @@ Do not write markdown formatting (like \`\`\`json), do not write any greetings, 
 /**
  * Summarizes the incident report details in active voice into 10 words or less.
  * @param {string} details 
+ * @param {string} role
  * @returns {Promise<string>}
  */
-export async function generateIncidentSummary(details) {
+export async function generateIncidentSummary(details, role = 'admin') {
   if (!details || details.trim().length < 8) {
+    return '';
+  }
+
+  const allowed = await checkAndRegisterAiRequest(role);
+  if (!allowed) {
     return '';
   }
 
@@ -96,11 +173,17 @@ Do not add quotes, do not write any prefixes or commentary. Just output the Taga
 /**
  * Evaluates if an incident description is likely fake, spam, gibberish, or joke text.
  * @param {string} details 
+ * @param {string} role
  * @returns {Promise<{ isFake: boolean, confidence: 'Low' | 'Medium' | 'High', reasoning: string }>}
  */
-export async function analyzeIncidentValidity(details) {
+export async function analyzeIncidentValidity(details, role = 'admin') {
   if (!details || details.trim().length < 8) {
     return { isFake: false, confidence: 'Low', reasoning: 'Too short to analyze' };
+  }
+
+  const allowed = await checkAndRegisterAiRequest(role);
+  if (!allowed) {
+    return { isFake: false, confidence: 'Low', reasoning: 'AI Rate limit reached' };
   }
 
   try {
@@ -152,43 +235,99 @@ Do not write markdown formatting (like \`\`\`json), do not write any greetings, 
 }
 
 /**
- * Evaluates if the attached evidence images match or are consistent with the reported category and details.
+ * Consolidated Incident Submission AI Processor
+ * Consolidates Summary, Validity (text), and Image match checks in 1 single request.
  * @param {string} details 
  * @param {string} category 
  * @param {Array<{ data: string, mimeType: string }>} base64Images 
- * @returns {Promise<{ imageMatches: boolean, confidence: 'Low' | 'Medium' | 'High', reasoning: string }>}
+ * @param {string} role 
+ * @returns {Promise<{ rateLimited?: boolean, summary: string, isFake: boolean, textReasoning: string, textConfidence: string, imageMatches: boolean, imageReasoning: string, imageConfidence: string, urgency: string, category: string }>}
  */
-export async function analyzeIncidentImages(details, category, base64Images) {
-  if (!base64Images || base64Images.length === 0) {
-    return { imageMatches: true, confidence: 'Low', reasoning: 'No images to analyze' };
+export async function processIncidentSubmissionAI(details, category, base64Images = [], role = 'citizen') {
+  if (!details || details.trim().length < 8) {
+    return {
+      summary: '',
+      isFake: false,
+      textReasoning: '',
+      textConfidence: 'Low',
+      imageMatches: true,
+      imageReasoning: '',
+      imageConfidence: 'Low',
+      urgency: 'medium',
+      category: category
+    };
+  }
+
+  const allowed = await checkAndRegisterAiRequest(role);
+  if (!allowed) {
+    return {
+      rateLimited: true,
+      summary: '',
+      isFake: false,
+      textReasoning: 'Rate limit reached',
+      textConfidence: 'Low',
+      imageMatches: true,
+      imageReasoning: '',
+      imageConfidence: 'Low',
+      urgency: 'medium',
+      category: category
+    };
   }
 
   try {
     const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
     if (!apiKey) {
-      console.warn('[aiService] EXPO_PUBLIC_GEMINI_API_KEY is missing. Skipping AI image match check.');
-      return { imageMatches: true, confidence: 'Low', reasoning: 'API key missing' };
+      console.warn('[aiService] EXPO_PUBLIC_GEMINI_API_KEY is missing. Skipping consolidated AI processing.');
+      return {
+        summary: '',
+        isFake: false,
+        textReasoning: 'API key missing',
+        textConfidence: 'Low',
+        imageMatches: true,
+        imageReasoning: '',
+        imageConfidence: 'Low',
+        urgency: 'medium',
+        category: category
+      };
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
-    const prompt = `You are an emergency triage validator for a barangay/local community command center.
-Analyze if the attached image(s) match or are consistent with the reported incident details ("${details}") and category ("${category}").
+    const prompt = `You are an emergency triage and verification assistant for a local community command center.
+Analyze the following incident report text and any attached images.
 
-Guidelines:
-- "imageMatches" should be true if the image content matches or is contextually consistent with the reported issue (e.g., if category is "Fire" and the image shows a fire, smoke, burnt area, fire truck, fire extinguisher, etc.; or if it is "Flood" and shows flooded streets, rain, high water level).
-- "imageMatches" should be false if the image is completely unrelated, spam, or joke evidence (e.g. a meme, a screenshot of a chat window, a blank/black photo, a selfie showing no emergency or hazard, a pet photo, a random download, or game screenshot).
-- "confidence" must be "Low", "Medium", or "High".
-- "reasoning" must be a single concise sentence in Tagalog or simple Taglish explaining why the images are flagged as mismatched/unrelated. If they match, reasoning should be empty.
+Incident Description: "${details}"
+Reporter's Selected Category: "${category}"
+
+Your tasks:
+1. Summarize: Provide a highly concise brief summary in Tagalog/Taglish of 10 words or less describing the situation in active voice (e.g. "May sunog sa kusina malapit sa Plaza Rizal").
+2. Validate Text (isFake): Determine if this description is spam, fake, gibberish (e.g. keyboard mashing like "asdfghjk"), a joke, or a template test report.
+   - Set "isFake" to true if it is spam, a joke, gibberish, or an obvious template test message.
+   - Set "isFake" to false if it describes any possible emergency or normal local issue.
+   - Provide "textReasoning" in Tagalog (max 1 sentence) explaining why it was flagged as fake, or leave it empty if valid.
+   - Provide "textConfidence": "Low" | "Medium" | "High".
+3. Validate Images (imageMatches): If images are attached, evaluate if they match or are contextually consistent with the description and category.
+   - Set "imageMatches" to true if there are no images, OR if the images show content matching or contextually related to the reported issue.
+   - Set "imageMatches" to false if the images are completely unrelated (e.g., memes, blank screens, screenshots of chats, selfies showing no hazard, pet photos).
+   - Provide "imageReasoning" in Tagalog (max 1 sentence) explaining why the image is unrelated, or leave it empty.
+   - Provide "imageConfidence": "Low" | "Medium" | "High".
+4. Predict Urgency: Urgency must be strictly one of: "Low", "Medium", "High", "Critical".
+5. Predict Category: Predict the best matching category. Must be strictly one of: "Fire", "Medical", "Flood", "Crime", "Accident", "General".
 
 You MUST respond ONLY in raw JSON format matching this exact schema:
 {
+  "summary": "10-word Tagalog phrase",
+  "isFake": true | false,
+  "textReasoning": "string explanation or empty",
+  "textConfidence": "Low" | "Medium" | "High",
   "imageMatches": true | false,
-  "confidence": "Low" | "Medium" | "High",
-  "reasoning": "string explanation in Tagalog or empty"
+  "imageReasoning": "string explanation or empty",
+  "imageConfidence": "Low" | "Medium" | "High",
+  "urgency": "Low" | "Medium" | "High" | "Critical",
+  "category": "Fire" | "Medical" | "Flood" | "Crime" | "Accident" | "General"
 }
-Do not write markdown formatting (like \`\`\`json), do not write any greetings, prefix, or suffix. Just return the JSON string.`;
+Do not write markdown formatting (like \`\`\`json), do not write prefixes or suffixes. Just return the JSON string.`;
 
     const parts = [
       prompt,
@@ -203,22 +342,35 @@ Do not write markdown formatting (like \`\`\`json), do not write any greetings, 
     const result = await model.generateContent(parts);
     const text = result.response.text().trim();
 
-    // Clean up markdown block if model output includes it despite prompt
     let cleanedText = text;
-    if (text.startsWith('```')) {
-      cleanedText = text.replace(/^```(json)?/, '').replace(/```$/, '').trim();
+    if (cleanedText.startsWith('```')) {
+      cleanedText = cleanedText.replace(/^```(json)?/, '').replace(/```$/, '').trim();
     }
 
     const parsed = JSON.parse(cleanedText);
     return {
-      imageMatches: parsed.imageMatches !== false,
-      confidence: parsed.confidence || 'Low',
-      reasoning: parsed.reasoning || ''
+      summary: parsed.summary || '',
+      isFake: parsed.isFake === true || parsed.isFake === 'true',
+      textReasoning: parsed.textReasoning || '',
+      textConfidence: parsed.textConfidence || 'Low',
+      imageMatches: parsed.imageMatches !== false && parsed.imageMatches !== 'false',
+      imageReasoning: parsed.imageReasoning || '',
+      imageConfidence: parsed.imageConfidence || 'Low',
+      urgency: parsed.urgency || 'medium',
+      category: parsed.category || category
     };
   } catch (error) {
-    console.log('[aiService] Gemini AI service is currently offline or rate-limited. Falling back gracefully (Multimodal image analysis).');
-    return { imageMatches: true, confidence: 'Low', reasoning: 'AI Service is temporarily unavailable' };
+    console.log('[aiService] Consolidated incident analysis failed, falling back:', error);
+    return {
+      summary: '',
+      isFake: false,
+      textReasoning: 'AI service unavailable',
+      textConfidence: 'Low',
+      imageMatches: true,
+      imageReasoning: '',
+      imageConfidence: 'Low',
+      urgency: 'medium',
+      category: category
+    };
   }
 }
-
-
