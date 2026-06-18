@@ -12,12 +12,14 @@ import {
   ActivityIndicator,
   ScrollView,
   Animated,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, getDoc, doc, updateDoc, where, getDocs, increment, writeBatch } from 'firebase/firestore';
 import { Feather } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services/firebaseConfig';
+import { checkChatMessageStatus, recordChatMessageSent } from '../../services/rateLimiter';
 import { setActiveChat } from '../../services/notificationService';
 
 export default function ChatScreen({ route, navigation }) {
@@ -350,6 +352,15 @@ export default function ChatScreen({ route, navigation }) {
   const handleSend = async () => {
     if (!inputText.trim() || !currentAlertId) return;
 
+    // Rate limit check for citizen messages (lenient)
+    if (!isAdmin) {
+      const rateStatus = await checkChatMessageStatus();
+      if (rateStatus.locked) {
+        Alert.alert('Rate Limited', `Please wait ${rateStatus.secondsRemaining} seconds before sending another message.`);
+        return;
+      }
+    }
+
     const messageText = inputText.trim();
     setInputText('');
 
@@ -382,6 +393,8 @@ export default function ChatScreen({ route, navigation }) {
         updateData.unreadCountCitizen = increment(1);
       } else {
         updateData.unreadCountAdmin = increment(1);
+        // Record chat message sent for rate limiting
+        await recordChatMessageSent();
       }
 
       await updateDoc(doc(db, 'alerts', currentAlertId), updateData);

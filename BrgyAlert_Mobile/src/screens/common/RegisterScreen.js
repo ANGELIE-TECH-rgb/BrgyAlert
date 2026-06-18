@@ -281,14 +281,15 @@ export default function RegisterScreen({ navigation }) {
         dob,
         phoneNumber.trim(),
         gender,
-        'citizen' // Automatically set to citizen
-      );
-
-      // Show native success alert dialog
-      Alert.alert(
-        "Registration Successful",
-        "Your account has been created successfully! Welcome to BrgyAlert.",
-        [{ text: "OK" }]
+        'citizen', // Automatically set to citizen
+        () => new Promise((resolve) => {
+          Alert.alert(
+            "Registration Successful",
+            "Your account has been created successfully! Welcome to BrgyAlert.",
+            [{ text: "OK", onPress: resolve }],
+            { cancelable: false }
+          );
+        })
       );
     } catch (error) {
       console.log('Registration error:', error.code, error.message);

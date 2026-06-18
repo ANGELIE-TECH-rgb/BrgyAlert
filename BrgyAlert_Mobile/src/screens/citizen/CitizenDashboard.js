@@ -23,7 +23,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services/firebaseConfig';
-import { markAsRead, markAllAsRead, playNotificationSound } from '../../services/notificationService';
+import { markAsRead, markAllAsRead } from '../../services/notificationService';
+import { checkPanicStatus, recordPanicTrigger } from '../../services/rateLimiter';
 import { getCurrentLocation } from '../../services/locationService';
 import IncidentCard from '../../components/IncidentCard';
 import BottomTabNav from '../../components/BottomTabNav';
@@ -328,9 +329,18 @@ export default function CitizenDashboard({ navigation }) {
       return;
     }
 
+    // Check panic rate limit
+    const rateStatus = await checkPanicStatus();
+    if (rateStatus.locked) {
+      Alert.alert(
+        'Emergency Cooldown',
+        `An emergency alert was recently sent. Please wait ${rateStatus.secondsRemaining} seconds before triggering another panic alert.`
+      );
+      return;
+    }
+
     try {
       Alert.alert('Panic Triggered', 'Sending emergency location alert to Barangay Command Center...');
-      await playNotificationSound('emergency');
       const location = await getCurrentLocation();
 
       const panicPayload = {
@@ -354,6 +364,7 @@ export default function CitizenDashboard({ navigation }) {
       };
 
       const docRef = await addDoc(collection(db, 'alerts'), panicPayload);
+      await recordPanicTrigger();
 
       navigation.navigate('ReportSuccess', {
         reportId: docRef.id,

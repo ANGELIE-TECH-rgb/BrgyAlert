@@ -29,6 +29,7 @@ import { getCurrentLocation } from '../../services/locationService';
 import { selectImageFromLibrary, captureImageWithCamera } from '../../services/mediaService';
 import GestureModal from '../../components/GestureModal';
 import { predictIncidentAttributes, processIncidentSubmissionAI, isAiRateLimited } from '../../services/aiService';
+import { checkReportStatus, recordReportSubmission } from '../../services/rateLimiter';
 
 const INCIDENT_TYPES = [
   'Physical Abuse',
@@ -198,6 +199,34 @@ export default function ReportWizard({ navigation }) {
     return () => unsubscribeNet();
   }, []);
 
+  // Rate limit check on mount
+  useEffect(() => {
+    const verifyRateLimit = async () => {
+      const status = await checkReportStatus();
+      if (status.locked) {
+        Alert.alert(
+          'Rate Limit Reached',
+          `You recently submitted a report. Please wait ${status.secondsRemaining} seconds before submitting another incident report.`,
+          [{ text: 'OK', onPress: () => navigation.goBack() }],
+          { cancelable: false }
+        );
+      }
+    };
+    verifyRateLimit();
+  }, []);
+
+  // Intercept and prevent back navigation when submitting is active
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      if (isSubmitting) {
+        // Prevent default behavior of leaving the screen
+        e.preventDefault();
+      }
+    });
+
+    return unsubscribe;
+  }, [navigation, isSubmitting]);
+
   const handleSelectImage = async (useCamera = false) => {
     setPickerModalVisible(false);
     try {
@@ -323,15 +352,20 @@ export default function ReportWizard({ navigation }) {
             onPress: async () => {
               const supported = await Linking.canOpenURL(smsUrl);
               if (supported) {
+                await recordReportSubmission();
                 await Linking.openURL(smsUrl);
-                navigation.navigate('ReportSuccess', {
+                
+                // Toggle isSubmitting to false first so beforeRemove doesn't block the redirect!
+                setIsSubmitting(false);
+                
+                navigation.replace('ReportSuccess', {
                   reportId: 'OFFLINE_SMS',
                   estimatedTime: 'Waiting for SMS transmission'
                 });
               } else {
                 Alert.alert('SMS Error', 'Could not open native SMS client.');
+                setIsSubmitting(false);
               }
-              setIsSubmitting(false);
             }
           },
           {
@@ -355,6 +389,17 @@ export default function ReportWizard({ navigation }) {
     }
 
     setErrorMsg('');
+    
+    // Check rate limit first
+    const rateStatus = await checkReportStatus();
+    if (rateStatus.locked) {
+      Alert.alert(
+        'Rate Limit Reached',
+        `Please wait ${rateStatus.secondsRemaining} seconds before submitting another incident report.`
+      );
+      return;
+    }
+
     setIsSubmitting(true);
 
     if (isOnline) {
@@ -457,7 +502,12 @@ export default function ReportWizard({ navigation }) {
         };
 
         const docRef = await addDoc(collection(db, 'alerts'), payload);
-        navigation.navigate('ReportSuccess', { 
+        await recordReportSubmission();
+
+        // Toggle isSubmitting to false first so beforeRemove doesn't block the redirect!
+        setIsSubmitting(false);
+
+        navigation.replace('ReportSuccess', { 
           reportId: docRef.id, 
           estimatedTime: '15 - 30 Minutes' 
         });
@@ -798,7 +848,11 @@ export default function ReportWizard({ navigation }) {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.navHeader}>
-        <TouchableOpacity style={styles.backButton} onPress={handleBack} disabled={isSubmitting}>
+        <TouchableOpacity 
+          style={[styles.backButton, isSubmitting && { opacity: 0.5 }]} 
+          onPress={handleBack} 
+          disabled={isSubmitting}
+        >
           <Feather name="arrow-left" size={20} color="#1F2937" />
         </TouchableOpacity>
         
@@ -858,6 +912,20 @@ export default function ReportWizard({ navigation }) {
             />
           )}
         </TouchableOpacity>
+      </Modal>
+
+      {/* Loading Overlay Modal */}
+      <Modal
+        transparent={true}
+        animationType="fade"
+        visible={isSubmitting}
+        onRequestClose={() => { }}
+      >
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#FFFFFF" style={{ marginBottom: 20 }} />
+          <Text style={styles.loadingText}>Submitting Report...</Text>
+          <Text style={styles.loadingSubtext}>Please wait while we upload evidence and compile your report</Text>
+        </View>
       </Modal>
     </View>
   );
@@ -1353,5 +1421,28 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     flex: 1,
+  },
+  loadingOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.44)', // Frosted dark/black background
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  loadingText: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    marginBottom: 8,
+    letterSpacing: -0.3,
+  },
+  loadingSubtext: {
+    fontSize: 14,
+    color: '#CBD5E1', // Cool gray 300
+    textAlign: 'center',
+    lineHeight: 20,
+    fontWeight: '500',
+    maxWidth: 280,
   },
 });

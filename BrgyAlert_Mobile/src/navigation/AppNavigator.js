@@ -253,6 +253,15 @@ export default function AppNavigator() {
     return <WelcomeScreen onFinish={() => setHasSeenOnboarding(true)} />;
   }
 
+  // Prevent routing transitions while user is authenticated but profile is still loading
+  if (user && !userProfile) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#0B2564" />
+      </View>
+    );
+  }
+
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>

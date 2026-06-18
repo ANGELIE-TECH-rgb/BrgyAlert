@@ -144,10 +144,10 @@ export default function LoginScreen({ navigation }) {
       }
     } catch (error) {
       console.log('Login failed:', error.code || error.message);
-      
-      const isNetworkError = 
-        error.code === 'auth/network-request-failed' || 
-        error.message?.toLowerCase().includes('network') || 
+
+      const isNetworkError =
+        error.code === 'auth/network-request-failed' ||
+        error.message?.toLowerCase().includes('network') ||
         error.message?.toLowerCase().includes('timeout');
 
       if (isNetworkError) {
@@ -361,11 +361,9 @@ export default function LoginScreen({ navigation }) {
         onRequestClose={() => { }}
       >
         <View style={styles.loadingOverlay}>
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#FFFFFF" />
-            <Text style={styles.loadingText}>Signing in...</Text>
-            <Text style={styles.loadingSubtext}>Please wait while we verify your credentials</Text>
-          </View>
+          <ActivityIndicator size="large" color="#FFFFFF" style={{ marginBottom: 20 }} />
+          <Text style={styles.loadingText}>Signing in...</Text>
+          <Text style={styles.loadingSubtext}>Please wait while we verify your credentials</Text>
         </View>
       </Modal>
     </SafeAreaView>
@@ -576,26 +574,26 @@ const styles = StyleSheet.create({
   },
   loadingOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.40)',
+    backgroundColor: 'rgba(0, 0, 0, 0.44)', // Frosted dark/black background
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  loadingContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingHorizontal: 32,
   },
   loadingText: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 20,
+    fontWeight: '800',
     color: '#FFFFFF',
-    marginTop: 16,
     textAlign: 'center',
+    marginBottom: 8,
+    letterSpacing: -0.3,
   },
   loadingSubtext: {
-    fontSize: 13,
-    color: '#E2E8F0',
-    marginTop: 8,
+    fontSize: 14,
+    color: '#CBD5E1', // Cool gray 300
     textAlign: 'center',
+    lineHeight: 20,
+    fontWeight: '500',
+    maxWidth: 280,
   },
   offlineBanner: {
     backgroundColor: '#FFF9E6',

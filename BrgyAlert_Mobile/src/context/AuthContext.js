@@ -101,7 +101,14 @@ export const AuthProvider = ({ children }) => {
       }
 
       setUser(firebaseUser);
-      subscribeToUserProfile(uid);
+      
+      // Wait for the profile snapshot listener to complete loading the profile
+      await new Promise((resolve) => {
+        subscribeToUserProfile(uid, () => {
+          resolve();
+        });
+      });
+      setLoading(false);
     } catch (error) {
       console.log('[AuthContext] Firebase Google login error:', error);
       if (error.code === statusCodes.SIGN_IN_CANCELLED) {
@@ -113,7 +120,6 @@ export const AuthProvider = ({ children }) => {
       } else {
         Alert.alert('Google Login Error', error.message || 'Failed to authenticate with Firebase.');
       }
-    } finally {
       setLoading(false);
     }
   };
@@ -126,11 +132,20 @@ export const AuthProvider = ({ children }) => {
   // This keeps the profile in sync in real-time — if an admin changes the
   // user's role in Firebase Console, the app updates instantly.
   const profileListenerRef = React.useRef(null);
+  const activeUidRef = React.useRef(null);
 
   // ─── Real-time profile listener ────────────────────────────────────────────
   // Replaces one-time getDoc with onSnapshot so any Firestore change
   // (role, name, etc.) is reflected in the app immediately.
-  const subscribeToUserProfile = (uid) => {
+  const subscribeToUserProfile = (uid, onComplete) => {
+    if (activeUidRef.current === uid) {
+      console.log('[AuthContext] Already subscribed to profile for UID:', uid);
+      if (onComplete) onComplete();
+      return;
+    }
+
+    activeUidRef.current = uid;
+
     // Unsubscribe from any previous listener first
     if (profileListenerRef.current) {
       profileListenerRef.current();
@@ -150,10 +165,16 @@ export const AuthProvider = ({ children }) => {
           console.warn('[AuthContext] No Firestore profile found for UID:', uid);
           setUserProfile(null);
         }
+        if (onComplete) {
+          onComplete();
+        }
       },
       (error) => {
         // Network errors are non-fatal — the last known profile stays in state
         console.warn('[AuthContext] Profile listener error:', error.message);
+        if (onComplete) {
+          onComplete();
+        }
       }
     );
 
@@ -162,6 +183,7 @@ export const AuthProvider = ({ children }) => {
 
   // Unsubscribe from profile listener (called on logout)
   const unsubscribeFromProfile = () => {
+    activeUidRef.current = null;
     if (profileListenerRef.current) {
       profileListenerRef.current();
       profileListenerRef.current = null;
@@ -205,13 +227,15 @@ export const AuthProvider = ({ children }) => {
         setUser(firebaseUser);
         // Start real-time listener — profile updates (incl. role changes)
         // will automatically flow into the app without re-login
-        subscribeToUserProfile(firebaseUser.uid);
+        subscribeToUserProfile(firebaseUser.uid, () => {
+          setLoading(false);
+        });
       } else {
         setUser(null);
         setUserProfile(null);
         unsubscribeFromProfile();
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => {
@@ -227,19 +251,24 @@ export const AuthProvider = ({ children }) => {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       setUser(userCredential.user);
-      // Real-time listener will populate userProfile automatically
-      subscribeToUserProfile(userCredential.user.uid);
+      
+      // Wait for the profile snapshot listener to complete loading the profile
+      await new Promise((resolve) => {
+        subscribeToUserProfile(userCredential.user.uid, () => {
+          resolve();
+        });
+      });
+      
       return userCredential.user;
     } catch (error) {
       console.log('Login error:', error.code, error.message);
-      throw error;
-    } finally {
       setLoading(false);
+      throw error;
     }
   };
 
   // ─── Register ──────────────────────────────────────────────────────────────
-  const register = async (email, password, fullName, dob, phoneNumber, gender, role) => {
+  const register = async (email, password, fullName, dob, phoneNumber, gender, role, onSuccess) => {
     isRegisteringRef.current = true;
     setLoading(true);
     try {
@@ -330,6 +359,10 @@ export const AuthProvider = ({ children }) => {
             throw error;
           }
         }
+      }
+
+      if (onSuccess) {
+        await onSuccess();
       }
 
       // Step 4: Set state and start real-time listener

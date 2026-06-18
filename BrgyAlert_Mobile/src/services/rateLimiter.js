@@ -160,3 +160,135 @@ export async function recordSignUpAttempt() {
     return { locked: false, secondsRemaining: 0 };
   }
 }
+
+const REPORT_LIMIT_MS = 60 * 1000; // 1 minute window
+const REPORT_LAST_TIME_KEY = '@brgyalert_last_report_time';
+
+/**
+ * Checks if the device is currently rate-limited for report submissions.
+ * @returns {Promise<{locked: boolean, secondsRemaining: number}>}
+ */
+export async function checkReportStatus() {
+  try {
+    const lastTimeStr = await AsyncStorage.getItem(REPORT_LAST_TIME_KEY);
+    if (!lastTimeStr) {
+      return { locked: false, secondsRemaining: 0 };
+    }
+
+    const lastTime = parseInt(lastTimeStr, 10);
+    const now = Date.now();
+    const diff = now - lastTime;
+
+    if (diff < REPORT_LIMIT_MS) {
+      return {
+        locked: true,
+        secondsRemaining: Math.ceil((REPORT_LIMIT_MS - diff) / 1000),
+      };
+    }
+
+    // Rate limit expired, clean up
+    await AsyncStorage.removeItem(REPORT_LAST_TIME_KEY);
+    return { locked: false, secondsRemaining: 0 };
+  } catch (err) {
+    console.log('Error checking report rate limit status:', err);
+    return { locked: false, secondsRemaining: 0 };
+  }
+}
+
+/**
+ * Records a successful report submission.
+ */
+export async function recordReportSubmission() {
+  try {
+    await AsyncStorage.setItem(REPORT_LAST_TIME_KEY, String(Date.now()));
+  } catch (err) {
+    console.log('Error recording report submission timestamp:', err);
+  }
+}
+
+// Chat message rate limiting (lenient)
+const CHAT_MESSAGE_LIMIT_MS = 5 * 1000; // 5 seconds window
+const CHAT_MESSAGE_LAST_TIME_KEY = '@brgyalert_last_chat_message_time';
+const PANIC_LIMIT_MS = 60 * 1000; // 1 minute window
+const PANIC_LAST_TIME_KEY = '@brgyalert_last_panic_time';
+
+/**
+ * Checks if the device is currently rate-limited for emergency panic triggers.
+ * @returns {Promise<{locked: boolean, secondsRemaining: number}>}
+ */
+export async function checkPanicStatus() {
+  try {
+    const lastTimeStr = await AsyncStorage.getItem(PANIC_LAST_TIME_KEY);
+    if (!lastTimeStr) {
+      return { locked: false, secondsRemaining: 0 };
+    }
+
+    const lastTime = parseInt(lastTimeStr, 10);
+    const now = Date.now();
+    const diff = now - lastTime;
+
+    if (diff < PANIC_LIMIT_MS) {
+      return {
+        locked: true,
+        secondsRemaining: Math.ceil((PANIC_LIMIT_MS - diff) / 1000),
+      };
+    }
+
+    // Rate limit expired, clean up
+    await AsyncStorage.removeItem(PANIC_LAST_TIME_KEY);
+    return { locked: false, secondsRemaining: 0 };
+  } catch (err) {
+    console.log('Error checking panic rate limit status:', err);
+    return { locked: false, secondsRemaining: 0 };
+  }
+}
+
+/**
+ * Records a successful emergency panic trigger.
+ */
+export async function recordPanicTrigger() {
+  try {
+    await AsyncStorage.setItem(PANIC_LAST_TIME_KEY, String(Date.now()));
+  } catch (err) {
+    console.log('Error recording panic trigger timestamp:', err);
+  }
+}
+
+/**
+ * Checks if the device is currently rate-limited for citizen chat messages.
+ * @returns {Promise<{locked: boolean, secondsRemaining: number}>}
+ */
+export async function checkChatMessageStatus() {
+  try {
+    const lastTimeStr = await AsyncStorage.getItem(CHAT_MESSAGE_LAST_TIME_KEY);
+    if (!lastTimeStr) {
+      return { locked: false, secondsRemaining: 0 };
+    }
+    const lastTime = parseInt(lastTimeStr, 10);
+    const now = Date.now();
+    const diff = now - lastTime;
+    if (diff < CHAT_MESSAGE_LIMIT_MS) {
+      return {
+        locked: true,
+        secondsRemaining: Math.ceil((CHAT_MESSAGE_LIMIT_MS - diff) / 1000),
+      };
+    }
+    // Rate limit expired, clean up
+    await AsyncStorage.removeItem(CHAT_MESSAGE_LAST_TIME_KEY);
+    return { locked: false, secondsRemaining: 0 };
+  } catch (err) {
+    console.log('Error checking chat message rate limit status:', err);
+    return { locked: false, secondsRemaining: 0 };
+  }
+}
+
+/**
+ * Records a successful citizen chat message send.
+ */
+export async function recordChatMessageSent() {
+  try {
+    await AsyncStorage.setItem(CHAT_MESSAGE_LAST_TIME_KEY, String(Date.now()));
+  } catch (err) {
+    console.log('Error recording chat message timestamp:', err);
+  }
+}
