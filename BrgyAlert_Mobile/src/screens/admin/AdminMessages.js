@@ -16,6 +16,7 @@ import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import { db } from '../../services/firebaseConfig';
 import AdminBottomTabNav from '../../components/AdminBottomTabNav';
 import SkeletonLoader from '../../components/SkeletonLoader';
+import EmptyState from '../../components/EmptyState';
 
 export default function AdminMessages({ navigation }) {
   const insets = useSafeAreaInsets();
@@ -308,23 +309,24 @@ export default function AdminMessages({ navigation }) {
       {loading ? (
         <SkeletonLoader type="thread" count={4} />
       ) : chatThreads.length === 0 ? (
-        <View style={styles.centerContainer}>
-          <View style={styles.emptyIconWrapper}>
-            <Feather name="message-square" size={40} color="#9CA3AF" />
-          </View>
-          <Text style={styles.emptyText}>
-            No chat threads available. Citizens will appear here once they report incidents or launch direct chat support.
-          </Text>
-        </View>
+        <EmptyState
+          icon="message-square"
+          title="No Active Chats"
+          subtitle="Citizens will appear here once they report incidents or launch direct chat support."
+          accentColor="#0B2564"
+        />
       ) : filteredThreads.length === 0 ? (
-        <View style={styles.centerContainer}>
-          <View style={styles.emptyIconWrapper}>
-            <Feather name="search" size={40} color="#9CA3AF" />
-          </View>
-          <Text style={styles.emptyText}>
-            No conversations match your search or filter.
-          </Text>
-        </View>
+        <EmptyState
+          icon="search"
+          title="No Matches Found"
+          subtitle="No conversations match your search or filter."
+          actionLabel="Clear Search"
+          onActionPress={() => {
+            setSearchQuery('');
+            setReadFilter('all');
+          }}
+          accentColor="#0B2564"
+        />
       ) : (
         <FlatList
           data={filteredThreads}

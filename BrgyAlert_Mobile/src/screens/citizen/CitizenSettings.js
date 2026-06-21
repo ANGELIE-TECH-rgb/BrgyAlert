@@ -22,9 +22,10 @@ import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 
 import { useAuth } from '../../context/AuthContext';
 import { db, auth } from '../../services/firebaseConfig';
 import BottomTabNav from '../../components/BottomTabNav';
+import GestureModal from '../../components/GestureModal';
 
 export default function CitizenSettings({ navigation }) {
-  const { user, userProfile, logout, resetPassword } = useAuth();
+  const { user, userProfile, logout, resetPassword, sendVerificationEmail } = useAuth();
   const insets = useSafeAreaInsets();
 
   // Profile Form States
@@ -35,6 +36,7 @@ export default function CitizenSettings({ navigation }) {
 
   const [saving, setSaving] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [pushEnabled, setPushEnabled] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
 
   // Change Password States
@@ -44,19 +46,28 @@ export default function CitizenSettings({ navigation }) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [changingPassword, setChangingPassword] = useState(false);
 
-  // Load local sound preference on load
+  // Legal Modals
+  const [legalModalVisible, setLegalModalVisible] = useState(false);
+  const [legalModalType, setLegalModalType] = useState('terms'); // terms | privacy
+  const [resendingVerification, setResendingVerification] = useState(false);
+
+  // Load preferences on load
   useEffect(() => {
-    const loadSoundPref = async () => {
+    const loadPrefs = async () => {
       try {
-        const pref = await AsyncStorage.getItem('soundEnabled');
-        if (pref !== null) {
-          setSoundEnabled(pref === 'true');
+        const soundPref = await AsyncStorage.getItem('soundEnabled');
+        if (soundPref !== null) {
+          setSoundEnabled(soundPref === 'true');
+        }
+        const pushPref = await AsyncStorage.getItem('pushEnabled');
+        if (pushPref !== null) {
+          setPushEnabled(pushPref === 'true');
         }
       } catch (err) {
-        console.log('Error loading sound preference:', err);
+        console.log('Error loading preferences:', err);
       }
     };
-    loadSoundPref();
+    loadPrefs();
   }, []);
 
   // Update states if userProfile changes
@@ -137,6 +148,16 @@ export default function CitizenSettings({ navigation }) {
     }
   };
 
+  // Toggle Push Preference
+  const handleTogglePush = async (val) => {
+    setPushEnabled(val);
+    try {
+      await AsyncStorage.setItem('pushEnabled', String(val));
+    } catch (err) {
+      console.log('Error saving push preference:', err);
+    }
+  };
+
   // Direct In-App Change Password Logic
   const handleChangePassword = async () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
@@ -181,6 +202,19 @@ export default function CitizenSettings({ navigation }) {
     }
   };
 
+  // Resend Email Verification
+  const handleResendVerification = async () => {
+    setResendingVerification(true);
+    try {
+      await sendVerificationEmail();
+      Alert.alert('Verification Sent', 'A verification email link has been sent to ' + user.email);
+    } catch (error) {
+      Alert.alert('Error', error.message || 'Could not send verification email.');
+    } finally {
+      setResendingVerification(false);
+    }
+  };
+
   // Handle Sign Out
   const handleSignOut = () => {
     Alert.alert(
@@ -205,6 +239,11 @@ export default function CitizenSettings({ navigation }) {
     }
   };
 
+  const openLegalModal = (type) => {
+    setLegalModalType(type);
+    setLegalModalVisible(true);
+  };
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
@@ -218,14 +257,35 @@ export default function CitizenSettings({ navigation }) {
 
         {/* Profile Card Summary */}
         <View style={styles.profileCard}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{getInitials()}</Text>
+          <View style={styles.avatarContainer}>
+            <View style={styles.avatarGradient}>
+              <Text style={styles.avatarText}>{getInitials()}</Text>
+            </View>
           </View>
           <View style={styles.profileInfo}>
             <Text style={styles.profileName}>{fullName || 'Citizen User'}</Text>
             <Text style={styles.profileEmail}>{user?.email || ''}</Text>
-            <View style={styles.roleBadge}>
-              <Text style={styles.roleBadgeText}>Citizen Portal</Text>
+            <View style={styles.badgeRow}>
+              <View style={styles.roleBadge}>
+                <Text style={styles.roleBadgeText}>Citizen Portal</Text>
+              </View>
+              {user?.emailVerified ? (
+                <View style={[styles.verificationBadge, { backgroundColor: '#10B98120' }]}>
+                  <Feather name="check-circle" size={10} color="#10B981" style={{ marginRight: 3 }} />
+                  <Text style={[styles.verificationBadgeText, { color: '#10B981' }]}>Verified</Text>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.verificationBadge, { backgroundColor: '#F59E0B20' }]}
+                  onPress={handleResendVerification}
+                  disabled={resendingVerification}
+                >
+                  <Feather name="alert-triangle" size={10} color="#F59E0B" style={{ marginRight: 3 }} />
+                  <Text style={[styles.verificationBadgeText, { color: '#F59E0B' }]}>
+                    {resendingVerification ? 'Sending...' : 'Unverified • Verify Now'}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         </View>
@@ -367,6 +427,25 @@ export default function CitizenSettings({ navigation }) {
               />
             </View>
 
+            {/* Push Notifications Row */}
+            <View style={[styles.settingRow, styles.borderTop]}>
+              <View style={styles.settingRowLeft}>
+                <View style={[styles.rowIconWrapper, { backgroundColor: '#EEF2F6' }]}>
+                  <Feather name="bell" size={18} color="#475569" />
+                </View>
+                <View>
+                  <Text style={styles.settingTitle}>Push Notifications</Text>
+                  <Text style={styles.settingSubtitle}>Receive real-time system alerts</Text>
+                </View>
+              </View>
+              <Switch
+                value={pushEnabled}
+                onValueChange={handleTogglePush}
+                trackColor={{ false: '#D1D5DB', true: '#BFDBFE' }}
+                thumbColor={pushEnabled ? '#2563EB' : '#9CA3AF'}
+              />
+            </View>
+
             {/* Reset Password Row */}
             <TouchableOpacity
               style={[styles.settingRow, styles.borderTop]}
@@ -450,13 +529,7 @@ export default function CitizenSettings({ navigation }) {
             {/* Privacy Policy */}
             <TouchableOpacity
               style={[styles.settingRow, styles.borderTop]}
-              onPress={() =>
-                Alert.alert(
-                  'Privacy Policy',
-                  'BrgyAlert collects incident reports, location data, and profile information solely to provide barangay emergency response services. Your data is never sold or shared with third parties outside of authorized responders.',
-                  [{ text: 'Got it' }]
-                )
-              }
+              onPress={() => openLegalModal('privacy')}
               activeOpacity={0.7}
             >
               <View style={styles.settingRowLeft}>
@@ -474,13 +547,7 @@ export default function CitizenSettings({ navigation }) {
             {/* Terms of Service */}
             <TouchableOpacity
               style={[styles.settingRow, styles.borderTop]}
-              onPress={() =>
-                Alert.alert(
-                  'Terms of Service',
-                  'By using BrgyAlert, you agree to report incidents truthfully and responsibly. Misuse of the system, including false reports, may result in suspension and legal action under Philippine law.',
-                  [{ text: 'Understood' }]
-                )
-              }
+              onPress={() => openLegalModal('terms')}
               activeOpacity={0.7}
             >
               <View style={styles.settingRowLeft}>
@@ -632,6 +699,57 @@ export default function CitizenSettings({ navigation }) {
         </View>
       </Modal>
 
+      {/* Legal Scrollable Gesture Modals */}
+      <GestureModal
+        visible={legalModalVisible}
+        onClose={() => setLegalModalVisible(false)}
+        title={legalModalType === 'privacy' ? 'Privacy Policy' : 'Terms of Service'}
+      >
+        <ScrollView style={styles.legalScroll} showsVerticalScrollIndicator={false}>
+          {legalModalType === 'privacy' ? (
+            <View style={styles.legalTextContainer}>
+              <Text style={styles.legalHeading}>1. Information We Collect</Text>
+              <Text style={styles.legalBody}>
+                BrgyAlert collects incident reports, real-time location data when reporting emergencies, and contact profiles (Full Name, Phone Number) to facilitate direct communication with authorized barangay responders.
+              </Text>
+              <Text style={styles.legalHeading}>2. How We Use Information</Text>
+              <Text style={styles.legalBody}>
+                Your data is exclusively utilized to dispatch public safety personnel (police, medical, fire) to emergency sites and coordinate rescue response.
+              </Text>
+              <Text style={styles.legalHeading}>3. Data Protection</Text>
+              <Text style={styles.legalBody}>
+                We employ secure database access protocols and encryption. Your credentials and personally identifiable data are never leased or sold to third-party tracking services or marketing agencies.
+              </Text>
+              <Text style={styles.legalHeading}>4. Revisions</Text>
+              <Text style={styles.legalBody}>
+                We reserve the right to modify this Privacy Policy. Continued usage signifies agreement with our updated safety terms.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.legalTextContainer}>
+              <Text style={styles.legalHeading}>1. Code of Conduct</Text>
+              <Text style={styles.legalBody}>
+                You agree to report emergency incidents truthfully, responsibly, and to the best of your knowledge. Submission of intentionally falsified emergencies is illegal under Philippine law (PD 1727) and will result in permanent account ban.
+              </Text>
+              <Text style={styles.legalHeading}>2. Service Limitations</Text>
+              <Text style={styles.legalBody}>
+                BrgyAlert is a coordination tool. We do not guarantee instant physical presence of responders and are not liable for network latency or connection outages during severe natural disasters.
+              </Text>
+              <Text style={styles.legalHeading}>3. Account Liability</Text>
+              <Text style={styles.legalBody}>
+                You are solely responsible for keeping your credentials safe. Do not share your login credentials with others.
+              </Text>
+            </View>
+          )}
+          <TouchableOpacity
+            style={styles.legalCloseButton}
+            onPress={() => setLegalModalVisible(false)}
+          >
+            <Text style={styles.legalCloseButtonText}>I Understand</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </GestureModal>
+
       {/* Bottom Smooth Gradient Background Fade */}
       <View style={styles.bottomGradient} pointerEvents="none">
         <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -670,7 +788,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingTop: 8,
-    paddingBottom: 140, // Space for floating bottom nav
+    paddingBottom: 140,
   },
   bottomGradient: {
     position: 'absolute',
@@ -688,26 +806,43 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     padding: 20,
     marginBottom: 28,
-    // Premium soft shadow
     shadowColor: '#0F2C59',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.15,
     shadowRadius: 20,
     elevation: 4,
   },
-  avatar: {
+  avatarContainer: {
+    position: 'relative',
+    marginRight: 16,
+  },
+  avatarGradient: {
     width: 64,
     height: 64,
     borderRadius: 32,
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    borderWidth: 2,
+    borderColor: '#E8F0FE',
   },
   avatarText: {
     fontSize: 22,
     fontWeight: '700',
     color: '#0F2C59',
+  },
+  avatarEditBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: '#FFFFFF',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#0F2C59',
   },
   profileInfo: {
     flex: 1,
@@ -723,17 +858,35 @@ const styles = StyleSheet.create({
     marginTop: 2,
     marginBottom: 8,
   },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
   roleBadge: {
-    alignSelf: 'flex-start',
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
     paddingVertical: 4,
     paddingHorizontal: 10,
     borderRadius: 12,
+    marginRight: 8,
+    marginBottom: 4,
   },
   roleBadgeText: {
     fontSize: 10,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  verificationBadge: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  verificationBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
   },
   section: {
     paddingHorizontal: 24,
@@ -752,7 +905,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#F3F4F6',
     padding: 16,
-    // Subtle card shadow
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.02,
@@ -976,5 +1128,38 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginBottom: 20,
     lineHeight: 18,
+  },
+  legalScroll: {
+    maxHeight: 400,
+    paddingTop: 8,
+  },
+  legalTextContainer: {
+    marginBottom: 24,
+  },
+  legalHeading: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F2C59',
+    marginTop: 16,
+    marginBottom: 6,
+  },
+  legalBody: {
+    fontSize: 13,
+    color: '#4B5563',
+    lineHeight: 18,
+  },
+  legalCloseButton: {
+    backgroundColor: '#0F2C59',
+    borderRadius: 12,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  legalCloseButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

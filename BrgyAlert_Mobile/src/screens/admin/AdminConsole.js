@@ -23,6 +23,7 @@ import AdminBottomTabNav from '../../components/AdminBottomTabNav';
 import TutorialOverlay from '../../components/TutorialOverlay';
 import IncidentCard from '../../components/IncidentCard';
 import SkeletonLoader from '../../components/SkeletonLoader';
+import EmptyState from '../../components/EmptyState';
 
 // Barangay Lepa center coordinates
 const BRGY_CENTER = { latitude: 14.6000, longitude: 120.9800 };
@@ -485,9 +486,12 @@ export default function AdminConsole({ navigation }) {
           {loading ? (
             <SkeletonLoader type="card" count={3} />
           ) : allAlerts.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No logs found.</Text>
-            </View>
+            <EmptyState
+              icon="inbox"
+              title="No Incident Logs"
+              subtitle="All clear. No reports have been submitted to the system yet."
+              accentColor="#0B2564"
+            />
           ) : (
             allAlerts.slice(0, 3).map((alert) => (
               <IncidentCard

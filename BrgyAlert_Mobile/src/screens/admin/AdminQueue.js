@@ -26,6 +26,7 @@ import AdminBottomTabNav from '../../components/AdminBottomTabNav';
 import TutorialOverlay from '../../components/TutorialOverlay';
 import SkeletonLoader from '../../components/SkeletonLoader';
 import GestureModal from '../../components/GestureModal';
+import EmptyState from '../../components/EmptyState';
 
 const INCIDENT_TYPES = [
   'Crime',
@@ -635,16 +636,19 @@ export default function AdminQueue({ route, navigation }) {
           <SkeletonLoader type="card" count={3} />
         </View>
       ) : filteredAlerts.length === 0 ? (
-        <View style={styles.centerContainer}>
-          <View style={styles.emptyIconWrapper}>
-            <Feather
-              name={searchQuery.trim().length > 0 ? 'search' : 'check-square'}
-              size={40}
-              color="#9CA3AF"
-            />
-          </View>
-          <Text style={styles.emptyText}>{getEmptyStateText()}</Text>
-        </View>
+        <EmptyState
+          icon={searchQuery.trim().length > 0 ? 'search' : 'check-square'}
+          title={searchQuery.trim().length > 0 ? 'No Matches Found' : 'Queue is Clear'}
+          subtitle={getEmptyStateText()}
+          actionLabel={searchQuery.trim().length > 0 || selectedCategory || selectedUrgency || selectedStatus !== 'all' ? 'Reset Filters' : undefined}
+          onActionPress={() => {
+            setSearchQuery('');
+            setSelectedCategory(null);
+            setSelectedUrgency(null);
+            setSelectedStatus('all');
+          }}
+          accentColor="#0B2564"
+        />
       ) : (
         <FlatList
           data={filteredAlerts}

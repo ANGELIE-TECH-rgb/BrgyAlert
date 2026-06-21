@@ -22,6 +22,7 @@ import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 
 import { useAuth } from '../../context/AuthContext';
 import { db, auth } from '../../services/firebaseConfig';
 import AdminBottomTabNav from '../../components/AdminBottomTabNav';
+import GestureModal from '../../components/GestureModal';
 
 export default function AdminSettings({ navigation }) {
   const { user, userProfile, logout, resetPassword, updateUserRole } = useAuth();
@@ -59,6 +60,14 @@ export default function AdminSettings({ navigation }) {
   const [loadingConfig, setLoadingConfig] = useState(true);
   const [savingConfig, setSavingConfig] = useState(false);
 
+  // Response Time Config
+  const [responseTimeValue, setResponseTimeValue] = useState('15-30 mins');
+  const [savingResponseTime, setSavingResponseTime] = useState(false);
+
+  // Legal Modals
+  const [legalModalVisible, setLegalModalVisible] = useState(false);
+  const [legalModalType, setLegalModalType] = useState('terms'); // terms | privacy
+
   // Load local sound preference on load
   useEffect(() => {
     const loadSoundPref = async () => {
@@ -74,10 +83,11 @@ export default function AdminSettings({ navigation }) {
     loadSoundPref();
   }, []);
 
-  // Fetch Barangay Configuration on load
+  // Fetch Barangay Configuration and Response Time Config on load
   useEffect(() => {
-    const fetchBarangayConfig = async () => {
+    const fetchConfigs = async () => {
       try {
+        // 1. Barangay basic hotlines
         const docRef = doc(db, 'config', 'barangay');
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
@@ -87,13 +97,20 @@ export default function AdminSettings({ navigation }) {
           setHotlineFire(data.hotlineFire || '');
           setHotlineAmbulance(data.hotlineAmbulance || '');
         }
+
+        // 2. Response time
+        const responseTimeRef = doc(db, 'brgyConfig', 'responseTimeConfig');
+        const responseTimeSnap = await getDoc(responseTimeRef);
+        if (responseTimeSnap.exists()) {
+          setResponseTimeValue(responseTimeSnap.data().value || '15-30 mins');
+        }
       } catch (err) {
-        console.log('Error fetching barangay config:', err);
+        console.log('Error fetching barangay configurations:', err);
       } finally {
         setLoadingConfig(false);
       }
     };
-    fetchBarangayConfig();
+    fetchConfigs();
   }, []);
 
   // Update profile states if userProfile changes
@@ -168,6 +185,27 @@ export default function AdminSettings({ navigation }) {
       Alert.alert('Error', 'Could not update Barangay configurations. Please try again.');
     } finally {
       setSavingConfig(false);
+    }
+  };
+
+  // Save Response Time Config
+  const handleSaveResponseTime = async () => {
+    if (!responseTimeValue.trim()) {
+      Alert.alert('Validation Error', 'Response Time value cannot be empty.');
+      return;
+    }
+    setSavingResponseTime(true);
+    try {
+      const responseTimeRef = doc(db, 'brgyConfig', 'responseTimeConfig');
+      await setDoc(responseTimeRef, {
+        value: responseTimeValue.trim(),
+      }, { merge: true });
+      Alert.alert('Success', 'Estimated Response Time updated successfully.');
+    } catch (error) {
+      console.log('Error saving response time config:', error);
+      Alert.alert('Error', 'Could not update Response Time config.');
+    } finally {
+      setSavingResponseTime(false);
     }
   };
 
@@ -248,34 +286,10 @@ export default function AdminSettings({ navigation }) {
     }
   };
 
-  // Handle Sign Out
-  const handleSignOut = () => {
-    Alert.alert(
-      'Sign Out',
-      'Are you sure you want to sign out of BrgyAlert Admin Console?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Sign Out', style: 'destructive', onPress: () => logout() }
-      ]
-    );
-  };
-
-  // Handle Replay Tour
-  const handleReplayTour = async () => {
-    try {
-      await AsyncStorage.removeItem('hasSeenAdminTutorial');
-      Alert.alert('Tour Reset', 'Admin tour has been reset. Returning to command console...');
-      navigation.navigate('AdminHome');
-    } catch (err) {
-      console.log('Error resetting tutorial state:', err);
-      Alert.alert('Error', 'Could not reset the app tour.');
-    }
-  };
-
-  // Search user by email for role management
+  // Search User by Email (admin-only)
   const handleSearchUser = async () => {
     if (!searchEmail.trim()) {
-      Alert.alert('Validation', 'Please enter an email to search.');
+      Alert.alert('Validation Error', 'Please enter an email address to search.');
       return;
     }
     setSearchingUser(true);
@@ -284,15 +298,16 @@ export default function AdminSettings({ navigation }) {
       const q = query(collection(db, 'users'), where('email', '==', searchEmail.trim().toLowerCase()));
       const snap = await getDocs(q);
       if (snap.empty) {
-        Alert.alert('Not Found', 'No user found with that email address.');
+        Alert.alert('Not Found', 'No user found with the specified email address.');
       } else {
-        const userData = { id: snap.docs[0].id, ...snap.docs[0].data() };
-        setSearchedUser(userData);
-        setNewUserRole(userData.role || 'citizen');
+        const docObj = snap.docs[0];
+        const data = docObj.data();
+        setSearchedUser({ id: docObj.id, ...data });
+        setNewUserRole(data.role || 'citizen');
       }
     } catch (err) {
       console.log('Error searching user:', err);
-      Alert.alert('Error', 'Could not search for user. Please try again.');
+      Alert.alert('Error', 'Failed to query user.');
     } finally {
       setSearchingUser(false);
     }
@@ -307,7 +322,7 @@ export default function AdminSettings({ navigation }) {
     }
     Alert.alert(
       'Confirm Role Change',
-      `Change ${searchedUser.fullName || searchedUser.email}\'s role from "${searchedUser.role}" to "${newUserRole}"?`,
+      `Change ${searchedUser.fullName || searchedUser.email}'s role from "${searchedUser.role}" to "${newUserRole}"?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -316,7 +331,6 @@ export default function AdminSettings({ navigation }) {
           onPress: async () => {
             setSavingRole(true);
             try {
-              // Direct Firestore update — admin is allowed to change any user's role
               await updateUserRole(searchedUser.id, newUserRole);
               setSearchedUser(prev => ({ ...prev, role: newUserRole }));
               Alert.alert('Success', `Role updated to "${newUserRole}" for ${searchedUser.fullName || searchedUser.email}.`);
@@ -332,6 +346,58 @@ export default function AdminSettings({ navigation }) {
     );
   };
 
+  // Handle Clear Cache
+  const handleClearCache = () => {
+    Alert.alert(
+      'Clear App Cache',
+      'This will clear local preferences (such as sound configurations, onboarded statuses, and saved cookies). The app will restart.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear Cache',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await AsyncStorage.clear();
+              Alert.alert('Cache Cleared', 'All local application cache has been reset. Please restart the app.');
+            } catch (err) {
+              Alert.alert('Error', 'Failed to clear local cache.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // Handle Sign Out
+  const handleSignOut = () => {
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out of BrgyAlert Admin Console?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Sign Out', style: 'destructive', onPress: () => logout() }
+      ]
+    );
+  };
+
+  // Handle Replay Tour
+  const handleReplayTour = async () => {
+    try {
+      await AsyncStorage.removeItem('hasSeenAdminConsoleTutorial');
+      Alert.alert('Tour Reset', 'Admin tour has been reset. Returning to console...');
+      navigation.navigate('AdminConsole');
+    } catch (err) {
+      console.log('Error resetting tutorial state:', err);
+      Alert.alert('Error', 'Could not reset the admin console tour.');
+    }
+  };
+
+  const openLegalModal = (type) => {
+    setLegalModalType(type);
+    setLegalModalVisible(true);
+  };
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
@@ -345,14 +411,18 @@ export default function AdminSettings({ navigation }) {
 
         {/* Profile Card Summary */}
         <View style={styles.profileCard}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{getInitials()}</Text>
+          <View style={styles.avatarContainer}>
+            <View style={styles.avatarGradient}>
+              <Text style={styles.avatarText}>{getInitials()}</Text>
+            </View>
           </View>
           <View style={styles.profileInfo}>
             <Text style={styles.profileName}>{fullName || 'Admin User'}</Text>
             <Text style={styles.profileEmail}>{user?.email || ''}</Text>
-            <View style={styles.roleBadge}>
-              <Text style={styles.roleBadgeText}>{getRoleLabel()}</Text>
+            <View style={[styles.roleBadge, { backgroundColor: userProfile?.role === 'admin' ? '#3B82F630' : '#10B98130' }]}>
+              <Text style={[styles.roleBadgeText, { color: userProfile?.role === 'admin' ? '#2563EB' : '#10B981' }]}>
+                {getRoleLabel()}
+              </Text>
             </View>
           </View>
         </View>
@@ -475,7 +545,7 @@ export default function AdminSettings({ navigation }) {
           <Text style={styles.sectionTitle}>Barangay Configurations</Text>
           <View style={styles.card}>
             {loadingConfig ? (
-              <ActivityIndicator size="small" color="#0F2C59" style={{ marginVertical: 20 }} />
+              <ActivityIndicator size="small" color="#0B2564" style={{ marginVertical: 20 }} />
             ) : (
               <>
                 <Text style={styles.inputLabel}>Barangay Name</Text>
@@ -518,7 +588,7 @@ export default function AdminSettings({ navigation }) {
                 />
 
                 <TouchableOpacity
-                  style={styles.saveButton}
+                  style={[styles.saveButton, { marginBottom: 20 }]}
                   onPress={handleSaveBarangayConfig}
                   disabled={savingConfig}
                   activeOpacity={0.8}
@@ -526,9 +596,33 @@ export default function AdminSettings({ navigation }) {
                   {savingConfig ? (
                     <ActivityIndicator size="small" color="#FFFFFF" />
                   ) : (
-                    <Text style={styles.saveButtonText}>Save Barangay Settings</Text>
+                    <Text style={styles.saveButtonText}>Save Barangay Hotlines</Text>
                   )}
                 </TouchableOpacity>
+
+                {/* Response Time Config Field */}
+                <View style={{ borderTopWidth: 1, borderTopColor: '#F3F4F6', paddingTop: 16 }}>
+                  <Text style={styles.inputLabel}>Estimated Response Time (Citizen Banner)</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={responseTimeValue}
+                    onChangeText={setResponseTimeValue}
+                    placeholder="e.g. 15-30 mins"
+                    placeholderTextColor="#9CA3AF"
+                  />
+                  <TouchableOpacity
+                    style={[styles.saveButton, { backgroundColor: '#3B82F6' }]}
+                    onPress={handleSaveResponseTime}
+                    disabled={savingResponseTime}
+                    activeOpacity={0.8}
+                  >
+                    {savingResponseTime ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.saveButtonText}>Save Response Time</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
               </>
             )}
           </View>
@@ -614,6 +708,8 @@ export default function AdminSettings({ navigation }) {
             </View>
           </View>
         )}
+
+        {/* Preferences */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Preferences</Text>
           <View style={styles.card}>
@@ -694,7 +790,7 @@ export default function AdminSettings({ navigation }) {
           </View>
         </View>
 
-        {/* ─── Support & Legal ──────────────────────────────── */}
+        {/* Support & Legal */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Support & Legal</Text>
           <View style={styles.card}>
@@ -702,7 +798,7 @@ export default function AdminSettings({ navigation }) {
             {/* Contact Support */}
             <TouchableOpacity
               style={styles.settingRow}
-              onPress={() => Linking.openURL('mailto:support@brgylert.ph?subject=BrgyAlert%20Admin%20Support')}
+              onPress={() => Linking.openURL('mailto:support@brgylert.ph?subject=BrgyAlert%20Support')}
               activeOpacity={0.7}
             >
               <View style={styles.settingRowLeft}>
@@ -711,7 +807,7 @@ export default function AdminSettings({ navigation }) {
                 </View>
                 <View>
                   <Text style={styles.settingTitle}>Contact Support</Text>
-                  <Text style={styles.settingSubtitle}>Email the BrgyAlert team</Text>
+                  <Text style={styles.settingSubtitle}>Email us for help or inquiries</Text>
                 </View>
               </View>
               <Feather name="chevron-right" size={18} color="#9CA3AF" />
@@ -720,13 +816,7 @@ export default function AdminSettings({ navigation }) {
             {/* Privacy Policy */}
             <TouchableOpacity
               style={[styles.settingRow, styles.borderTop]}
-              onPress={() =>
-                Alert.alert(
-                  'Privacy Policy',
-                  'BrgyAlert collects incident reports, location data, and profile information solely to provide barangay emergency response services. Admin data is restricted to authorized Command Center personnel.',
-                  [{ text: 'Got it' }]
-                )
-              }
+              onPress={() => openLegalModal('privacy')}
               activeOpacity={0.7}
             >
               <View style={styles.settingRowLeft}>
@@ -744,13 +834,7 @@ export default function AdminSettings({ navigation }) {
             {/* Terms of Service */}
             <TouchableOpacity
               style={[styles.settingRow, styles.borderTop]}
-              onPress={() =>
-                Alert.alert(
-                  'Terms of Service',
-                  'Admin users of BrgyAlert are bound to handle citizen data confidentially and responsibly. Unauthorized access, misuse of data, or false status updates are grounds for account suspension.',
-                  [{ text: 'Understood' }]
-                )
-              }
+              onPress={() => openLegalModal('terms')}
               activeOpacity={0.7}
             >
               <View style={styles.settingRowLeft}>
@@ -759,7 +843,7 @@ export default function AdminSettings({ navigation }) {
                 </View>
                 <View>
                   <Text style={styles.settingTitle}>Terms of Service</Text>
-                  <Text style={styles.settingSubtitle}>Admin usage rules</Text>
+                  <Text style={styles.settingSubtitle}>Usage rules and responsibilities</Text>
                 </View>
               </View>
               <Feather name="chevron-right" size={18} color="#9CA3AF" />
@@ -768,7 +852,7 @@ export default function AdminSettings({ navigation }) {
             {/* Report a Bug */}
             <TouchableOpacity
               style={[styles.settingRow, styles.borderTop]}
-              onPress={() => Linking.openURL('mailto:bugs@brgylert.ph?subject=Bug%20Report%20-%20BrgyAlert%20Admin')}
+              onPress={() => Linking.openURL('mailto:bugs@brgylert.ph?subject=Bug%20Report%20-%20BrgyAlert%20Mobile')}
               activeOpacity={0.7}
             >
               <View style={styles.settingRowLeft}>
@@ -777,7 +861,7 @@ export default function AdminSettings({ navigation }) {
                 </View>
                 <View>
                   <Text style={styles.settingTitle}>Report a Bug</Text>
-                  <Text style={styles.settingSubtitle}>Help us improve the admin console</Text>
+                  <Text style={styles.settingSubtitle}>Help us improve the app</Text>
                 </View>
               </View>
               <Feather name="chevron-right" size={18} color="#9CA3AF" />
@@ -786,9 +870,32 @@ export default function AdminSettings({ navigation }) {
           </View>
         </View>
 
-        {/* System Information */}
-        <View style={styles.infoWrapper}>
-          <Text style={styles.infoText}>BrgyAlert Command • Version 1.0.0</Text>
+        {/* System Information Expansion */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>System Information</Text>
+          <View style={styles.card}>
+            <View style={styles.profileDetailRow}>
+              <Text style={styles.detailLabel}>App Version</Text>
+              <Text style={styles.detailValue}>1.0.0 (Build 24)</Text>
+            </View>
+            <View style={styles.profileDetailRow}>
+              <Text style={styles.detailLabel}>Active Station</Text>
+              <Text style={styles.detailValue}>{barangayName}</Text>
+            </View>
+            <View style={styles.profileDetailRow}>
+              <Text style={styles.detailLabel}>Environment</Text>
+              <Text style={styles.detailValue}>Production (Firebase)</Text>
+            </View>
+            
+            <TouchableOpacity
+              style={[styles.editProfileButton, { backgroundColor: '#FEF2F2', marginTop: 12 }]}
+              onPress={handleClearCache}
+              activeOpacity={0.7}
+            >
+              <Feather name="trash-2" size={14} color="#EF4444" style={{ marginRight: 6 }} />
+              <Text style={[styles.editProfileButtonText, { color: '#EF4444' }]}>Clear App Cache</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Danger/Sign Out */}
@@ -902,14 +1009,65 @@ export default function AdminSettings({ navigation }) {
         </View>
       </Modal>
 
+      {/* Legal Scrollable Gesture Modals */}
+      <GestureModal
+        visible={legalModalVisible}
+        onClose={() => setLegalModalVisible(false)}
+        title={legalModalType === 'privacy' ? 'Privacy Policy' : 'Terms of Service'}
+      >
+        <ScrollView style={styles.legalScroll} showsVerticalScrollIndicator={false}>
+          {legalModalType === 'privacy' ? (
+            <View style={styles.legalTextContainer}>
+              <Text style={styles.legalHeading}>1. Information We Collect</Text>
+              <Text style={styles.legalBody}>
+                BrgyAlert collects incident reports, real-time location data when reporting emergencies, and contact profiles (Full Name, Phone Number) to facilitate direct communication with authorized barangay responders.
+              </Text>
+              <Text style={styles.legalHeading}>2. How We Use Information</Text>
+              <Text style={styles.legalBody}>
+                Your data is exclusively utilized to dispatch public safety personnel (police, medical, fire) to emergency sites and coordinate rescue response.
+              </Text>
+              <Text style={styles.legalHeading}>3. Data Protection</Text>
+              <Text style={styles.legalBody}>
+                We employ secure database access protocols and encryption. Your credentials and personally identifiable data are never leased or sold to third-party tracking services or marketing agencies.
+              </Text>
+              <Text style={styles.legalHeading}>4. Revisions</Text>
+              <Text style={styles.legalBody}>
+                We reserve the right to modify this Privacy Policy. Continued usage signifies agreement with our updated safety terms.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.legalTextContainer}>
+              <Text style={styles.legalHeading}>1. Code of Conduct</Text>
+              <Text style={styles.legalBody}>
+                You agree to report emergency incidents truthfully, responsibly, and to the best of your knowledge. Submission of intentionally falsified emergencies is illegal under Philippine law (PD 1727) and will result in permanent account ban.
+              </Text>
+              <Text style={styles.legalHeading}>2. Service Limitations</Text>
+              <Text style={styles.legalBody}>
+                BrgyAlert is a coordination tool. We do not guarantee instant physical presence of responders and are not liable for network latency or connection outages during severe natural disasters.
+              </Text>
+              <Text style={styles.legalHeading}>3. Account Liability</Text>
+              <Text style={styles.legalBody}>
+                You are solely responsible for keeping your credentials safe. Do not share your login credentials with others.
+              </Text>
+            </View>
+          )}
+          <TouchableOpacity
+            style={styles.legalCloseButton}
+            onPress={() => setLegalModalVisible(false)}
+          >
+            <Text style={styles.legalCloseButtonText}>I Understand</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </GestureModal>
+
       {/* Bottom Smooth Gradient Background Fade */}
       <View style={styles.bottomGradient} pointerEvents="none">
         <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
           <Defs>
             <LinearGradient id="fadeGrad" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0"   stopColor="#FFFFFF" stopOpacity="0"    />
+              <Stop offset="0" stopColor="#FFFFFF" stopOpacity="0" />
               <Stop offset="0.6" stopColor="#FFFFFF" stopOpacity="0.85" />
-              <Stop offset="1"   stopColor="#FFFFFF" stopOpacity="1"    />
+              <Stop offset="1" stopColor="#FFFFFF" stopOpacity="1" />
             </LinearGradient>
           </Defs>
           <Rect width="100" height="100" fill="url(#fadeGrad)" />
@@ -940,7 +1098,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingTop: 8,
-    paddingBottom: 140, // Space for floating bottom nav
+    paddingBottom: 140,
   },
   bottomGradient: {
     position: 'absolute',
@@ -954,29 +1112,47 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginHorizontal: 24,
-    backgroundColor: '#0F2C59',
+    backgroundColor: '#0B2564',
     borderRadius: 24,
     padding: 20,
     marginBottom: 28,
-    shadowColor: '#0F2C59',
+    shadowColor: '#0B2564',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.15,
     shadowRadius: 20,
     elevation: 4,
   },
-  avatar: {
+  avatarContainer: {
+    position: 'relative',
+    marginRight: 16,
+  },
+  avatarGradient: {
     width: 64,
     height: 64,
     borderRadius: 32,
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    borderWidth: 2,
+    borderColor: '#E8F0FE',
   },
   avatarText: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#0F2C59',
+    color: '#0B2564',
+  },
+  avatarEditBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: '#FFFFFF',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#0B2564',
   },
   profileInfo: {
     flex: 1,
@@ -994,7 +1170,6 @@ const styles = StyleSheet.create({
   },
   roleBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     paddingVertical: 4,
     paddingHorizontal: 10,
     borderRadius: 12,
@@ -1002,7 +1177,6 @@ const styles = StyleSheet.create({
   roleBadgeText: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#FFFFFF',
   },
   section: {
     paddingHorizontal: 24,
@@ -1074,7 +1248,7 @@ const styles = StyleSheet.create({
     color: '#0F2C59',
   },
   saveButton: {
-    backgroundColor: '#0F2C59',
+    backgroundColor: '#0B2564',
     borderRadius: 12,
     height: 46,
     justifyContent: 'center',
@@ -1118,16 +1292,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#9CA3AF',
     marginTop: 1,
-  },
-  infoWrapper: {
-    alignItems: 'center',
-    marginTop: 12,
-    marginBottom: 24,
-  },
-  infoText: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    fontWeight: '500',
   },
   signOutButton: {
     flexDirection: 'row',
@@ -1244,5 +1408,38 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginBottom: 20,
     lineHeight: 18,
+  },
+  legalScroll: {
+    maxHeight: 400,
+    paddingTop: 8,
+  },
+  legalTextContainer: {
+    marginBottom: 24,
+  },
+  legalHeading: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0B2564',
+    marginTop: 16,
+    marginBottom: 6,
+  },
+  legalBody: {
+    fontSize: 13,
+    color: '#4B5563',
+    lineHeight: 18,
+  },
+  legalCloseButton: {
+    backgroundColor: '#0B2564',
+    borderRadius: 12,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  legalCloseButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

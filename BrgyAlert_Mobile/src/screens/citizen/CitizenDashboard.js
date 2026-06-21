@@ -32,6 +32,7 @@ import BottomTabNav from '../../components/BottomTabNav';
 import TutorialOverlay from '../../components/TutorialOverlay';
 import SkeletonLoader from '../../components/SkeletonLoader';
 import ConnectionBlocker from '../../components/ConnectionBlocker';
+import EmptyState from '../../components/EmptyState';
 
 export default function CitizenDashboard({ navigation }) {
   const { user, userProfile, sendVerificationEmail } = useAuth();
@@ -621,10 +622,14 @@ export default function CitizenDashboard({ navigation }) {
           {loadingLogs ? (
             <SkeletonLoader type="card" count={2} />
           ) : recentLogs.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Feather name="folder-minus" size={36} color="#9CA3AF" style={styles.emptyIcon} />
-              <Text style={styles.emptyText}>No reports filed yet. Keep our community safe by reporting incidents.</Text>
-            </View>
+            <EmptyState
+              icon="clipboard"
+              title="No Reports Yet"
+              subtitle="Stay safe — use the '+' button below to report any incident."
+              actionLabel="File a Report"
+              onActionPress={() => navigation.navigate('ReportWizard')}
+              accentColor="#0F2C59"
+            />
           ) : (
             recentLogs.slice(0, 3).map((log) => (
               <IncidentCard

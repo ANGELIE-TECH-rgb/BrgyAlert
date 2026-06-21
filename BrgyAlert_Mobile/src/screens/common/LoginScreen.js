@@ -659,7 +659,6 @@ const styles = StyleSheet.create({
   logoImage: {
     height: 60,
     width: 100,
-    marginBottom: 16,
     alignSelf: 'flex-start',
   },
   rememberedEmailChip: {

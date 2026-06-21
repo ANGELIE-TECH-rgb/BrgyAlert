@@ -23,6 +23,7 @@ import TutorialOverlay from '../../components/TutorialOverlay';
 import NetInfo from '@react-native-community/netinfo';
 import SkeletonLoader from '../../components/SkeletonLoader';
 import ConnectionBlocker from '../../components/ConnectionBlocker';
+import EmptyState from '../../components/EmptyState';
 
 export default function CitizenReports({ navigation }) {
   const { user } = useAuth();
@@ -368,16 +369,21 @@ export default function CitizenReports({ navigation }) {
           <SkeletonLoader type="card" count={3} />
         </View>
       ) : filteredAlerts.length === 0 ? (
-        <View style={styles.centerContainer}>
-          <View style={styles.emptyIconWrapper}>
-            <Feather
-              name={searchQuery.trim().length > 0 ? 'search' : 'folder'}
-              size={40}
-              color="#9CA3AF"
-            />
-          </View>
-          <Text style={styles.emptyText}>{getEmptyStateText()}</Text>
-        </View>
+        <EmptyState
+          icon={searchQuery.trim().length > 0 ? 'search' : 'folder'}
+          title={searchQuery.trim().length > 0 ? 'No Matches Found' : 'No Incident Logs'}
+          subtitle={getEmptyStateText()}
+          actionLabel={searchQuery.trim().length > 0 || statusFilter !== 'all' ? 'Reset Filters' : 'File a Report'}
+          onActionPress={() => {
+            if (searchQuery.trim().length > 0 || statusFilter !== 'all') {
+              setSearchQuery('');
+              setStatusFilter('all');
+            } else {
+              navigation.navigate('ReportWizard');
+            }
+          }}
+          accentColor="#0F2C59"
+        />
       ) : (
         <FlatList
           data={filteredAlerts}

@@ -22,6 +22,7 @@ import TutorialOverlay from '../../components/TutorialOverlay';
 import NetInfo from '@react-native-community/netinfo';
 import SkeletonLoader from '../../components/SkeletonLoader';
 import ConnectionBlocker from '../../components/ConnectionBlocker';
+import EmptyState from '../../components/EmptyState';
 
 export default function ChatMessages({ navigation }) {
   const { user } = useAuth();
@@ -309,23 +310,23 @@ export default function ChatMessages({ navigation }) {
       {loading ? (
         <SkeletonLoader type="thread" count={4} />
       ) : alerts.length === 0 ? (
-        <View style={styles.centerContainer}>
-          <View style={styles.emptyIconWrapper}>
-            <Feather name="message-square" size={40} color="#9CA3AF" />
-          </View>
-          <Text style={styles.emptyText}>
-            No reports filed yet. Tapping the floating '+' button on the home screen allows you to report an incident and start chatting.
-          </Text>
-        </View>
+        <EmptyState
+          icon="message-square"
+          title="No Conversations Yet"
+          subtitle="Tapping the floating '+' button on the home screen allows you to report an incident and start chatting."
+          actionLabel="Go to Dashboard"
+          onActionPress={() => navigation.navigate('CitizenHome')}
+          accentColor="#0F2C59"
+        />
       ) : filteredAlerts.length === 0 ? (
-        <View style={styles.centerContainer}>
-          <View style={styles.emptyIconWrapper}>
-            <Feather name="search" size={40} color="#9CA3AF" />
-          </View>
-          <Text style={styles.emptyText}>
-            No conversations match your search or filter.
-          </Text>
-        </View>
+        <EmptyState
+          icon="search"
+          title="No Matches Found"
+          subtitle="No conversations match your search or filter."
+          actionLabel="Clear Search"
+          onActionPress={() => setSearchQuery('')}
+          accentColor="#0F2C59"
+        />
       ) : (
         <FlatList
           data={filteredAlerts}
