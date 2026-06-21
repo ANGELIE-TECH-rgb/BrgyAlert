@@ -37,9 +37,9 @@ service cloud.firestore {
     //      read/modify any alert — horizontal privilege leak)
     // ──────────────────────────────────────────────────────────────
     match /alerts/{alertId} {
-      // Create: must be authenticated AND write their own UID into the document
+      // Create: must be authenticated AND (write their own UID into the document OR be an admin/responder)
       allow create: if isAuthenticated() &&
-                    request.resource.data.userId == request.auth.uid;
+                    (request.resource.data.userId == request.auth.uid || isAdminOrResponder());
 
       // Read: only the report's owner OR an admin/responder
       allow read: if (isAuthenticated() && resource.data.userId == request.auth.uid) ||

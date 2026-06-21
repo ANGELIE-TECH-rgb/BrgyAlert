@@ -201,7 +201,7 @@ export default function AdminAnalytics({ navigation }) {
     let icon = 'info';
 
     if (statusCounts.active > 5) {
-      insightText = `Active queue is high (${statusCounts.active} reports). Triage pending reports immediately to dispatch emergency response teams.`;
+      insightText = `Active records count is high (${statusCounts.active} reports). Triage pending reports immediately to dispatch emergency response teams.`;
       badge = 'Triage Needed';
       color = '#EF4444';
       bg = '#FEF2F2';
@@ -362,7 +362,7 @@ export default function AdminAnalytics({ navigation }) {
                 <Feather name="clock" size={20} color="#D97706" />
               </View>
               <Text style={styles.kpiVal}>{statusCounts.active}</Text>
-              <Text style={styles.kpiLabel}>Active Queue</Text>
+              <Text style={styles.kpiLabel}>Active Records</Text>
             </TouchableOpacity>
 
             <TouchableOpacity 

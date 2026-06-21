@@ -58,8 +58,8 @@
           "photosPermission": "BrgyAlert uses your photo library to select and attach existing images as evidence for your incident reports.",
           "cameraPermission": "BrgyAlert uses your camera to capture and attach real-time photo evidence for reporting incidents."
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ]
   }
 }
-

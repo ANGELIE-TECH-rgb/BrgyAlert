@@ -61,7 +61,7 @@ export default function AdminBottomTabNav() {
 
   const tabs = [
     { name: 'AdminHome', label: 'Dashboard', icon: 'layout' },
-    { name: 'AdminQueue', label: 'Queue', icon: 'clipboard' },
+    { name: 'AdminQueue', label: 'Records', icon: 'clipboard' },
     { name: 'AdminMessages', label: 'Messages', icon: 'message-square' },
     { name: 'AdminAnalytics', label: 'Analytics', icon: 'bar-chart-2' },
     { name: 'AdminSettings', label: 'Settings', icon: 'settings' }

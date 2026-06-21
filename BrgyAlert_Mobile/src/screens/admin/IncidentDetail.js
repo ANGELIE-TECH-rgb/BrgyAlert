@@ -506,6 +506,20 @@ export default function IncidentDetail({ route, navigation }) {
                 <Text style={styles.reviewLabel}>Incident Type</Text>
                 <Text style={styles.reviewValue}>{incident.category}</Text>
               </View>
+              {incident.source === 'admin_manual' && (
+                <View style={styles.reviewRow}>
+                  <Text style={styles.reviewLabel}>Report Source</Text>
+                  <View style={{ alignSelf: 'flex-start', backgroundColor: '#E0F2FE', paddingVertical: 4, paddingHorizontal: 10, borderRadius: 8, marginTop: 4 }}>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#0369A1' }}>Admin Manual Entry</Text>
+                  </View>
+                </View>
+              )}
+              {incident.adminNotes ? (
+                <View style={styles.reviewRow}>
+                  <Text style={styles.reviewLabel}>Internal Admin Notes</Text>
+                  <Text style={styles.reviewValue}>{incident.adminNotes}</Text>
+                </View>
+              ) : null}
               <View style={styles.reviewRow}>
                 <Text style={styles.reviewLabel}>Location</Text>
                 <Text style={styles.reviewValue}>{incident.location?.addressText || 'N/A'}</Text>

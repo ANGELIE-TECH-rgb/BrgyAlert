@@ -85,7 +85,7 @@ export default function AdminConsole({ navigation }) {
       arrow: 'top'
     },
     {
-      title: 'Live Incident Command Queue',
+      title: 'Live Incident Command Records',
       desc: 'Scan alerts on the interactive map, view details, dispatch emergency responders, or decline incident reports in real-time.',
       top: Math.round(H * 0.40),
       arrow: 'top'
@@ -300,7 +300,7 @@ export default function AdminConsole({ navigation }) {
               <View style={styles.allClearIconWrapper}>
                 <Feather name="check-circle" size={16} color="#10B981" />
               </View>
-              <Text style={styles.allClearText}>All quiet. The incident queue is fully cleared!</Text>
+              <Text style={styles.allClearText}>All quiet. The incident records are fully up to date!</Text>
             </View>
           </View>
         )}
