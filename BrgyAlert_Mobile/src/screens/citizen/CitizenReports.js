@@ -213,12 +213,14 @@ export default function CitizenReports({ navigation }) {
     const catStyle = getCategoryStyle(item.category);
     const serialCode = item.id ? `#INC-${item.id.substring(0, 3).toUpperCase()}` : `#INC-00${index + 1}`;
 
-    // Format Time
-    let timeText = '00:00';
+    // Format Date & Time
+    let dateText = '';
     if (item.createdAt) {
       try {
         const date = item.createdAt.toDate ? item.createdAt.toDate() : new Date(item.createdAt);
-        timeText = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+        const datePart = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const timePart = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+        dateText = `${datePart} • ${timePart}`;
       } catch (e) {
         // Fallback
       }
@@ -228,6 +230,17 @@ export default function CitizenReports({ navigation }) {
     const locationSegment = item.location?.addressText
       ? item.location.addressText.split(',')[0].trim()
       : 'Unknown Area';
+
+    // Get urgency color dot helper
+    const getUrgencyDotColor = (urgency) => {
+      switch (urgency) {
+        case 'critical': return '#7F1D1D';
+        case 'high': return '#EF4444';
+        case 'medium': return '#F59E0B';
+        case 'low': return '#10B981';
+        default: return '#9CA3AF';
+      }
+    };
 
     return (
       <TouchableOpacity
@@ -241,13 +254,18 @@ export default function CitizenReports({ navigation }) {
           </View>
           <View style={styles.cardContent}>
             <View style={styles.cardTitleRow}>
+              <View style={[styles.urgencyDot, { backgroundColor: getUrgencyDotColor(item.urgency) }]} />
               <Text style={styles.serialText}>{serialCode}</Text>
               <Text style={styles.categoryText}>{item.category || 'General'}</Text>
             </View>
             <Text style={styles.locationTimeText}>
-              {locationSegment} • {timeText}
+              {locationSegment} • {dateText}
             </Text>
-            {item.details ? (
+            {item.status === 'declined' && item.declineReason ? (
+              <Text style={styles.declinedPreview} numberOfLines={1}>
+                Reason: {item.declineReason}
+              </Text>
+            ) : item.details ? (
               <Text style={styles.detailsPreview} numberOfLines={1}>
                 {item.details}
               </Text>
@@ -369,6 +387,15 @@ export default function CitizenReports({ navigation }) {
           showsVerticalScrollIndicator={false}
         />
       )}
+
+      {/* Floating Action Button (FAB) for filing a report */}
+      <TouchableOpacity
+        style={[styles.fabButton, { bottom: insets.bottom + 85 }]}
+        onPress={() => navigation.navigate('ReportWizard')}
+        activeOpacity={0.8}
+      >
+        <Feather name="plus" size={24} color="#FFFFFF" />
+      </TouchableOpacity>
 
       {/* Bottom Smooth Gradient Background Fade */}
       <View style={styles.bottomGradient} pointerEvents="none">
@@ -612,5 +639,32 @@ const styles = StyleSheet.create({
     right: 0,
     height: 180,
     zIndex: 5,
+  },
+  urgencyDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
+  },
+  declinedPreview: {
+    fontSize: 12,
+    color: '#EF4444',
+    fontWeight: '600',
+  },
+  fabButton: {
+    position: 'absolute',
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#0F2C59',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#0F2C59',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+    zIndex: 99,
   },
 });

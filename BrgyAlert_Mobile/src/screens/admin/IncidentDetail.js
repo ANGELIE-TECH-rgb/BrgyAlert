@@ -61,6 +61,11 @@ export default function IncidentDetail({ route, navigation }) {
 
   // Status modal state
   const [statusModalVisible, setStatusModalVisible] = useState(false);
+
+  // Edit Admin Notes state
+  const [editNotesModalVisible, setEditNotesModalVisible] = useState(false);
+  const [editNotesValue, setEditNotesValue] = useState('');
+  const [editNotesSubmitting, setEditNotesSubmitting] = useState(false);
   
   // Dynamic reporter profile lookup
   const [reporterProfile, setReporterProfile] = useState(null);
@@ -331,6 +336,26 @@ export default function IncidentDetail({ route, navigation }) {
     );
   };
 
+  // Submit admin notes update
+  const saveAdminNotes = async () => {
+    if (editNotesSubmitting || !alertId) return;
+    setEditNotesSubmitting(true);
+    try {
+      const docRef = doc(db, 'alerts', alertId);
+      await updateDoc(docRef, {
+        adminNotes: editNotesValue.trim(),
+        updatedAt: serverTimestamp()
+      });
+      setEditNotesModalVisible(false);
+      Alert.alert('Success', 'Internal notes updated successfully.');
+    } catch (err) {
+      console.log('Error updating admin notes:', err);
+      Alert.alert('Error', 'Failed to update notes. Please try again.');
+    } finally {
+      setEditNotesSubmitting(false);
+    }
+  };
+
   // Open native Maps app with the incident coordinates — 100% free, no API call
   const openInMaps = () => {
     const lat = incident?.location?.latitude;
@@ -514,12 +539,22 @@ export default function IncidentDetail({ route, navigation }) {
                   </View>
                 </View>
               )}
-              {incident.adminNotes ? (
-                <View style={styles.reviewRow}>
+              <View style={styles.reviewRow}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Text style={styles.reviewLabel}>Internal Admin Notes</Text>
-                  <Text style={styles.reviewValue}>{incident.adminNotes}</Text>
+                  <TouchableOpacity 
+                    onPress={() => {
+                      setEditNotesValue(incident.adminNotes || '');
+                      setEditNotesModalVisible(true);
+                    }}
+                    style={{ flexDirection: 'row', alignItems: 'center' }}
+                  >
+                    <Feather name="edit-2" size={12} color="#0F2C59" style={{ marginRight: 4 }} />
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#0F2C59' }}>Edit</Text>
+                  </TouchableOpacity>
                 </View>
-              ) : null}
+                <Text style={styles.reviewValue}>{incident.adminNotes || 'No notes added yet.'}</Text>
+              </View>
               <View style={styles.reviewRow}>
                 <Text style={styles.reviewLabel}>Location</Text>
                 <Text style={styles.reviewValue}>{incident.location?.addressText || 'N/A'}</Text>
@@ -803,6 +838,59 @@ export default function IncidentDetail({ route, navigation }) {
             {declineSubmitting
               ? <ActivityIndicator size="small" color="#FFFFFF" />
               : <Text style={styles.confirmDeclineButtonText}>Decline Report</Text>
+            }
+          </TouchableOpacity>
+        </View>
+      </GestureModal>
+
+      {/* ─── EDIT NOTES MODAL ────────────────────────────────────────── */}
+      <GestureModal
+        visible={editNotesModalVisible}
+        onClose={() => setEditNotesModalVisible(false)}
+        contentStyle={styles.declineModalSheet}
+        keyboardAvoiding
+      >
+        <View style={styles.declineModalHeader}>
+          <View style={[styles.declineIconCircle, { backgroundColor: '#E8F0FE' }]}>
+            <Feather name="edit-2" size={20} color="#0F2C59" />
+          </View>
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={styles.declineModalTitle}>Edit Admin Notes</Text>
+            <Text style={styles.declineModalSubtitle}>
+              Update internal notes about this incident record (only visible to admins).
+            </Text>
+          </View>
+        </View>
+
+        <Text style={styles.declineInputLabel}>Internal Notes</Text>
+        <TextInput
+          style={styles.declineInput}
+          placeholder="e.g. Dispatched Responder Unit 3, contacted witness..."
+          placeholderTextColor="#9CA3AF"
+          value={editNotesValue}
+          onChangeText={setEditNotesValue}
+          multiline
+          numberOfLines={4}
+          textAlignVertical="top"
+          maxLength={500}
+        />
+        <Text style={styles.charCount}>{editNotesValue.length}/500</Text>
+
+        <View style={styles.declineModalButtons}>
+          <TouchableOpacity
+            style={styles.cancelModalButton}
+            onPress={() => setEditNotesModalVisible(false)}
+          >
+            <Text style={styles.cancelModalButtonText}>Cancel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.confirmDeclineButton, { backgroundColor: '#0F2C59', shadowColor: '#0F2C59' }, editNotesSubmitting && { opacity: 0.6 }]}
+            onPress={saveAdminNotes}
+            disabled={editNotesSubmitting}
+          >
+            {editNotesSubmitting
+              ? <ActivityIndicator size="small" color="#FFFFFF" />
+              : <Text style={styles.confirmDeclineButtonText}>Save Notes</Text>
             }
           </TouchableOpacity>
         </View>

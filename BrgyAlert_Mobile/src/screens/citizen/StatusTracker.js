@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
-import { doc, onSnapshot, query, collection, where, getDocs, writeBatch } from 'firebase/firestore';
+import { doc, onSnapshot, query, collection, where, getDocs, writeBatch, getDoc } from 'firebase/firestore';
 import { db } from '../../services/firebaseConfig';
 import { useAuth } from '../../context/AuthContext';
 import TutorialOverlay from '../../components/TutorialOverlay';
@@ -40,6 +40,22 @@ export default function StatusTracker({ route, navigation }) {
   const [incident, setIncident] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(true);
+  const [responseTimeText, setResponseTimeText] = useState('15-30 mins');
+
+  // Load configured response time from Firestore
+  useEffect(() => {
+    const fetchResponseTime = async () => {
+      try {
+        const configDoc = await getDoc(doc(db, 'brgyConfig', 'responseTimeConfig'));
+        if (configDoc.exists() && configDoc.data().value) {
+          setResponseTimeText(configDoc.data().value);
+        }
+      } catch (err) {
+        console.log('Error fetching responseTimeConfig:', err);
+      }
+    };
+    fetchResponseTime();
+  }, []);
 
   // Monitor Network Connectivity State
   useEffect(() => {
@@ -278,6 +294,19 @@ export default function StatusTracker({ route, navigation }) {
                     <Text style={styles.declineReasonText}>"{incident.declineReason}"</Text>
                   </View>
                 ) : null}
+              </View>
+            )}
+
+            {/* ─── ESTIMATED RESPONSE BANNER ──────────────────────────── */}
+            {!isDeclined && (incident?.status === 'under_review' || incident?.status === 'dispatched') && (
+              <View style={styles.responseBanner}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                  <Feather name="clock" size={16} color="#0F2C59" style={{ marginRight: 6 }} />
+                  <Text style={styles.responseBannerTitle}>Command Center Notified</Text>
+                </View>
+                <Text style={styles.responseBannerText}>
+                  Responders are actively coordinating. Estimated response time: {responseTimeText}.
+                </Text>
               </View>
             )}
 
@@ -567,6 +596,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 16,
     paddingBottom: 120, // Ensure room for sticky footer button
+  },
+  responseBanner: {
+    backgroundColor: '#E8F0FE',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#D2E3FC',
+  },
+  responseBannerTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0F2C59',
+  },
+  responseBannerText: {
+    fontSize: 13,
+    color: '#3C4043',
+    lineHeight: 18,
+    fontWeight: '500',
+    marginTop: 2,
   },
 
   // ── Decline banner styles ─────────────────────────────────────────────

@@ -63,6 +63,12 @@ export default function AdminQueue({ route, navigation }) {
   const [statusFilter, setStatusFilter] = useState('all'); // all | submitted | under_review | dispatched | resolved | declined
   const [showTutorial, setShowTutorial] = useState(false);
 
+  // New filters and sort state
+  const [categoryFilter, setCategoryFilter] = useState('all'); // all | INCIDENT_TYPES
+  const [urgencyFilter, setUrgencyFilter] = useState('all'); // all | low | medium | high | critical
+  const [sortOption, setSortOption] = useState('newest'); // newest | oldest | urgency_high | urgency_low
+  const [showFiltersSection, setShowFiltersSection] = useState(false);
+
   // Manual entry modal states
   const [showAddModal, setShowAddModal] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -221,36 +227,84 @@ export default function AdminQueue({ route, navigation }) {
   };
 
   // Filter and search computation
-  const filteredAlerts = allAlerts.filter((alert) => {
-    // 1. Filter by Status Chip
-    if (statusFilter === 'all') {
-      if (alert.status === 'declined') return false;
-    } else if (statusFilter === 'resolved') {
-      if (alert.status !== 'done' && alert.status !== 'resolved') return false;
-    } else {
-      if (alert.status !== statusFilter) return false;
-    }
+  const getFilteredAndSortedAlerts = () => {
+    let result = allAlerts.filter((alert) => {
+      // 1. Filter by Status Chip
+      if (statusFilter === 'all') {
+        if (alert.status === 'declined') return false;
+      } else if (statusFilter === 'resolved') {
+        if (alert.status !== 'done' && alert.status !== 'resolved') return false;
+      } else {
+        if (alert.status !== statusFilter) return false;
+      }
 
-    // 2. Filter by Search Query
-    if (searchQuery.trim().length > 0) {
-      const queryLower = searchQuery.toLowerCase();
-      const category = (alert.category || '').toLowerCase();
-      const details = (alert.details || '').toLowerCase();
-      const reporter = (alert.reporterName || '').toLowerCase();
-      const address = (alert.location?.addressText || '').toLowerCase();
-      const serial = alert.id ? `#inc-${alert.id.substring(0, 3).toLowerCase()}` : '';
+      // 2. Filter by Category
+      if (categoryFilter !== 'all') {
+        if (alert.category !== categoryFilter) return false;
+      }
 
-      return (
-        category.includes(queryLower) ||
-        details.includes(queryLower) ||
-        reporter.includes(queryLower) ||
-        address.includes(queryLower) ||
-        serial.includes(queryLower)
-      );
-    }
+      // 3. Filter by Urgency
+      if (urgencyFilter !== 'all') {
+        if (alert.urgency !== urgencyFilter) return false;
+      }
 
-    return true;
-  });
+      // 4. Filter by Search Query
+      if (searchQuery.trim().length > 0) {
+        const queryLower = searchQuery.toLowerCase();
+        const category = (alert.category || '').toLowerCase();
+        const details = (alert.details || '').toLowerCase();
+        const reporter = (alert.reporterName || '').toLowerCase();
+        const address = (alert.location?.addressText || '').toLowerCase();
+        const serial = alert.id ? `#inc-${alert.id.substring(0, 3).toLowerCase()}` : '';
+
+        return (
+          category.includes(queryLower) ||
+          details.includes(queryLower) ||
+          reporter.includes(queryLower) ||
+          address.includes(queryLower) ||
+          serial.includes(queryLower)
+        );
+      }
+
+      return true;
+    });
+
+    // Urgency weight helper
+    const getUrgencyWeight = (urgency) => {
+      switch (urgency) {
+        case 'critical': return 4;
+        case 'high': return 3;
+        case 'medium': return 2;
+        case 'low': return 1;
+        default: return 0;
+      }
+    };
+
+    // Sort result
+    result.sort((a, b) => {
+      const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
+      const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
+
+      if (sortOption === 'newest') {
+        return dateB - dateA;
+      } else if (sortOption === 'oldest') {
+        return dateA - dateB;
+      } else if (sortOption === 'urgency_high') {
+        const weightDiff = getUrgencyWeight(b.urgency) - getUrgencyWeight(a.urgency);
+        if (weightDiff !== 0) return weightDiff;
+        return dateB - dateA; // Fallback to newest
+      } else if (sortOption === 'urgency_low') {
+        const weightDiff = getUrgencyWeight(a.urgency) - getUrgencyWeight(b.urgency);
+        if (weightDiff !== 0) return weightDiff;
+        return dateB - dateA; // Fallback to newest
+      }
+      return 0;
+    });
+
+    return result;
+  };
+
+  const filteredAlerts = getFilteredAndSortedAlerts();
 
   // Render incident item card
   const renderItem = ({ item, index }) => {
@@ -258,12 +312,14 @@ export default function AdminQueue({ route, navigation }) {
     const catStyle = getCategoryStyle(item.category);
     const serialCode = item.id ? `#INC-${item.id.substring(0, 3).toUpperCase()}` : `#INC-00${index + 1}`;
     
-    // Format Time
-    let timeText = '00:00';
+    // Format Date & Time
+    let dateText = '';
     if (item.createdAt) {
       try {
         const date = item.createdAt.toDate ? item.createdAt.toDate() : new Date(item.createdAt);
-        timeText = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+        const datePart = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const timePart = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+        dateText = `${datePart} • ${timePart}`;
       } catch (e) {
         // Fallback
       }
@@ -273,6 +329,17 @@ export default function AdminQueue({ route, navigation }) {
     const locationSegment = item.location?.addressText
       ? item.location.addressText.split(',')[0].trim()
       : 'Unknown Area';
+
+    // Get urgency color dot helper
+    const getUrgencyDotColor = (urgency) => {
+      switch (urgency) {
+        case 'critical': return '#7F1D1D';
+        case 'high': return '#EF4444';
+        case 'medium': return '#F59E0B';
+        case 'low': return '#10B981';
+        default: return '#9CA3AF';
+      }
+    };
 
     return (
       <TouchableOpacity
@@ -286,17 +353,25 @@ export default function AdminQueue({ route, navigation }) {
           </View>
           <View style={styles.cardContent}>
             <View style={styles.cardTitleRow}>
+              <View style={[styles.urgencyDot, { backgroundColor: getUrgencyDotColor(item.urgency) }]} />
               <Text style={styles.serialText}>{serialCode}</Text>
               <Text style={styles.categoryText}>{item.category || 'General'}</Text>
             </View>
             <Text style={styles.locationTimeText}>
-              {locationSegment} • {timeText}
+              {locationSegment} • {dateText}
             </Text>
-            {item.details ? (
-              <Text style={styles.detailsPreview} numberOfLines={1}>
-                {item.details}
-              </Text>
-            ) : null}
+            <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginTop: 2 }}>
+              {item.source === 'admin_manual' && (
+                <View style={styles.manualEntryBadge}>
+                  <Text style={styles.manualEntryBadgeText}>Manual Entry</Text>
+                </View>
+              )}
+              {item.details ? (
+                <Text style={styles.detailsPreview} numberOfLines={1}>
+                  {item.details}
+                </Text>
+              ) : null}
+            </View>
           </View>
         </View>
         <View style={styles.cardRight}>
@@ -410,13 +485,13 @@ export default function AdminQueue({ route, navigation }) {
         </TouchableOpacity>
       </View>
 
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <View style={styles.searchBar}>
+      {/* Search & Actions Bar */}
+      <View style={[styles.searchContainer, { flexDirection: 'row', alignItems: 'center' }]}>
+        <View style={[styles.searchBar, { flex: 1 }]}>
           <Feather name="search" size={18} color="#9CA3AF" style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search category, location, reporter..."
+            placeholder="Search category, location..."
             placeholderTextColor="#9CA3AF"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -427,7 +502,99 @@ export default function AdminQueue({ route, navigation }) {
             </TouchableOpacity>
           )}
         </View>
+        
+        {/* Toggle Filter Panel */}
+        <TouchableOpacity 
+          style={[styles.actionIconButton, showFiltersSection && styles.actionIconButtonActive]}
+          onPress={() => setShowFiltersSection(!showFiltersSection)}
+          activeOpacity={0.7}
+        >
+          <Feather name="filter" size={18} color={showFiltersSection ? '#0F2C59' : '#4B5563'} />
+        </TouchableOpacity>
+
+        {/* Toggle Sort Options */}
+        <TouchableOpacity 
+          style={styles.actionIconButton}
+          onPress={() => {
+            Alert.alert(
+              'Sort Incident Records',
+              'Choose how you want to sort the list:',
+              [
+                { text: 'Newest First', onPress: () => setSortOption('newest') },
+                { text: 'Oldest First', onPress: () => setSortOption('oldest') },
+                { text: 'Highest Urgency', onPress: () => setSortOption('urgency_high') },
+                { text: 'Lowest Urgency', onPress: () => setSortOption('urgency_low') },
+                { text: 'Cancel', style: 'cancel' }
+              ]
+            );
+          }}
+          activeOpacity={0.7}
+        >
+          <Feather name="bar-chart-2" size={18} color="#4B5563" style={{ transform: [{ rotate: '90deg' }] }} />
+        </TouchableOpacity>
       </View>
+
+      {/* Advanced Filters Panel (Collapsible) */}
+      {showFiltersSection && (
+        <View style={styles.advancedFiltersPanel}>
+          {/* Category Filters */}
+          <Text style={styles.advancedFilterLabel}>Category Filter</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.advancedFilterScroll}>
+            <TouchableOpacity 
+              style={[styles.smallChip, categoryFilter === 'all' && styles.smallChipActive]} 
+              onPress={() => setCategoryFilter('all')}
+            >
+              <Text style={[styles.smallChipText, categoryFilter === 'all' && styles.smallChipTextActive]}>All Categories</Text>
+            </TouchableOpacity>
+            {INCIDENT_TYPES.map((cat) => (
+              <TouchableOpacity 
+                key={cat} 
+                style={[styles.smallChip, categoryFilter === cat && styles.smallChipActive]} 
+                onPress={() => setCategoryFilter(cat)}
+              >
+                <Text style={[styles.smallChipText, categoryFilter === cat && styles.smallChipTextActive]}>{cat}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {/* Urgency Filters */}
+          <Text style={[styles.advancedFilterLabel, { marginTop: 10 }]}>Urgency Filter</Text>
+          <View style={styles.advancedFilterUrgencyRow}>
+            <TouchableOpacity 
+              style={[styles.smallChip, urgencyFilter === 'all' && styles.smallChipActive]} 
+              onPress={() => setUrgencyFilter('all')}
+            >
+              <Text style={[styles.smallChipText, urgencyFilter === 'all' && styles.smallChipTextActive]}>All Urgencies</Text>
+            </TouchableOpacity>
+            {['low', 'medium', 'high', 'critical'].map((urg) => (
+              <TouchableOpacity 
+                key={urg} 
+                style={[styles.smallChip, urgencyFilter === urg && styles.smallChipActive]} 
+                onPress={() => setUrgencyFilter(urg)}
+              >
+                <Text style={[styles.smallChipText, urgencyFilter === urg && styles.smallChipTextActive, { textTransform: 'capitalize' }]}>{urg}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      )}
+
+      {/* Active Sort Label Indicator */}
+      {sortOption !== 'newest' && (
+        <View style={styles.sortIndicatorContainer}>
+          <Text style={styles.sortIndicatorText}>
+            Sorted by:{' '}
+            <Text style={{ fontWeight: '700' }}>
+              {sortOption === 'oldest' && 'Oldest First'}
+              {sortOption === 'urgency_high' && 'Highest Urgency'}
+              {sortOption === 'urgency_low' && 'Lowest Urgency'}
+            </Text>
+          </Text>
+          <TouchableOpacity onPress={() => setSortOption('newest')}>
+            <Feather name="x" size={14} color="#6B7280" />
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Filter Chips */}
       <View style={styles.filterContainer}>
@@ -773,6 +940,97 @@ const styles = StyleSheet.create({
   },
   clearButton: {
     padding: 4,
+  },
+  actionIconButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  actionIconButtonActive: {
+    backgroundColor: '#E8F0FE',
+  },
+  advancedFiltersPanel: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 20,
+    padding: 16,
+    marginHorizontal: 24,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  advancedFilterLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6B7280',
+    textTransform: 'uppercase',
+    marginBottom: 8,
+    letterSpacing: 0.5,
+  },
+  advancedFilterScroll: {
+    paddingVertical: 4,
+  },
+  advancedFilterUrgencyRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  smallChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    marginRight: 6,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  smallChipActive: {
+    backgroundColor: '#E8F0FE',
+    borderColor: '#0F2C59',
+  },
+  smallChipText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#4B5563',
+  },
+  smallChipTextActive: {
+    color: '#0F2C59',
+  },
+  sortIndicatorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F3F4F6',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginHorizontal: 24,
+    marginBottom: 12,
+  },
+  sortIndicatorText: {
+    fontSize: 12,
+    color: '#4B5563',
+  },
+  urgencyDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
+  },
+  manualEntryBadge: {
+    backgroundColor: '#E0F2FE',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginRight: 6,
+  },
+  manualEntryBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#0369A1',
   },
   filterContainer: {
     marginBottom: 16,
