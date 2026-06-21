@@ -24,6 +24,7 @@ import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp,
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services/firebaseConfig';
 import { markAsRead, markAllAsRead } from '../../services/notificationService';
+import { notifyAllAdmins } from '../../services/adminNotifier';
 import { checkPanicStatus, recordPanicTrigger } from '../../services/rateLimiter';
 import { getCurrentLocation } from '../../services/locationService';
 import IncidentCard from '../../components/IncidentCard';
@@ -184,7 +185,27 @@ export default function CitizenDashboard({ navigation }) {
       setDropdownNotifications(list.slice(0, 5));
       setUnreadCount(unread);
     }, (error) => {
-      console.log('Error fetching dashboard notifications:', error);
+      console.log('[CitizenDashboard] Notification query error:', error.code, error.message);
+      // Fallback: unordered query with client-side sort
+      const fallbackQ = query(collection(db, 'users', user.uid, 'notifications'));
+      onSnapshot(fallbackQ, (snap) => {
+        const list = [];
+        let unread = 0;
+        snap.forEach((doc) => {
+          const data = doc.data();
+          if (!data.read) unread++;
+          list.push({ id: doc.id, ...data });
+        });
+        list.sort((a, b) => {
+          const aTime = a.createdAt?.toDate?.()?.getTime?.() ?? 0;
+          const bTime = b.createdAt?.toDate?.()?.getTime?.() ?? 0;
+          return bTime - aTime;
+        });
+        setDropdownNotifications(list.slice(0, 5));
+        setUnreadCount(unread);
+      }, (fallbackErr) => {
+        console.log('[CitizenDashboard] Fallback notification query error:', fallbackErr.code);
+      });
     });
     return () => unsubscribe();
   }, [user]);
@@ -365,6 +386,15 @@ export default function CitizenDashboard({ navigation }) {
 
       const docRef = await addDoc(collection(db, 'alerts'), panicPayload);
       await recordPanicTrigger();
+
+      // Notify all admins/responders directly — critical panic needs immediate attention
+      const locationText = panicPayload.location?.addressText || 'Unknown Location';
+      notifyAllAdmins(user.uid, {
+        title: `🚨 CRITICAL PANIC ALERT!`,
+        body: `Panic button triggered by ${panicPayload.reporterName} at ${locationText}. IMMEDIATE RESPONSE REQUIRED.`,
+        type: 'emergency',
+        relatedId: docRef.id,
+      }).catch((e) => console.log('[CitizenDashboard] Could not notify admins of panic:', e));
 
       navigation.navigate('ReportSuccess', {
         reportId: docRef.id,

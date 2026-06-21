@@ -30,6 +30,9 @@ import { selectImageFromLibrary, captureImageWithCamera } from '../../services/m
 import GestureModal from '../../components/GestureModal';
 import { predictIncidentAttributes, processIncidentSubmissionAI, isAiRateLimited } from '../../services/aiService';
 import { checkReportStatus, recordReportSubmission } from '../../services/rateLimiter';
+import { sanitizeText, sanitizeForAI } from '../../services/inputSanitizer';
+import { sendAndSaveNotification } from '../../services/notificationService';
+import { notifyAllAdmins } from '../../services/adminNotifier';
 
 const INCIDENT_TYPES = [
   'Physical Abuse',
@@ -432,11 +435,16 @@ export default function ReportWizard({ navigation }) {
         let combinedReason = '';
         let combinedConfidence = 'Low';
 
+        // Sanitize description and witness before AI call and Firestore write
+        const safeDescription = sanitizeText(description, 1000);
+        const safeWitness = sanitizeText(witness, 500);
+        const aiSafeDescription = sanitizeForAI(description, 800);
+
         // Check if rate limited first to avoid calling processIncidentSubmissionAI if we are already rate limited
         const limitReached = await isAiRateLimited('citizen');
         if (!limitReached) {
           try {
-            const aiResult = await processIncidentSubmissionAI(description, incidentType, base64Images, 'citizen');
+            const aiResult = await processIncidentSubmissionAI(aiSafeDescription, incidentType, base64Images, 'citizen');
             if (aiResult.rateLimited) {
               setAiLimitReached(true);
             } else {
@@ -481,8 +489,8 @@ export default function ReportWizard({ navigation }) {
           reporterName: userProfile?.fullName || 'Anonymous Citizen',
           phoneNumber: userProfile?.phoneNumber || '',
           category: incidentType,
-          details: description,
-          witnessName: witness.trim() || 'None',
+          details: safeDescription,
+          witnessName: safeWitness || 'None',
           location: {
             latitude: locationCoords.latitude,
             longitude: locationCoords.longitude,
@@ -503,6 +511,28 @@ export default function ReportWizard({ navigation }) {
 
         const docRef = await addDoc(collection(db, 'alerts'), payload);
         await recordReportSubmission();
+
+        // Send a confirmation notification to the citizen so they see it in their feed
+        if (user?.uid) {
+          sendAndSaveNotification(user.uid, {
+            title: `✅ Report Submitted`,
+            body: `Your ${incidentType} report has been received and is now pending review by the Barangay Command Center.`,
+            type: 'incident',
+            relatedId: docRef.id,
+          }).catch((e) => console.log('[ReportWizard] Could not save confirmation notification:', e));
+        }
+
+        // Notify all admins/responders directly — works even when their app is closed
+        const locationText = payload.location?.addressText || 'Unknown Location';
+        const isPanic = payload.urgency === 'critical';
+        notifyAllAdmins(user?.uid, {
+          title: isPanic ? `🚨 CRITICAL PANIC ALERT!` : `🚨 NEW INCIDENT: ${incidentType || 'General'}`,
+          body: isPanic
+            ? `Panic button triggered by ${payload.reporterName} at ${locationText}.`
+            : `${payload.reporterName} reported at ${locationText}. Urgency: ${(payload.urgency || 'medium').toUpperCase()}.`,
+          type: isPanic ? 'emergency' : 'incident',
+          relatedId: docRef.id,
+        }).catch((e) => console.log('[ReportWizard] Could not notify admins:', e));
 
         // Toggle isSubmitting to false first so beforeRemove doesn't block the redirect!
         setIsSubmitting(false);

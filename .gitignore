@@ -13,3 +13,9 @@ dist/
 **/dist/
 web-build/
 **/web-build/
+
+# Environment variables — NEVER commit these to Git
+.env
+**/.env
+.env.local
+.env.production

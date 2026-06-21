@@ -20,7 +20,9 @@ import { Feather } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services/firebaseConfig';
 import { checkChatMessageStatus, recordChatMessageSent } from '../../services/rateLimiter';
-import { setActiveChat } from '../../services/notificationService';
+import { sanitizeText } from '../../services/inputSanitizer';
+import { setActiveChat, sendAndSaveNotification } from '../../services/notificationService';
+import { notifyAllAdmins } from '../../services/adminNotifier';
 
 export default function ChatScreen({ route, navigation }) {
   const { alertId, userId, userName } = route.params || {};
@@ -361,7 +363,8 @@ export default function ChatScreen({ route, navigation }) {
       }
     }
 
-    const messageText = inputText.trim();
+    const messageText = sanitizeText(inputText.trim(), 500);
+    if (!messageText) return; // do not send empty/stripped messages
     setInputText('');
 
     if (typingTimeoutRef.current) {
@@ -391,10 +394,33 @@ export default function ChatScreen({ route, navigation }) {
 
       if (isAdmin) {
         updateData.unreadCountCitizen = increment(1);
+
+        // Directly save notification to the citizen's Firestore subcollection.
+        // This is more reliable than waiting for the citizen's onSnapshot listener,
+        // which only works if the citizen's app is active and online.
+        const citizenId = activeAlert?.userId;
+        if (citizenId && citizenId !== 'anonymous' && citizenId !== user.uid) {
+          sendAndSaveNotification(citizenId, {
+            title: `💬 Message from Barangay Command Center`,
+            body: messageText.length > 80 ? messageText.substring(0, 80) + '...' : messageText,
+            type: 'message',
+            relatedId: currentAlertId,
+          }, true /* skipLocalNotification — citizen is on a different device */).catch((e) => console.log('[ChatScreen] Could not save citizen notification:', e));
+        }
       } else {
         updateData.unreadCountAdmin = increment(1);
         // Record chat message sent for rate limiting
         await recordChatMessageSent();
+
+        // Notify all admins/responders directly — works even if their app is in background
+        const reporterName = userProfile?.fullName || 'Citizen';
+        const alertCategory = activeAlert?.category || 'Incident';
+        notifyAllAdmins(user.uid, {
+          title: `💬 Message from ${reporterName}`,
+          body: messageText.length > 80 ? messageText.substring(0, 80) + '...' : messageText,
+          type: 'message',
+          relatedId: currentAlertId,
+        }).catch((e) => console.log('[ChatScreen] Could not notify admins of message:', e));
       }
 
       await updateDoc(doc(db, 'alerts', currentAlertId), updateData);

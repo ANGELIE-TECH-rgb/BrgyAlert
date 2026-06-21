@@ -3,7 +3,7 @@ import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { collection, query, where, onSnapshot, getDocs, writeBatch } from 'firebase/firestore';
+import { collection, doc, query, where, onSnapshot, getDocs, writeBatch, limit } from 'firebase/firestore';
 import { db } from '../services/firebaseConfig';
 import { registerForNotificationsAsync, sendAndSaveNotification, getActiveChat } from '../services/notificationService';
 import { useAuth } from '../context/AuthContext';
@@ -88,6 +88,48 @@ export default function AppNavigator() {
 
     const setupListener = async () => {
       const activeUnreadNotifs = {};
+
+      // ── Seed notifications for citizens with existing reports ──────────────
+      // This runs ONCE per login session for citizens.
+      // If a citizen has active reports but no notifications in their feed,
+      // we create a summary notification so the screen is never empty.
+      if (!isAdmin) {
+        const seedKey = `notifSeeded_${user.uid}`;
+        const alreadySeeded = await AsyncStorage.getItem(seedKey);
+        if (!alreadySeeded) {
+          try {
+            // Check if they have any existing notifications
+            const existingNotifsSnap = await getDocs(
+              query(collection(db, 'users', user.uid, 'notifications'), limit(1))
+            );
+            if (existingNotifsSnap.empty) {
+              // No notifications yet — seed one for each active/pending report
+              const reportsSnap = await getDocs(
+                query(
+                  collection(db, 'alerts'),
+                  where('userId', '==', user.uid)
+                )
+              );
+              const ACTIVE_STATUSES = ['submitted', 'under_review', 'in_progress'];
+              for (const reportDoc of reportsSnap.docs) {
+                const rData = reportDoc.data();
+                const reportStatus = rData.status || 'submitted';
+                if (!ACTIVE_STATUSES.includes(reportStatus)) continue; // skip resolved reports
+                await sendAndSaveNotification(user.uid, {
+                  title: `📋 Report Status: ${reportStatus.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase())}`,
+                  body: `Your ${rData.category || 'Incident'} report is currently ${reportStatus.replace('_', ' ')}. We'll notify you of any updates.`,
+                  type: 'status',
+                  relatedId: reportDoc.id,
+                }, true /* skipLocalNotification — seed is silent, user already knows about these reports */);
+              }
+            }
+            await AsyncStorage.setItem(seedKey, 'true');
+          } catch (seedErr) {
+            console.log('[AppNavigator] Notification seed error:', seedErr.message);
+          }
+        }
+      }
+
       try {
         const notifsQ = query(
           collection(db, 'users', user.uid, 'notifications'),
@@ -266,7 +308,7 @@ export default function AppNavigator() {
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!user ? (
-          // Auth Stack (Unauthenticated)
+          // Auth Stack (Unauthenticated) — no protected routes
           <>
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="Register" component={RegisterScreen} />
@@ -275,7 +317,11 @@ export default function AppNavigator() {
             <Stack.Screen name="ReportSuccess" component={ReportSuccess} />
           </>
         ) : userProfile?.role === 'responder' || userProfile?.role === 'admin' ? (
-          // Admin / Responder stack
+          // ── Admin / Responder stack ─────────────────────────────────────────
+          // SECURITY: Only renders when the Firestore-verified role is 'admin'
+          // or 'responder'. Citizens cannot access these screens because their
+          // routes are simply not registered in the navigator for their session.
+          // This stack-based isolation is the client-side navigation guard.
           <>
             <Stack.Screen name="AdminHome" component={AdminConsole} />
             <Stack.Screen name="AdminQueue" component={AdminQueue} />
@@ -288,7 +334,10 @@ export default function AppNavigator() {
             <Stack.Screen name="AdminSettings" component={AdminSettings} />
           </>
         ) : (
-          // Citizen Stack (Default)
+          // ── Citizen Stack ───────────────────────────────────────────────────
+          // SECURITY: Admin screens are not registered here — citizens have no
+          // route to navigate to any admin screen even via deep links or state
+          // manipulation. Firestore rules provide the server-side enforcement.
           <>
             <Stack.Screen name="CitizenHome" component={CitizenDashboard} />
             <Stack.Screen name="CitizenReports" component={CitizenReports} />

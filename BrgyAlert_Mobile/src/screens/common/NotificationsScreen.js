@@ -40,6 +40,7 @@ export default function NotificationsScreen({ navigation }) {
   useEffect(() => {
     if (!user) return;
 
+    // Primary query: ordered by createdAt descending (requires Firestore index)
     const q = query(
       collection(db, 'users', user.uid, 'notifications'),
       orderBy('createdAt', 'desc')
@@ -56,8 +57,33 @@ export default function NotificationsScreen({ navigation }) {
       setNotifications(list);
       setLoading(false);
     }, (error) => {
-      console.log('Error fetching notifications:', error);
-      setLoading(false);
+      console.log('[Notifications] Snapshot error code:', error.code);
+      console.log('[Notifications] Snapshot error message:', error.message);
+
+      if (error.code === 'permission-denied') {
+        // Rules may not allow the ordered query — try without orderBy
+        console.log('[Notifications] Permission denied on ordered query. Trying unordered fallback...');
+      }
+
+      // Fallback: try unordered query and sort client-side
+      const fallbackQ = query(collection(db, 'users', user.uid, 'notifications'));
+      onSnapshot(fallbackQ, (snap) => {
+        const list = [];
+        snap.forEach((doc) => {
+          list.push({ id: doc.id, ...doc.data() });
+        });
+        // Sort client-side by createdAt descending
+        list.sort((a, b) => {
+          const aTime = a.createdAt?.toDate?.()?.getTime?.() ?? 0;
+          const bTime = b.createdAt?.toDate?.()?.getTime?.() ?? 0;
+          return bTime - aTime;
+        });
+        setNotifications(list);
+        setLoading(false);
+      }, (fallbackErr) => {
+        console.log('[Notifications] Fallback query error:', fallbackErr.code, fallbackErr.message);
+        setLoading(false);
+      });
     });
 
     return () => unsubscribe();

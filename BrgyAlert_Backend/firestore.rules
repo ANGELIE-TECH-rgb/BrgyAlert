@@ -1,91 +1,161 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Check if the user is authenticated
+
+    // ──────────────────────────────────────────────────────────────
+    // HELPER FUNCTIONS
+    // ──────────────────────────────────────────────────────────────
+
+    // Check if the user is signed in
     function isAuthenticated() {
       return request.auth != null;
     }
 
-    // Rules for citizen reports/alerts
-    match /alerts/{alertId} {
-      allow create: if true;
-      allow read, update, delete: if isAuthenticated();
-
-      // Rules for incident chat messages
-      match /messages/{messageId} {
-        allow read, write: if isAuthenticated();
-      }
-    }
-
-    // Helper: check if the requesting user owns this document
+    // Check if the requesting user owns a document by their uid
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    // Helper: check if requesting user is an admin or responder
+    // Check if the requesting user is an admin or responder
+    // (reads their role from Firestore to prevent client-side spoofing)
     function isAdminOrResponder() {
-      return isAuthenticated() && 
+      return isAuthenticated() &&
         (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'responder');
     }
 
-    // Rules for user profiles
-    match /users/{userId} {
-      // Create: only the authenticated user can create their own profile.
-      // We also verify the uid field in the written data matches the auth uid
-      // to prevent one user from writing a profile for another user.
-      allow create: if isOwner(userId)
-                    && request.resource.data.uid == request.auth.uid;
+    // Check if the requesting user is strictly an admin (not a responder)
+    function isAdmin() {
+      return isAuthenticated() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
 
-      // Read: owner OR admin/responder (so responders can view reporter profiles)
-      allow read: if isOwner(userId) || isAdminOrResponder();
+    // ──────────────────────────────────────────────────────────────
+    // ALERTS — Citizen incident reports
+    // FIX: Previously `allow create: if true` (unauthenticated access)
+    //      and `allow read/update: if isAuthenticated()` (any user could
+    //      read/modify any alert — horizontal privilege leak)
+    // ──────────────────────────────────────────────────────────────
+    match /alerts/{alertId} {
+      // Create: must be authenticated AND write their own UID into the document
+      allow create: if isAuthenticated() &&
+                    request.resource.data.userId == request.auth.uid;
 
-      // Update / delete: owner only
-      allow update, delete: if isOwner(userId);
+      // Read: only the report's owner OR an admin/responder
+      allow read: if (isAuthenticated() && resource.data.userId == request.auth.uid) ||
+                  isAdminOrResponder();
 
-      // Rules for user notifications
-      match /notifications/{notificationId} {
-        // Read: owner only
-        allow read: if isOwner(userId);
-        // Write: owner OR admin/responder (so admin/responders can trigger updates)
-        allow write: if isOwner(userId) || isAdminOrResponder();
+      // Update: admins/responders can update everything.
+      //         Citizens can only update their own alert (e.g., add details)
+      //         but CANNOT change status, urgency, or assigned responders.
+      allow update: if isAdminOrResponder() ||
+                    (isAuthenticated() &&
+                     resource.data.userId == request.auth.uid &&
+                     request.resource.data.userId == request.auth.uid &&
+                     !request.resource.data.diff(resource.data).affectedKeys()
+                       .hasAny(['status', 'urgency', 'assignedResponders']));
+
+      // Delete: completely blocked — emergency records must not be deleted
+      allow delete: if false;
+
+      // ── Chat messages (subcollection) ──────────────────────────
+      // Read/Write: only the parent alert's owner OR an admin/responder
+      match /messages/{messageId} {
+        allow read, write: if
+          (isAuthenticated() &&
+           get(/databases/$(database)/documents/alerts/$(alertId)).data.userId == request.auth.uid) ||
+          isAdminOrResponder();
       }
     }
 
-    // Rules for responders
+    // ──────────────────────────────────────────────────────────────
+    // USERS — Citizen and admin profiles
+    // FIX: Previously allowed citizens to write ANY field including `role`
+    //      which enabled privilege escalation (citizen → admin self-promotion)
+    // ──────────────────────────────────────────────────────────────
+    match /users/{userId} {
+      // Create: only authenticated users can create their own profile
+      allow create: if isOwner(userId) &&
+                    request.resource.data.uid == request.auth.uid;
+
+      // Read: any authenticated user can read user profiles.
+      // Citizens need this to query admin/responder UIDs for notification dispatch.
+      // Sensitive fields (passwords etc.) are never stored in Firestore — only in Firebase Auth.
+      allow read: if isAuthenticated();
+
+      // Update: owner can update their own profile BUT cannot change their role.
+      //         Admin/responders can update any profile (including role changes).
+      allow update: if (isOwner(userId) &&
+                        !request.resource.data.diff(resource.data)
+                          .affectedKeys().hasAny(['role'])) ||
+                    isAdminOrResponder();
+
+      // Delete: blocked — accounts are managed through Firebase Auth
+      allow delete: if false;
+
+      // ── Notifications (subcollection) ──────────────────────────
+      // Read: only the notification recipient (owner) can read their own
+      // Write: any authenticated user can create notifications for others
+      //        (citizens notify admins on new reports; admins notify citizens on replies)
+      //        Only the owner or admin can update/delete their own notifications
+      match /notifications/{notificationId} {
+        allow read: if isOwner(userId);
+        allow create: if isAuthenticated();
+        allow update, delete: if isOwner(userId) || isAdminOrResponder();
+      }
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // RESPONDERS — Barangay responder registry
+    // FIX: Previously allowed any authenticated user to write
+    // ──────────────────────────────────────────────────────────────
     match /responders/{responderId} {
       allow read: if true;
-      allow write: if isAuthenticated();
+      allow write: if isAdminOrResponder();
     }
 
-    // Rules for evacuation centers
+    // ──────────────────────────────────────────────────────────────
+    // EVACUATION CENTERS
+    // FIX: Previously allowed any authenticated user to write
+    // ──────────────────────────────────────────────────────────────
     match /evacuation_centers/{centerId} {
       allow read: if true;
-      allow write: if isAuthenticated();
+      allow write: if isAdminOrResponder();
     }
 
-    // Rules for broadcasts
+    // ──────────────────────────────────────────────────────────────
+    // BROADCASTS — Barangay-wide announcements
+    // FIX: Previously allowed any authenticated user to write
+    // ──────────────────────────────────────────────────────────────
     match /broadcasts/{broadcastId} {
       allow read: if true;
-      allow write: if isAuthenticated();
+      allow write: if isAdminOrResponder();
     }
 
-    // Rules for SMS logs (Only backend/admin SDK, block client access)
+    // ──────────────────────────────────────────────────────────────
+    // SMS LOGS — Backend only, completely blocked on client
+    // ──────────────────────────────────────────────────────────────
     match /sms_logs/{logId} {
       allow read, write: if false;
     }
 
-    // Rules for emergency contacts
+    // ──────────────────────────────────────────────────────────────
+    // EMERGENCY CONTACTS
+    // FIX: Previously allowed any authenticated user to write
+    // ──────────────────────────────────────────────────────────────
     match /emergency_contacts/{contactId} {
       allow read: if true;
-      allow write: if isAuthenticated();
+      allow write: if isAdminOrResponder();
     }
 
-    // Rules for barangay configurations
+    // ──────────────────────────────────────────────────────────────
+    // CONFIG — Barangay settings (hotlines, barangay name, etc.)
+    // FIX: Previously allowed any authenticated user to write
+    // ──────────────────────────────────────────────────────────────
     match /config/{configId} {
       allow read: if true;
-      allow write: if isAuthenticated();
+      allow write: if isAdminOrResponder();
     }
+
   }
 }
-

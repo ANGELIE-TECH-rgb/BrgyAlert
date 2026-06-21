@@ -137,9 +137,13 @@ export async function triggerLocalNotification(title, body, type = 'report') {
 
 /**
  * Saves notification to Firestore under /users/{userId}/notifications
- * and schedules a local system notification banner + custom sound chime
+ * and optionally schedules a local system notification banner + custom sound chime.
+ *
+ * @param {string} userId - The Firestore uid of the notification recipient
+ * @param {object} payload - title, body, type, relatedId
+ * @param {boolean} skipLocalNotification - Set true when saving for a DIFFERENT user (e.g. admin writing to citizen's subcollection)
  */
-export async function sendAndSaveNotification(userId, { title, body, type, relatedId }) {
+export async function sendAndSaveNotification(userId, { title, body, type, relatedId }, skipLocalNotification = false) {
   try {
     if (!userId) {
       console.log('Warning: sendAndSaveNotification called without userId');
@@ -155,8 +159,10 @@ export async function sendAndSaveNotification(userId, { title, body, type, relat
       createdAt: serverTimestamp(),
     });
 
-    // 2. Trigger local system notification and play chime
-    await triggerLocalNotification(title, body, type);
+    // 2. Trigger local system notification and play chime ONLY for the current device's user
+    if (!skipLocalNotification) {
+      await triggerLocalNotification(title, body, type);
+    }
   } catch (error) {
     console.log('Error sending and saving notification:', error);
   }

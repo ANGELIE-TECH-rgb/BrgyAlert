@@ -22,6 +22,7 @@ import { useAuth } from '../../context/AuthContext';
 import { Feather, AntDesign, Ionicons } from '@expo/vector-icons';
 import GoogleIcon from '../../components/GoogleIcon';
 import { checkSignUpStatus, recordSignUpAttempt } from '../../services/rateLimiter';
+import { validateEmail, sanitizeText, validatePhilippinePhone } from '../../services/inputSanitizer';
 
 import GestureModal from '../../components/GestureModal';
 
@@ -188,8 +189,8 @@ export default function RegisterScreen({ navigation }) {
       return;
     }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email.trim())) {
-      setErrorMsg('Please enter a valid email address.');
+    if (!validateEmail(email.trim())) {
+      setErrorMsg('Please enter a valid email address (e.g. user@gmail.com).');
       return;
     }
     if (password !== confirmPassword) {
@@ -248,6 +249,12 @@ export default function RegisterScreen({ navigation }) {
       setErrorMsg('Full Name is required.');
       return;
     }
+    // Sanitize fullName — strip any HTML tags or dangerous chars
+    const cleanFullName = sanitizeText(fullName.trim(), 100);
+    if (cleanFullName.length < 2) {
+      setErrorMsg('Full Name must be at least 2 characters.');
+      return;
+    }
     if (!dob || dob === '') {
       setErrorMsg('Date of Birth is required.');
       return;
@@ -277,7 +284,7 @@ export default function RegisterScreen({ navigation }) {
       await register(
         email.trim(),
         password,
-        fullName.trim(),
+        cleanFullName,
         dob,
         phoneNumber.trim(),
         gender,

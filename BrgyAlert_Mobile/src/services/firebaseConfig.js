@@ -3,16 +3,17 @@ import { getAuth } from 'firebase/auth';
 import { initializeFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
-//firebase api key
+//firebase api key — values loaded from .env (EXPO_PUBLIC_* variables)
 const firebaseConfig = {
-  apiKey: "AIzaSyDG61e0PX-imPGW_msoq3Cn7FcRzKZ5QRE",
-  authDomain: "brgyalert-74b2f.firebaseapp.com",
-  projectId: "brgyalert-74b2f",
-  storageBucket: "brgyalert-74b2f.firebasestorage.app",
-  messagingSenderId: "82872757022",
-  appId: "1:82872757022:web:45e13a64eea8bac587b70f",
-  measurementId: "G-RD88HC5TEN"
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
+  measurementId: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
+
 
 // Initialize Firebase App
 const app = initializeApp(firebaseConfig);

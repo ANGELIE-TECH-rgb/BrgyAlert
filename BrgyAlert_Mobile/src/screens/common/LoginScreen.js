@@ -18,9 +18,11 @@ import { useAuth } from '../../context/AuthContext';
 import { Feather, AntDesign, Ionicons } from '@expo/vector-icons';
 import GoogleIcon from '../../components/GoogleIcon';
 import { checkLoginStatus, recordFailedLogin, resetLoginAttempts } from '../../services/rateLimiter';
+import { validateEmail, sanitizeText } from '../../services/inputSanitizer';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 import { requestLocationPermission } from '../../services/locationService';
+import { auth } from '../../services/firebaseConfig';
 
 export default function LoginScreen({ navigation }) {
   const { login, loginWithGoogle } = useAuth();
@@ -58,17 +60,23 @@ export default function LoginScreen({ navigation }) {
   const [lockoutTime, setLockoutTime] = useState(0);
   const [rememberMe, setRememberMe] = useState(false);
 
-  // Load remembered email on startup
+  // Load remembered email on startup — reads from Firebase Auth's persisted
+  // session rather than storing the raw email in plain AsyncStorage.
+  // This avoids leaking the email on physical device access.
   useEffect(() => {
     const loadRememberedEmail = async () => {
       try {
-        const storedEmail = await AsyncStorage.getItem('rememberedEmail');
-        if (storedEmail) {
-          setEmail(storedEmail);
+        const rememberFlag = await AsyncStorage.getItem('rememberMeEnabled');
+        if (rememberFlag === 'true') {
+          // Firebase Auth already persists the session — read the email from it
+          const currentUser = auth.currentUser;
+          if (currentUser?.email) {
+            setEmail(currentUser.email);
+          }
           setRememberMe(true);
         }
       } catch (err) {
-        console.log('Failed to load remembered email', err);
+        console.log('Failed to load remember-me state', err);
       }
     };
     loadRememberedEmail();
@@ -130,17 +138,26 @@ export default function LoginScreen({ navigation }) {
       return;
     }
 
+    // Validate email format before sending to Firebase
+    const cleanEmail = sanitizeText(email.trim(), 254);
+    if (!validateEmail(cleanEmail)) {
+      setErrorMsg('Please enter a valid email address (e.g. user@gmail.com).');
+      Alert.alert('Invalid Email', 'Please enter a valid email address.');
+      return;
+    }
+
     setErrorMsg('');
     setIsSubmitting(true);
 
     try {
-      await login(email.trim(), password);
+      await login(cleanEmail, password);
       await resetLoginAttempts();
 
       if (rememberMe) {
-        await AsyncStorage.setItem('rememberedEmail', email.trim());
+        // Store only a flag — NOT the raw email
+        await AsyncStorage.setItem('rememberMeEnabled', 'true');
       } else {
-        await AsyncStorage.removeItem('rememberedEmail');
+        await AsyncStorage.removeItem('rememberMeEnabled');
       }
     } catch (error) {
       console.log('Login failed:', error.code || error.message);

@@ -121,6 +121,33 @@ export const compressImage = async (uri) => {
   }
 };
 
+// MIME type whitelist — only allow real image types as evidence
+const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+
+/**
+ * Validates an image asset selected from gallery or camera.
+ * Checks MIME type against whitelist and enforces a 10 MB file size cap.
+ * @param {object} asset - The image asset object returned by expo-image-picker
+ * @throws {Error} If file type is not allowed or size exceeds limit
+ */
+const validateImageAsset = (asset) => {
+  // Check MIME type if available
+  if (asset.mimeType && !ALLOWED_MIME_TYPES.includes(asset.mimeType.toLowerCase())) {
+    throw new Error(
+      `Invalid file type: ${asset.mimeType}. Only JPEG, PNG, and WebP images are allowed as evidence.`
+    );
+  }
+
+  // Check file size
+  if (asset.fileSize && asset.fileSize > MAX_FILE_SIZE_BYTES) {
+    const sizeMB = (asset.fileSize / (1024 * 1024)).toFixed(1);
+    throw new Error(
+      `File size (${sizeMB} MB) exceeds the 10 MB limit. Please select a smaller image.`
+    );
+  }
+};
+
 export const selectImageFromLibrary = async () => {
   try {
     const hasPermission = await requestLibraryPermission();
@@ -137,9 +164,8 @@ export const selectImageFromLibrary = async () => {
 
     if (!result.canceled && result.assets && result.assets.length > 0) {
       const asset = result.assets[0];
-      if (asset.fileSize && asset.fileSize > 5 * 1024 * 1024) {
-        throw new Error('Image size exceeds the 5MB limit.');
-      }
+      // Validate MIME type and file size
+      validateImageAsset(asset);
       const originalUri = asset.uri;
       const compressedUri = await compressImage(originalUri);
       return compressedUri;
@@ -166,9 +192,8 @@ export const captureImageWithCamera = async () => {
 
     if (!result.canceled && result.assets && result.assets.length > 0) {
       const asset = result.assets[0];
-      if (asset.fileSize && asset.fileSize > 5 * 1024 * 1024) {
-        throw new Error('Image size exceeds the 5MB limit.');
-      }
+      // Validate MIME type and file size
+      validateImageAsset(asset);
       const originalUri = asset.uri;
       const compressedUri = await compressImage(originalUri);
       return compressedUri;

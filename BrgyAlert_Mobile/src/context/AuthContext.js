@@ -1,5 +1,5 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
-import { Alert } from 'react-native';
+import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
+import { Alert, AppState } from 'react-native';
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -190,6 +190,42 @@ export const AuthProvider = ({ children }) => {
       console.log('[AuthContext] Unsubscribed from profile listener.');
     }
   };
+
+  // ─── Session Auto-Logout (30-min background inactivity) ───────────────────
+  const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+  const backgroundTimestampRef = useRef(null);
+
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState) => {
+      if (nextAppState === 'background' || nextAppState === 'inactive') {
+        // Record the time when app went to background
+        backgroundTimestampRef.current = Date.now();
+      } else if (nextAppState === 'active') {
+        // App came back to foreground
+        if (backgroundTimestampRef.current !== null) {
+          const elapsed = Date.now() - backgroundTimestampRef.current;
+          backgroundTimestampRef.current = null;
+
+          if (elapsed >= SESSION_TIMEOUT_MS && user) {
+            // Session expired — sign out and notify user
+            console.log('[AuthContext] Session expired after 30 min background — auto-logging out.');
+            signOut(auth).catch((e) => console.log('[AuthContext] Auto-logout signOut error:', e));
+            setUser(null);
+            setUserProfile(null);
+            unsubscribeFromProfile();
+            Alert.alert(
+              'Session Expired',
+              'You were automatically signed out after 30 minutes of inactivity. Please sign in again to continue.',
+              [{ text: 'OK' }]
+            );
+          }
+        }
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription.remove();
+  }, [user]);
 
   // ─── Auth state monitor ────────────────────────────────────────────────────
   useEffect(() => {

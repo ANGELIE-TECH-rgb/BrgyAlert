@@ -17,14 +17,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, query, collection, where, getDocs } from 'firebase/firestore';
 import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth';
 import { useAuth } from '../../context/AuthContext';
 import { db, auth } from '../../services/firebaseConfig';
 import AdminBottomTabNav from '../../components/AdminBottomTabNav';
 
 export default function AdminSettings({ navigation }) {
-  const { user, userProfile, logout, resetPassword } = useAuth();
+  const { user, userProfile, logout, resetPassword, updateUserRole } = useAuth();
   const insets = useSafeAreaInsets();
 
   // Profile Form States
@@ -43,6 +43,13 @@ export default function AdminSettings({ navigation }) {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [changingPassword, setChangingPassword] = useState(false);
+
+  // User Role Management States (admin-only)
+  const [searchEmail, setSearchEmail] = useState('');
+  const [searchedUser, setSearchedUser] = useState(null);
+  const [searchingUser, setSearchingUser] = useState(false);
+  const [newUserRole, setNewUserRole] = useState('');
+  const [savingRole, setSavingRole] = useState(false);
 
   // Barangay Configuration States
   const [barangayName, setBarangayName] = useState('Barangay Lepa');
@@ -265,6 +272,66 @@ export default function AdminSettings({ navigation }) {
     }
   };
 
+  // Search user by email for role management
+  const handleSearchUser = async () => {
+    if (!searchEmail.trim()) {
+      Alert.alert('Validation', 'Please enter an email to search.');
+      return;
+    }
+    setSearchingUser(true);
+    setSearchedUser(null);
+    try {
+      const q = query(collection(db, 'users'), where('email', '==', searchEmail.trim().toLowerCase()));
+      const snap = await getDocs(q);
+      if (snap.empty) {
+        Alert.alert('Not Found', 'No user found with that email address.');
+      } else {
+        const userData = { id: snap.docs[0].id, ...snap.docs[0].data() };
+        setSearchedUser(userData);
+        setNewUserRole(userData.role || 'citizen');
+      }
+    } catch (err) {
+      console.log('Error searching user:', err);
+      Alert.alert('Error', 'Could not search for user. Please try again.');
+    } finally {
+      setSearchingUser(false);
+    }
+  };
+
+  // Update user role using the existing updateUserRole from AuthContext
+  const handleUpdateUserRole = async () => {
+    if (!searchedUser || !newUserRole) return;
+    if (newUserRole === searchedUser.role) {
+      Alert.alert('No Change', 'The selected role is the same as the current role.');
+      return;
+    }
+    Alert.alert(
+      'Confirm Role Change',
+      `Change ${searchedUser.fullName || searchedUser.email}\'s role from "${searchedUser.role}" to "${newUserRole}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Confirm',
+          style: 'destructive',
+          onPress: async () => {
+            setSavingRole(true);
+            try {
+              // Direct Firestore update — admin is allowed to change any user's role
+              await updateUserRole(searchedUser.id, newUserRole);
+              setSearchedUser(prev => ({ ...prev, role: newUserRole }));
+              Alert.alert('Success', `Role updated to "${newUserRole}" for ${searchedUser.fullName || searchedUser.email}.`);
+            } catch (err) {
+              console.log('Error updating role:', err);
+              Alert.alert('Error', 'Could not update role. Please try again.');
+            } finally {
+              setSavingRole(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
@@ -467,7 +534,86 @@ export default function AdminSettings({ navigation }) {
           </View>
         </View>
 
-        {/* Preferences Section */}
+        {/* User Role Management — admin-only */}
+        {userProfile?.role === 'admin' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>User Role Management</Text>
+            <View style={styles.card}>
+              <Text style={[styles.inputLabel, { marginBottom: 4 }]}>Search by Email</Text>
+              <Text style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 10 }}>
+                Find a registered user and update their role.
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <TextInput
+                  style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                  value={searchEmail}
+                  onChangeText={setSearchEmail}
+                  placeholder="user@email.com"
+                  placeholderTextColor="#9CA3AF"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                <TouchableOpacity
+                  style={[styles.saveButton, { paddingHorizontal: 16, marginTop: 0, minWidth: 80, height: 48, justifyContent: 'center' }]}
+                  onPress={handleSearchUser}
+                  disabled={searchingUser}
+                  activeOpacity={0.8}
+                >
+                  {searchingUser
+                    ? <ActivityIndicator size="small" color="#FFFFFF" />
+                    : <Text style={styles.saveButtonText}>Search</Text>
+                  }
+                </TouchableOpacity>
+              </View>
+
+              {searchedUser && (
+                <View style={{ marginTop: 16, padding: 14, backgroundColor: '#F0F4FF', borderRadius: 12 }}>
+                  <Text style={{ fontSize: 15, fontWeight: '700', color: '#1A2C5B', marginBottom: 2 }}>
+                    {searchedUser.fullName || 'Unknown'}
+                  </Text>
+                  <Text style={{ fontSize: 13, color: '#6B7280', marginBottom: 10 }}>{searchedUser.email}</Text>
+
+                  <Text style={styles.inputLabel}>Current Role: <Text style={{ color: '#0F2C59', fontWeight: '700' }}>{searchedUser.role}</Text></Text>
+                  <Text style={[styles.inputLabel, { marginTop: 10 }]}>New Role</Text>
+                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
+                    {['citizen', 'responder', 'admin'].map((role) => (
+                      <TouchableOpacity
+                        key={role}
+                        onPress={() => setNewUserRole(role)}
+                        style={[
+                          {
+                            flex: 1, paddingVertical: 10, borderRadius: 10,
+                            borderWidth: 1.5,
+                            borderColor: newUserRole === role ? '#0F2C59' : '#D1D5DB',
+                            backgroundColor: newUserRole === role ? '#0F2C59' : '#FFFFFF',
+                            alignItems: 'center'
+                          }
+                        ]}
+                      >
+                        <Text style={{ fontSize: 13, fontWeight: '600', color: newUserRole === role ? '#FFFFFF' : '#6B7280', textTransform: 'capitalize' }}>
+                          {role}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <TouchableOpacity
+                    style={[styles.saveButton, { marginTop: 14 }]}
+                    onPress={handleUpdateUserRole}
+                    disabled={savingRole || newUserRole === searchedUser.role}
+                    activeOpacity={0.8}
+                  >
+                    {savingRole
+                      ? <ActivityIndicator size="small" color="#FFFFFF" />
+                      : <Text style={styles.saveButtonText}>Apply Role Change</Text>
+                    }
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Preferences</Text>
           <View style={styles.card}>
