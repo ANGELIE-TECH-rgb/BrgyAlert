@@ -157,5 +157,10 @@ service cloud.firestore {
       allow write: if isAdminOrResponder();
     }
 
+    match /brgyConfig/{configId} {
+      allow read: if true;
+      allow write: if isAdminOrResponder();
+    }
+
   }
 }

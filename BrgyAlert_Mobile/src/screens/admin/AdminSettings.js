@@ -787,6 +787,24 @@ export default function AdminSettings({ navigation }) {
               <Feather name="chevron-right" size={18} color="#9CA3AF" />
             </TouchableOpacity>
 
+            {/* Clear App Cache Row */}
+            <TouchableOpacity
+              style={[styles.settingRow, styles.borderTop]}
+              onPress={handleClearCache}
+              activeOpacity={0.7}
+            >
+              <View style={styles.settingRowLeft}>
+                <View style={[styles.rowIconWrapper, { backgroundColor: '#FEF2F2' }]}>
+                  <Feather name="trash-2" size={18} color="#EF4444" />
+                </View>
+                <View>
+                  <Text style={styles.settingTitle}>Clear App Cache</Text>
+                  <Text style={styles.settingSubtitle}>Reset local preferences and sound cache</Text>
+                </View>
+              </View>
+              <Feather name="chevron-right" size={18} color="#9CA3AF" />
+            </TouchableOpacity>
+
           </View>
         </View>
 
@@ -870,33 +888,7 @@ export default function AdminSettings({ navigation }) {
           </View>
         </View>
 
-        {/* System Information Expansion */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>System Information</Text>
-          <View style={styles.card}>
-            <View style={styles.profileDetailRow}>
-              <Text style={styles.detailLabel}>App Version</Text>
-              <Text style={styles.detailValue}>1.0.0 (Build 24)</Text>
-            </View>
-            <View style={styles.profileDetailRow}>
-              <Text style={styles.detailLabel}>Active Station</Text>
-              <Text style={styles.detailValue}>{barangayName}</Text>
-            </View>
-            <View style={styles.profileDetailRow}>
-              <Text style={styles.detailLabel}>Environment</Text>
-              <Text style={styles.detailValue}>Production (Firebase)</Text>
-            </View>
-            
-            <TouchableOpacity
-              style={[styles.editProfileButton, { backgroundColor: '#FEF2F2', marginTop: 12 }]}
-              onPress={handleClearCache}
-              activeOpacity={0.7}
-            >
-              <Feather name="trash-2" size={14} color="#EF4444" style={{ marginRight: 6 }} />
-              <Text style={[styles.editProfileButtonText, { color: '#EF4444' }]}>Clear App Cache</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+
 
         {/* Danger/Sign Out */}
         <TouchableOpacity

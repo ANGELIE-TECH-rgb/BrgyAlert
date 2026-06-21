@@ -8,15 +8,50 @@ import {
   FlatList,
   ActivityIndicator,
   TextInput,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { collection, query, orderBy, onSnapshot, doc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, writeBatch, getDocs, where } from 'firebase/firestore';
 import { Feather } from '@expo/vector-icons';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import { db } from '../../services/firebaseConfig';
 import AdminBottomTabNav from '../../components/AdminBottomTabNav';
 import SkeletonLoader from '../../components/SkeletonLoader';
 import EmptyState from '../../components/EmptyState';
+
+const getRelativeTime = (dateInput) => {
+  if (!dateInput) return '';
+  const now = new Date();
+  const date = new Date(dateInput);
+  const diffMs = now - date;
+  
+  if (diffMs < 0) return 'Just now';
+  
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  
+  const diffHours = Math.floor(diffMs / 3600000);
+  if (diffHours < 24) {
+    const isSameDay = now.getDate() === date.getDate() && now.getMonth() === date.getMonth() && now.getFullYear() === date.getFullYear();
+    if (isSameDay) {
+      return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+    }
+  }
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday = yesterday.getDate() === date.getDate() && yesterday.getMonth() === date.getMonth() && yesterday.getFullYear() === date.getFullYear();
+  if (isYesterday) return 'Yesterday';
+
+  const diffDays = Math.floor(diffMs / 86400000);
+  if (diffDays < 7) {
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    return days[date.getDay()];
+  }
+
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
 
 export default function AdminMessages({ navigation }) {
   const insets = useSafeAreaInsets();
@@ -25,6 +60,14 @@ export default function AdminMessages({ navigation }) {
   const [chatThreads, setChatThreads] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [readFilter, setReadFilter] = useState('all'); // all | unread | read
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    setTimeout(() => {
+      setRefreshing(false);
+    }, 800);
+  };
 
   // Dynamic user profiles lookup
   const [userProfiles, setUserProfiles] = useState({});
@@ -164,21 +207,64 @@ export default function AdminMessages({ navigation }) {
     return () => unsubscribe();
   }, []);
 
+  // Get status dot color
+  const getStatusDotColor = (status) => {
+    switch (status) {
+      case 'submitted': return '#D97706'; // Pending (Amber)
+      case 'under_review': return '#2563EB'; // Under Review (Blue)
+      case 'dispatched': return '#10B981'; // Dispatched (Green)
+      case 'resolved':
+      case 'done':
+        return '#9CA3AF'; // Resolved (Grey)
+      default: return '#9CA3AF';
+    }
+  };
+
+  const totalUnreadCount = chatThreads.reduce((sum, t) => sum + (t.unreadCountAdmin || 0), 0);
+
+  const handleMarkAllRead = async () => {
+    Alert.alert(
+      'Mark All as Read',
+      'Are you sure you want to mark all messages as read?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Mark Read',
+          style: 'default',
+          onPress: async () => {
+            try {
+              const batch = writeBatch(db);
+              const unreadAlertsQuery = query(
+                collection(db, 'alerts'),
+                where('unreadCountAdmin', '>', 0)
+              );
+              const snapshot = await getDocs(unreadAlertsQuery);
+              if (snapshot.empty) return;
+
+              snapshot.forEach((alertDoc) => {
+                batch.update(doc(db, 'alerts', alertDoc.id), {
+                  unreadCountAdmin: 0
+                });
+              });
+
+              await batch.commit();
+            } catch (err) {
+              console.log('Error marking all as read:', err);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   // Render chat thread row
   const renderItem = ({ item }) => {
     const userProfile = userProfiles[item.userId];
     const resolvedReporterName = userProfile?.fullName || item.reporterName;
 
     // Format Time of Last Activity
-    let timeText = '';
     const lastActive = item.lastMessageAt || (item.alerts[0] && item.alerts[0].createdAt ? (item.alerts[0].createdAt.toDate ? item.alerts[0].createdAt.toDate() : new Date(item.alerts[0].createdAt)) : null);
-    if (lastActive) {
-      try {
-        timeText = new Date(lastActive).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-      } catch (e) {
-        // Fallback
-      }
-    }
+    const timeText = getRelativeTime(lastActive);
 
     // Reports Categories Summary (e.g. "Reports: Fire, Crime")
     const reportCategories = item.alerts.map(a => a.category).filter((val, id, self) => self.indexOf(val) === id).join(', ');
@@ -199,7 +285,7 @@ export default function AdminMessages({ navigation }) {
 
     return (
       <TouchableOpacity
-        style={styles.card}
+        style={[styles.card, unreadCount > 0 && styles.cardUnreadAccent]}
         onPress={() =>
           navigation.navigate('ChatScreen', {
             userId: item.userId,
@@ -218,10 +304,16 @@ export default function AdminMessages({ navigation }) {
           <View style={styles.cardContent}>
             <View style={styles.cardTitleRow}>
               <Text style={styles.reporterNameText}>{resolvedReporterName}</Text>
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>
-                  {item.alerts.length} report{item.alerts.length !== 1 ? 's' : ''}
-                </Text>
+              
+              {/* Dynamic Status Mini Dots Stack */}
+              <View style={styles.statusDotRow}>
+                {item.alerts.map((alertItem) => (
+                  <View 
+                    key={alertItem.id} 
+                    style={[styles.statusDot, { backgroundColor: getStatusDotColor(alertItem.status) }]} 
+                    title={alertItem.category}
+                  />
+                ))}
               </View>
             </View>
             <Text style={styles.categoriesText}>
@@ -256,10 +348,20 @@ export default function AdminMessages({ navigation }) {
 
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Incident Chats</Text>
-        <Text style={styles.headerSubtitle}>
-          {loading ? 'Loading...' : `Conversations with ${chatThreads.length} active reporter${chatThreads.length !== 1 ? 's' : ''}`}
-        </Text>
+        <View style={styles.headerTitleContainer}>
+          <View style={styles.headerMainRow}>
+            <Text style={styles.headerTitle}>Incident Chats</Text>
+            {!loading && totalUnreadCount > 0 && (
+              <TouchableOpacity style={styles.markReadBtn} onPress={handleMarkAllRead} activeOpacity={0.8}>
+                <Feather name="check-square" size={14} color="#0B2564" style={{ marginRight: 4 }} />
+                <Text style={styles.markReadBtnText}>Mark all read</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          <Text style={styles.headerSubtitle}>
+            {loading ? 'Loading...' : `Conversations with ${chatThreads.length} active reporter${chatThreads.length !== 1 ? 's' : ''}`}
+          </Text>
+        </View>
       </View>
 
       {/* Search and Filter Panel */}
@@ -334,6 +436,8 @@ export default function AdminMessages({ navigation }) {
           renderItem={renderItem}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          refreshing={refreshing}
+          onRefresh={handleRefresh}
         />
       )}
 
@@ -367,6 +471,15 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     marginBottom: 20,
   },
+  headerTitleContainer: {
+    width: '100%',
+  },
+  headerMainRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+  },
   headerTitle: {
     fontSize: 28,
     fontWeight: '700',
@@ -376,6 +489,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B7280',
     marginTop: 2,
+  },
+  markReadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F0FE',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  markReadBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#0B2564',
   },
   listContent: {
     paddingHorizontal: 24,
@@ -396,6 +522,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.02,
     shadowRadius: 12,
     elevation: 2,
+  },
+  cardUnreadAccent: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#0B2564',
+    paddingLeft: 12, // offset for border width
   },
   cardLeft: {
     flexDirection: 'row',
@@ -423,24 +554,26 @@ const styles = StyleSheet.create({
   cardTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingRight: 8,
     marginBottom: 2,
   },
   reporterNameText: {
     fontSize: 16,
     fontWeight: '700',
     color: '#1F2937',
+    flexShrink: 1,
+    marginRight: 8,
   },
-  badge: {
-    backgroundColor: '#F3F4F6',
-    paddingVertical: 2,
-    paddingHorizontal: 6,
-    borderRadius: 6,
-    marginLeft: 8,
+  statusDotRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  badgeText: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#4B5563',
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginLeft: 4,
   },
   categoriesText: {
     fontSize: 11,

@@ -24,6 +24,40 @@ import SkeletonLoader from '../../components/SkeletonLoader';
 import ConnectionBlocker from '../../components/ConnectionBlocker';
 import EmptyState from '../../components/EmptyState';
 
+const getRelativeTime = (dateInput) => {
+  if (!dateInput) return '';
+  const now = new Date();
+  const date = new Date(dateInput);
+  const diffMs = now - date;
+  
+  if (diffMs < 0) return 'Just now';
+  
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  
+  const diffHours = Math.floor(diffMs / 3600000);
+  if (diffHours < 24) {
+    const isSameDay = now.getDate() === date.getDate() && now.getMonth() === date.getMonth() && now.getFullYear() === date.getFullYear();
+    if (isSameDay) {
+      return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+    }
+  }
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday = yesterday.getDate() === date.getDate() && yesterday.getMonth() === date.getMonth() && yesterday.getFullYear() === date.getFullYear();
+  if (isYesterday) return 'Yesterday';
+
+  const diffDays = Math.floor(diffMs / 86400000);
+  if (diffDays < 7) {
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    return days[date.getDay()];
+  }
+
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
+
 export default function ChatMessages({ navigation }) {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
@@ -33,6 +67,14 @@ export default function ChatMessages({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    setTimeout(() => {
+      setRefreshing(false);
+    }, 800);
+  };
 
   // Monitor Network Connectivity State
   useEffect(() => {
@@ -183,6 +225,19 @@ export default function ChatMessages({ navigation }) {
     }
   };
 
+  // Helper for status borders
+  const getStatusBorderColor = (status) => {
+    switch (status) {
+      case 'submitted': return '#F59E0B'; // Amber
+      case 'under_review': return '#3B82F6'; // Blue
+      case 'dispatched': return '#10B981'; // Green
+      case 'resolved':
+      case 'done':
+        return '#9CA3AF'; // Grey
+      default: return '#D97706';
+    }
+  };
+
   // Render incident chat item card
   const renderItem = ({ item, index }) => {
     const badge = getStatusBadgeStyle(item.status);
@@ -190,16 +245,8 @@ export default function ChatMessages({ navigation }) {
     const serialCode = item.id ? `#INC-${item.id.substring(0, 3).toUpperCase()}` : `#INC-00${index + 1}`;
 
     // Format Time of Last Message or Creation
-    let timeText = '';
     const timeRef = item.lastMessageAt || item.createdAt;
-    if (timeRef) {
-      try {
-        const date = timeRef.toDate ? timeRef.toDate() : new Date(timeRef);
-        timeText = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-      } catch (e) {
-        // Fallback
-      }
-    }
+    const timeText = getRelativeTime(timeRef ? (timeRef.toDate ? timeRef.toDate() : new Date(timeRef)) : null);
 
     const previewMessageText = item.lastMessageText || item.details || 'No message or details yet.';
     const displayMessage = previewMessageText.length > 55
@@ -207,15 +254,27 @@ export default function ChatMessages({ navigation }) {
       : previewMessageText;
 
     const unreadCount = item.unreadCountCitizen || 0;
+    const isResolved = item.status === 'done' || item.status === 'resolved';
 
     return (
       <TouchableOpacity
-        style={styles.card}
+        style={[
+          styles.card, 
+          unreadCount > 0 && styles.cardUnreadAccent,
+          isResolved && styles.cardResolvedMuted
+        ]}
         onPress={() => navigation.navigate('ChatScreen', { alertId: item.id })}
         activeOpacity={0.7}
       >
         <View style={styles.cardLeft}>
-          <View style={[styles.iconWrapper, { backgroundColor: catStyle.bg }]}>
+          <View style={[
+            styles.iconWrapper, 
+            { 
+              backgroundColor: catStyle.bg,
+              borderWidth: 2,
+              borderColor: getStatusBorderColor(item.status)
+            }
+          ]}>
             <Feather name={catStyle.icon} size={20} color={catStyle.color} />
           </View>
           <View style={styles.cardContent}>
@@ -229,7 +288,11 @@ export default function ChatMessages({ navigation }) {
               </View>
             </View>
             <Text 
-              style={[styles.messagePreview, unreadCount > 0 && styles.messagePreviewUnread]} 
+              style={[
+                styles.messagePreview, 
+                unreadCount > 0 && styles.messagePreviewUnread,
+                isResolved && styles.messagePreviewItalic
+              ]} 
               numberOfLines={1}
             >
               {displayMessage}
@@ -334,6 +397,8 @@ export default function ChatMessages({ navigation }) {
           renderItem={renderItem}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          refreshing={refreshing}
+          onRefresh={handleRefresh}
         />
       )}
 
@@ -407,6 +472,17 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.02,
     shadowRadius: 12,
     elevation: 2,
+  },
+  cardUnreadAccent: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#0F2C59',
+    paddingLeft: 12,
+  },
+  cardResolvedMuted: {
+    opacity: 0.55,
+  },
+  messagePreviewItalic: {
+    fontStyle: 'italic',
   },
   cardLeft: {
     flexDirection: 'row',

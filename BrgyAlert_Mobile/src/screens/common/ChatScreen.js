@@ -441,6 +441,18 @@ export default function ChatScreen({ route, navigation }) {
     }
   };
 
+  const handleUpdateStatus = async (newStatus) => {
+    if (!currentAlertId) return;
+    try {
+      await updateDoc(doc(db, 'alerts', currentAlertId), {
+        status: newStatus
+      });
+      Alert.alert('Status Updated', `Incident status set to ${newStatus.replace('_', ' ').toUpperCase()}`);
+    } catch (err) {
+      console.log('Error updating status from chat:', err);
+    }
+  };
+
   // Helper for status badge style
   const getStatusBadgeStyle = (status) => {
     switch (status) {
@@ -461,7 +473,7 @@ export default function ChatScreen({ route, navigation }) {
   };
 
   // Render message bubble item
-  const renderMessageItem = ({ item }) => {
+  const renderMessageItem = ({ item, index }) => {
     const isMe = item.senderId === user.uid;
     const timeString = item.createdAt
       ? new Date(item.createdAt.toDate ? item.createdAt.toDate() : item.createdAt).toLocaleTimeString('en-US', {
@@ -471,27 +483,85 @@ export default function ChatScreen({ route, navigation }) {
         })
       : '';
 
+    // Date separator logic
+    let showDateSeparator = false;
+    let dateSeparatorText = '';
+    const currentMsgDate = item.createdAt ? (item.createdAt.toDate ? item.createdAt.toDate() : new Date(item.createdAt)) : null;
+
+    if (currentMsgDate) {
+      if (index === 0) {
+        showDateSeparator = true;
+      } else {
+        const prevMsg = messages[index - 1];
+        const prevMsgDate = prevMsg?.createdAt ? (prevMsg.createdAt.toDate ? prevMsg.createdAt.toDate() : new Date(prevMsg.createdAt)) : null;
+        if (prevMsgDate) {
+          showDateSeparator = currentMsgDate.toDateString() !== prevMsgDate.toDateString();
+        }
+      }
+
+      if (showDateSeparator) {
+        const today = new Date();
+        const yesterday = new Date();
+        yesterday.setDate(today.getDate() - 1);
+
+        if (currentMsgDate.toDateString() === today.toDateString()) {
+          dateSeparatorText = 'Today';
+        } else if (currentMsgDate.toDateString() === yesterday.toDateString()) {
+          dateSeparatorText = 'Yesterday';
+        } else {
+          dateSeparatorText = currentMsgDate.toLocaleDateString('en-US', {
+            weekday: 'long',
+            month: 'short',
+            day: 'numeric',
+          });
+        }
+      }
+    }
+
     return (
-      <View style={[styles.messageRow, isMe ? styles.messageRowRight : styles.messageRowLeft]}>
-        {!isMe && (
-          <View style={styles.senderAvatar}>
-            <Text style={styles.senderAvatarText}>
-              {item.senderName ? item.senderName.substring(0, 1).toUpperCase() : '?'}
-            </Text>
+      <View style={{ width: '100%' }}>
+        {showDateSeparator && (
+          <View style={styles.dateSeparatorContainer}>
+            <View style={styles.dateSeparatorLine} />
+            <View style={styles.dateSeparatorPill}>
+              <Text style={styles.dateSeparatorText}>{dateSeparatorText}</Text>
+            </View>
+            <View style={styles.dateSeparatorLine} />
           </View>
         )}
-        <View style={[styles.bubble, isMe ? styles.bubbleRight : styles.bubbleLeft]}>
-          {!isMe && <Text style={styles.senderNameText}>{item.senderName}</Text>}
-          <Text 
-            style={[styles.bubbleText, isMe ? styles.bubbleTextRight : styles.bubbleTextLeft]}
-            textBreakStrategy="simple"
-          >
-            {item.text}
-            <Text style={{ color: 'transparent' }}>{"  "}</Text>
-          </Text>
-          <Text style={[styles.messageTime, isMe ? styles.messageTimeRight : styles.messageTimeLeft]}>
-            {timeString}{isMe ? (item.read ? ' • Read' : ' • Sent') : ''}
-          </Text>
+        <View style={[styles.messageRow, isMe ? styles.messageRowRight : styles.messageRowLeft]}>
+          {!isMe && (
+            <View style={styles.senderAvatar}>
+              <Text style={styles.senderAvatarText}>
+                {item.senderName ? item.senderName.substring(0, 1).toUpperCase() : '?'}
+              </Text>
+            </View>
+          )}
+          <View style={[styles.bubble, isMe ? styles.bubbleRight : styles.bubbleLeft]}>
+            {!isMe && <Text style={styles.senderNameText}>{item.senderName}</Text>}
+            <Text 
+              style={[styles.bubbleText, isMe ? styles.bubbleTextRight : styles.bubbleTextLeft]}
+              textBreakStrategy="simple"
+            >
+              {item.text}
+              <Text style={{ color: 'transparent' }}>{"  "}</Text>
+            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 4 }}>
+              <Text style={[styles.messageTime, isMe ? styles.messageTimeRight : styles.messageTimeLeft, { marginTop: 0 }]}>
+                {timeString}
+              </Text>
+              {isMe && (
+                item.read ? (
+                  <View style={{ flexDirection: 'row', marginLeft: 4 }}>
+                    <Feather name="check" size={12} color="#93C5FD" />
+                    <Feather name="check" size={12} color="#93C5FD" style={{ marginLeft: -8 }} />
+                  </View>
+                ) : (
+                  <Feather name="check" size={12} color="#CBD5E1" style={{ marginLeft: 4 }} />
+                )
+              )}
+            </View>
+          </View>
         </View>
       </View>
     );
@@ -517,8 +587,30 @@ export default function ChatScreen({ route, navigation }) {
     );
   };
 
+  const renderEmptyState = () => {
+    return (
+      <View style={styles.emptyWelcomeContainer}>
+        <View style={styles.emptyWelcomeCard}>
+          <View style={styles.emptyWelcomeIconWrapper}>
+            <Feather name="message-square" size={32} color="#0B2564" />
+          </View>
+          <Text style={styles.emptyWelcomeTitle}>Start the Conversation</Text>
+          <Text style={styles.emptyWelcomeDesc}>
+            {isAdmin 
+              ? "Send a message to coordinate with the citizen regarding this incident report." 
+              : "This thread is open for direct coordination with the Barangay Command Center responders."}
+          </Text>
+        </View>
+      </View>
+    );
+  };
+
   const activeBadge = activeAlert ? getStatusBadgeStyle(activeAlert.status) : null;
   const currentSerial = activeAlert ? `#INC-${activeAlert.id.substring(0, 3).toUpperCase()}` : '';
+
+  const isIncidentResolved = activeAlert?.status === 'done' || activeAlert?.status === 'resolved';
+  const isUnverifiedCitizen = !isAdmin && user && !user.emailVerified;
+  const isInputDisabled = isIncidentResolved || isUnverifiedCitizen;
 
   return (
     <KeyboardAvoidingView
@@ -620,12 +712,50 @@ export default function ChatScreen({ route, navigation }) {
               {currentSerial} • {activeAlert.category}
             </Text>
           </View>
-          {activeBadge && (
-            <View style={[styles.contextBadge, { backgroundColor: activeBadge.bg }]}>
-              <Text style={[styles.contextBadgeText, { color: activeBadge.text }]}>
-                {activeBadge.label}
-              </Text>
+          
+          {/* Admin Quick-Status Transition Chips */}
+          {isAdmin ? (
+            <View style={styles.adminStatusChips}>
+              {activeAlert.status !== 'under_review' && activeAlert.status !== 'resolved' && activeAlert.status !== 'done' && (
+                <TouchableOpacity 
+                  style={[styles.statusChip, { backgroundColor: '#EFF6FF' }]} 
+                  onPress={() => handleUpdateStatus('under_review')}
+                >
+                  <Text style={[styles.statusChipText, { color: '#2563EB' }]}>Review</Text>
+                </TouchableOpacity>
+              )}
+              {activeAlert.status !== 'dispatched' && activeAlert.status !== 'resolved' && activeAlert.status !== 'done' && (
+                <TouchableOpacity 
+                  style={[styles.statusChip, { backgroundColor: '#ECFDF5' }]} 
+                  onPress={() => handleUpdateStatus('dispatched')}
+                >
+                  <Text style={[styles.statusChipText, { color: '#10B981' }]}>Dispatch</Text>
+                </TouchableOpacity>
+              )}
+              {activeAlert.status !== 'resolved' && activeAlert.status !== 'done' && (
+                <TouchableOpacity 
+                  style={[styles.statusChip, { backgroundColor: '#F3F4F6' }]} 
+                  onPress={() => handleUpdateStatus('resolved')}
+                >
+                  <Text style={[styles.statusChipText, { color: '#4B5563' }]}>Resolve</Text>
+                </TouchableOpacity>
+              )}
+              {activeBadge && (activeAlert.status === 'resolved' || activeAlert.status === 'done' || activeAlert.status === 'declined') && (
+                <View style={[styles.contextBadge, { backgroundColor: activeBadge.bg }]}>
+                  <Text style={[styles.contextBadgeText, { color: activeBadge.text }]}>
+                    {activeBadge.label}
+                  </Text>
+                </View>
+              )}
             </View>
+          ) : (
+            activeBadge && (
+              <View style={[styles.contextBadge, { backgroundColor: activeBadge.bg }]}>
+                <Text style={[styles.contextBadgeText, { color: activeBadge.text }]}>
+                  {activeBadge.label}
+                </Text>
+              </View>
+            )
           )}
         </View>
       )}
@@ -643,31 +773,62 @@ export default function ChatScreen({ route, navigation }) {
           keyExtractor={(item) => item.id}
           renderItem={renderMessageItem}
           ListFooterComponent={renderListFooter}
+          ListEmptyComponent={renderEmptyState}
           contentContainerStyle={styles.chatListContent}
           showsVerticalScrollIndicator={false}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
         />
       )}
 
+      {/* Resolved or Unverified Composer Warning Banners */}
+      {isIncidentResolved && (
+        <View style={styles.statusBannerResolved}>
+          <Feather name="lock" size={14} color="#4B5563" style={{ marginRight: 6 }} />
+          <Text style={styles.statusBannerResolvedText}>This incident has been resolved. Chat is now read-only.</Text>
+        </View>
+      )}
+      {isUnverifiedCitizen && !isIncidentResolved && (
+        <View style={styles.statusBannerUnverified}>
+          <Feather name="alert-triangle" size={14} color="#D97706" style={{ marginRight: 6 }} />
+          <Text style={styles.statusBannerUnverifiedText}>Email verification required to send messages.</Text>
+        </View>
+      )}
+
       {/* Input Composer Panel */}
       <View style={[styles.composerContainer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-        <TextInput
-          style={styles.input}
-          placeholder="Type your message here..."
-          placeholderTextColor="#9CA3AF"
-          value={inputText}
-          onChangeText={handleTextChange}
-          onBlur={() => updateTypingStatus(false)}
-          multiline
-          maxLength={500}
-        />
+        <View style={{ flex: 1, position: 'relative', justifyContent: 'center' }}>
+          <TextInput
+            style={[styles.input, isInputDisabled && styles.inputDisabled, { paddingRight: inputText.length >= 400 ? 64 : 16 }]}
+            placeholder={
+              isIncidentResolved 
+                ? "Chat is read-only" 
+                : isUnverifiedCitizen 
+                ? "Verify email to type..." 
+                : "Type your message here..."
+            }
+            placeholderTextColor="#9CA3AF"
+            value={inputText}
+            onChangeText={handleTextChange}
+            onBlur={() => updateTypingStatus(false)}
+            multiline
+            maxLength={500}
+            editable={!isInputDisabled}
+          />
+          {inputText.length >= 400 && (
+            <Text style={styles.charCounter}>{inputText.length}/500</Text>
+          )}
+        </View>
         <TouchableOpacity
-          style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
+          style={[styles.sendButton, (!inputText.trim() || isInputDisabled) && styles.sendButtonDisabled]}
           onPress={handleSend}
-          disabled={!inputText.trim()}
+          disabled={!inputText.trim() || isInputDisabled}
           activeOpacity={0.8}
         >
-          <Feather name="send" size={18} color="#FFFFFF" />
+          {isInputDisabled ? (
+            <Feather name="lock" size={18} color="#FFFFFF" />
+          ) : (
+            <Feather name="send" size={18} color="#FFFFFF" />
+          )}
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -943,5 +1104,136 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     backgroundColor: '#9CA3AF',
     marginHorizontal: 3,
+  },
+  dateSeparatorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 18,
+    width: '100%',
+  },
+  dateSeparatorLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E5E7EB',
+  },
+  dateSeparatorPill: {
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginHorizontal: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  dateSeparatorText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#6B7280',
+  },
+  statusBannerResolved: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F3F4F6',
+    paddingVertical: 8,
+    paddingHorizontal: 24,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  statusBannerResolvedText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#4B5563',
+  },
+  statusBannerUnverified: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFF7ED',
+    paddingVertical: 8,
+    paddingHorizontal: 24,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#FFEDD5',
+  },
+  statusBannerUnverifiedText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#D97706',
+  },
+  adminStatusChips: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statusChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginLeft: 6,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  statusChipText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  charCounter: {
+    position: 'absolute',
+    right: 12,
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#9CA3AF',
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  inputDisabled: {
+    backgroundColor: '#E5E7EB',
+    color: '#9CA3AF',
+  },
+  emptyWelcomeContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    marginTop: 40,
+  },
+  emptyWelcomeCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    width: '100%',
+    shadowColor: '#00000040',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.01,
+    shadowRadius: 10,
+    elevation: 1,
+  },
+  emptyWelcomeIconWrapper: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#E8F0FE',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  emptyWelcomeTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F2C59',
+    marginBottom: 8,
+  },
+  emptyWelcomeDesc: {
+    fontSize: 13,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 18,
   },
 });

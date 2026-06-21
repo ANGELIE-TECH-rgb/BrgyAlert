@@ -60,7 +60,7 @@ export default function AdminBottomTabNav() {
   }, [user]);
 
   const tabs = [
-    { name: 'AdminHome', label: 'Dashboard', icon: 'layout' },
+    { name: 'AdminHome', label: 'Home', icon: 'home' },
     { name: 'AdminQueue', label: 'Records', icon: 'clipboard' },
     { name: 'AdminMessages', label: 'Messages', icon: 'message-square' },
     { name: 'AdminAnalytics', label: 'Analytics', icon: 'bar-chart-2' },
