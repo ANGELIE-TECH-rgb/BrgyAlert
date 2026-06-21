@@ -34,7 +34,7 @@ import SkeletonLoader from '../../components/SkeletonLoader';
 import ConnectionBlocker from '../../components/ConnectionBlocker';
 
 export default function CitizenDashboard({ navigation }) {
-  const { user, userProfile } = useAuth();
+  const { user, userProfile, sendVerificationEmail } = useAuth();
   const insets = useSafeAreaInsets();
   const { height: H } = useWindowDimensions();
 
@@ -45,6 +45,20 @@ export default function CitizenDashboard({ navigation }) {
   const [recentLogs, setRecentLogs] = useState([]);
   const [loadingLogs, setLoadingLogs] = useState(true);
   const [showTutorial, setShowTutorial] = useState(false);
+  const [isVerificationBannerDismissed, setIsVerificationBannerDismissed] = useState(false);
+  const [sendingVerification, setSendingVerification] = useState(false);
+
+  const handleResendVerification = async () => {
+    setSendingVerification(true);
+    try {
+      await sendVerificationEmail();
+      Alert.alert('Verification Sent', 'A secure verification link has been resent to your registered email.');
+    } catch (err) {
+      Alert.alert('Error', err.message || 'Could not dispatch verification email. Please try again.');
+    } finally {
+      setSendingVerification(false);
+    }
+  };
 
   // Monitor navigation focus to trigger/replay the tour
   useEffect(() => {
@@ -79,7 +93,7 @@ export default function CitizenDashboard({ navigation }) {
 
   const citizenTourSteps = [
     {
-      title: 'Instant Panic Button',
+      title: 'Instant Panic Dispatch',
       desc: 'Hold this button for 3 seconds in severe emergencies to notify responders and broadcast your GPS coordinates.',
       top: Math.round(H * 0.38),
       arrow: 'top'
@@ -411,6 +425,33 @@ export default function CitizenDashboard({ navigation }) {
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+
+        {/* Email Verification Banner */}
+        {user && !user.emailVerified && !isVerificationBannerDismissed && (
+          <View style={styles.verificationWarningBanner}>
+            <View style={styles.verificationBannerMain}>
+              <Feather name="alert-triangle" size={20} color="#856404" style={{ marginRight: 10 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.verificationBannerTitle}>Verify Your Email Address</Text>
+                <Text style={styles.verificationBannerDesc}>
+                  Please check your inbox. Verification is required to unlock coordinates / dispatch messaging.
+                </Text>
+                <TouchableOpacity 
+                  style={styles.resendVerifyLink} 
+                  onPress={handleResendVerification}
+                  disabled={sendingVerification}
+                >
+                  <Text style={styles.resendVerifyLinkText}>
+                    {sendingVerification ? 'Sending link...' : 'Resend verification link'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity onPress={() => setIsVerificationBannerDismissed(true)}>
+                <Feather name="x" size={18} color="#856404" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
         {/* Header Block */}
         <View style={styles.header}>
@@ -1339,5 +1380,38 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '700',
+  },
+  verificationWarningBanner: {
+    backgroundColor: '#FFF3CD',
+    borderColor: '#FFEEBA',
+    borderWidth: 1,
+    borderRadius: 16,
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 16,
+  },
+  verificationBannerMain: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  verificationBannerTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#856404',
+    marginBottom: 4,
+  },
+  verificationBannerDesc: {
+    fontSize: 12,
+    color: '#856404',
+    lineHeight: 17,
+  },
+  resendVerifyLink: {
+    marginTop: 8,
+  },
+  resendVerifyLinkText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0F2C59',
+    textDecorationLine: 'underline',
   },
 });

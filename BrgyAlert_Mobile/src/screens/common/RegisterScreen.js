@@ -85,6 +85,10 @@ export default function RegisterScreen({ navigation }) {
   const [phoneNumber, setPhoneNumber] = useState(''); // Initialized to empty string for placeholder visibility
   const [gender, setGender] = useState('');
 
+  // Step 1: Terms consent
+  const [acceptTerms, setAcceptTerms] = useState(false);
+  const [termsModalVisible, setTermsModalVisible] = useState(false);
+
   // Modals Visibility
   const [genderModalVisible, setGenderModalVisible] = useState(false);
   const [calendarModalVisible, setCalendarModalVisible] = useState(false);
@@ -186,6 +190,10 @@ export default function RegisterScreen({ navigation }) {
   const handleNextStep = () => {
     if (!email || !password || !confirmPassword) {
       setErrorMsg('Please fill out all credentials fields.');
+      return;
+    }
+    if (!acceptTerms) {
+      setErrorMsg('You must agree to the Terms of Service and Privacy Policy.');
       return;
     }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -402,6 +410,58 @@ export default function RegisterScreen({ navigation }) {
           </View>
 
           {password.length > 0 && (
+            <View style={styles.passwordStrengthContainer}>
+              <View style={styles.strengthBarBg}>
+                <View 
+                  style={[
+                    styles.strengthBarFill, 
+                    { 
+                      width: (() => {
+                        let score = 0;
+                        if (password.length >= 8) score++;
+                        if (/[A-Z]/.test(password) && /[a-z]/.test(password)) score++;
+                        if (/\d/.test(password)) score++;
+                        if (/[!@#$%^&*(),.?":{}|<>]/.test(password)) score++;
+                        return score === 0 ? '0%' : score === 1 ? '25%' : score === 2 ? '50%' : score === 3 ? '75%' : '100%';
+                      })(),
+                      backgroundColor: (() => {
+                        let score = 0;
+                        if (password.length >= 8) score++;
+                        if (/[A-Z]/.test(password) && /[a-z]/.test(password)) score++;
+                        if (/\d/.test(password)) score++;
+                        if (/[!@#$%^&*(),.?":{}|<>]/.test(password)) score++;
+                        return score <= 1 ? '#DC3545' : score === 2 ? '#FD7E14' : score === 3 ? '#FFC107' : '#28A745';
+                      })()
+                    }
+                  ]} 
+                />
+              </View>
+              <Text style={[
+                styles.strengthText,
+                {
+                  color: (() => {
+                    let score = 0;
+                    if (password.length >= 8) score++;
+                    if (/[A-Z]/.test(password) && /[a-z]/.test(password)) score++;
+                    if (/\d/.test(password)) score++;
+                    if (/[!@#$%^&*(),.?":{}|<>]/.test(password)) score++;
+                    return score <= 1 ? '#DC3545' : score === 2 ? '#FD7E14' : score === 3 ? '#FFC107' : '#28A745';
+                  })()
+                }
+              ]}>
+                {(() => {
+                  let score = 0;
+                  if (password.length >= 8) score++;
+                  if (/[A-Z]/.test(password) && /[a-z]/.test(password)) score++;
+                  if (/\d/.test(password)) score++;
+                  if (/[!@#$%^&*(),.?":{}|<>]/.test(password)) score++;
+                  return score <= 1 ? 'Weak' : score === 2 ? 'Fair' : score === 3 ? 'Good' : 'Strong';
+                })()}
+              </Text>
+            </View>
+          )}
+
+          {password.length > 0 && (
             <View style={styles.passwordRequirementsContainer}>
               <Text style={styles.requirementsTitle}>Password Requirements:</Text>
               <View style={styles.requirementRow}>
@@ -469,8 +529,34 @@ export default function RegisterScreen({ navigation }) {
             </TouchableOpacity>
           </View>
 
+          {/* Terms & Conditions Consent */}
+          <View style={styles.termsConsentContainer}>
+            <TouchableOpacity
+              onPress={() => setAcceptTerms(!acceptTerms)}
+              activeOpacity={0.8}
+              style={[styles.termsCheckbox, acceptTerms && styles.termsCheckboxActive, { marginRight: 12 }]}
+            >
+              {acceptTerms && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
+            </TouchableOpacity>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => setTermsModalVisible(true)}
+              style={{ flex: 1 }}
+            >
+              <Text style={styles.termsConsentText}>
+                I agree to the{' '}
+                <Text style={styles.termsConsentLink}>Terms of Service</Text>
+                {' '}and{' '}
+                <Text style={styles.termsConsentLink}>Privacy Policy</Text>
+              </Text>
+            </TouchableOpacity>
+          </View>
+
           {/* Continue Button */}
-          <TouchableOpacity style={styles.primaryButton} onPress={handleNextStep}>
+          <TouchableOpacity 
+            style={[styles.primaryButton, !acceptTerms && styles.primaryButtonDisabled]} 
+            onPress={handleNextStep}
+          >
             <Text style={styles.primaryButtonText}>Sign up</Text>
           </TouchableOpacity>
         </View>
@@ -703,6 +789,37 @@ export default function RegisterScreen({ navigation }) {
             )}
           </TouchableOpacity>
         </View>
+
+        {/* Terms of Service & Privacy Policy Modal */}
+        <GestureModal
+          visible={termsModalVisible}
+          onClose={() => setTermsModalVisible(false)}
+          title="Terms & Privacy Policy"
+        >
+          <ScrollView style={styles.termsScroll} contentContainerStyle={styles.termsContentContainer}>
+            <Text style={styles.termsSectionTitle}>1. Privacy Policy</Text>
+            <Text style={styles.termsText}>
+              BrgyAlert collects basic profile registration data including full name, contact details, gender, and date of birth to establish authorized identity. Coordinates and reports are gathered solely for dispatching appropriate responder personnel during verified local emergencies.
+            </Text>
+            <Text style={styles.termsSectionTitle}>2. Code of Conduct</Text>
+            <Text style={styles.termsText}>
+              Users agree not to submit false, malicious, or fabricated panic alerts. False report triggers or misuse of responder chats can lead to permanent account suspension and legal action by barangay authorities.
+            </Text>
+            <Text style={styles.termsSectionTitle}>3. Dispatch Authority</Text>
+            <Text style={styles.termsText}>
+              The Barangay Command Center retains full operational discretion to decline, update, or escalate incident logs based on response unit availability, safety conditions, and reported priority levels.
+            </Text>
+            <TouchableOpacity 
+              style={[styles.primaryButton, { marginTop: 24, marginBottom: 32 }]} 
+              onPress={() => {
+                setAcceptTerms(true);
+                setTermsModalVisible(false);
+              }}
+            >
+              <Text style={styles.primaryButtonText}>Accept & Agree</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </GestureModal>
 
         {/* Swipeable Calendar Modal Selector */}
         <GestureModal
@@ -1275,5 +1392,83 @@ const styles = StyleSheet.create({
   requirementMet: {
     color: '#28A745',
     fontWeight: '600',
+  },
+  passwordStrengthContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingHorizontal: 4,
+  },
+  strengthBarBg: {
+    flex: 1,
+    height: 6,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginRight: 10,
+  },
+  strengthBarFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  strengthText: {
+    fontSize: 12,
+    fontWeight: '700',
+    width: 50,
+    textAlign: 'right',
+  },
+  termsConsentContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 16,
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  termsCheckbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  termsCheckboxActive: {
+    backgroundColor: '#0B2564',
+    borderColor: '#0B2564',
+  },
+  termsConsentText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#475569',
+    lineHeight: 18,
+  },
+  termsConsentLink: {
+    color: '#0B2564',
+    fontWeight: '700',
+    textDecorationLine: 'underline',
+  },
+  termsScroll: {
+    maxHeight: 400,
+    paddingHorizontal: 16,
+  },
+  termsContentContainer: {
+    paddingBottom: 24,
+  },
+  termsSectionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginTop: 16,
+    marginBottom: 6,
+  },
+  termsText: {
+    fontSize: 13,
+    color: '#4B5563',
+    lineHeight: 19,
+  },
+  primaryButtonDisabled: {
+    backgroundColor: '#718096',
   },
 });

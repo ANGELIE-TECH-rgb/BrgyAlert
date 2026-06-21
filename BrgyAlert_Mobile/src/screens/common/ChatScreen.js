@@ -354,6 +354,18 @@ export default function ChatScreen({ route, navigation }) {
   const handleSend = async () => {
     if (!inputText.trim() || !currentAlertId) return;
 
+    // Verify email requirement for citizens
+    if (!isAdmin && user && !user.emailVerified) {
+      Alert.alert(
+        'Email Verification Required',
+        'You must verify your email address before sending coordination messages to responders.',
+        [
+          { text: 'Cancel', style: 'cancel' }
+        ]
+      );
+      return;
+    }
+
     // Rate limit check for citizen messages (lenient)
     if (!isAdmin) {
       const rateStatus = await checkChatMessageStatus();

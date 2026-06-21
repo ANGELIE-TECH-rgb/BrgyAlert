@@ -12,7 +12,8 @@ import {
   ActivityIndicator,
   StatusBar,
   Alert,
-  Modal
+  Modal,
+  Image
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { Feather, AntDesign, Ionicons } from '@expo/vector-icons';
@@ -217,10 +218,15 @@ export default function LoginScreen({ navigation }) {
       >
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
 
-          {/* Header Title */}
+          {/* Header Title with Branding Logo */}
           <View style={styles.headerContainer}>
-            <Text style={styles.title}>Sign in to your Account</Text>
-            <Text style={styles.subtitle}>Enter your email and password to login</Text>
+            <Image
+              source={require('../../../assets/logo.png')}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
+            <Text style={styles.title}>Welcome Back</Text>
+            <Text style={styles.subtitle}>Your Barangay. Safer. Together. Enter your credentials to log in.</Text>
           </View>
 
           {/* Offline Mode Alert Banner */}
@@ -270,6 +276,12 @@ export default function LoginScreen({ navigation }) {
                 onBlur={() => setFocusedField(null)}
               />
             </View>
+            {rememberMe && email.trim().length > 0 && (
+              <View style={styles.rememberedEmailChip}>
+                <Ionicons name="save-outline" size={13} color="#0B2564" style={{ marginRight: 4 }} />
+                <Text style={styles.rememberedEmailText}>Email pre-filled from your last session</Text>
+              </View>
+            )}
 
             {/* Password Field */}
             <Text style={[styles.label, focusedField === 'password' && styles.labelActive]}>Password</Text>
@@ -643,5 +655,26 @@ const styles = StyleSheet.create({
   offlineBannerBold: {
     fontWeight: '700',
     textDecorationLine: 'underline',
+  },
+  logoImage: {
+    height: 60,
+    width: 100,
+    marginBottom: 16,
+    alignSelf: 'flex-start',
+  },
+  rememberedEmailChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0F4FF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginTop: 8,
+    alignSelf: 'flex-start',
+  },
+  rememberedEmailText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#0B2564',
   },
 });

@@ -5,6 +5,7 @@ import {
   createUserWithEmailAndPassword,
   signOut,
   sendPasswordResetEmail,
+  sendEmailVerification,
   onAuthStateChanged,
   setPersistence,
   getReactNativePersistence,
@@ -215,8 +216,8 @@ export const AuthProvider = ({ children }) => {
             unsubscribeFromProfile();
             Alert.alert(
               'Session Expired',
-              'You were automatically signed out after 30 minutes of inactivity. Please sign in again to continue.',
-              [{ text: 'OK' }]
+              'You were automatically signed out after 30 minutes of inactivity. Please sign in again to secure your account.',
+              [{ text: 'Sign In Again' }]
             );
           }
         }
@@ -266,6 +267,28 @@ export const AuthProvider = ({ children }) => {
         subscribeToUserProfile(firebaseUser.uid, () => {
           setLoading(false);
         });
+
+        // Dynamic autocheck interval: If email is unverified, poll status to avoid forcing a reload
+        if (!firebaseUser.emailVerified) {
+          const verifyInterval = setInterval(async () => {
+            try {
+              if (auth.currentUser) {
+                await auth.currentUser.reload();
+                if (auth.currentUser.emailVerified) {
+                  console.log('[AuthContext] Email verified dynamically!');
+                  setUser({ ...auth.currentUser }); // Force re-render of user state to update verification
+                  clearInterval(verifyInterval);
+                }
+              }
+            } catch (err) {
+              console.log('[AuthContext] Error dynamically reloading user state:', err);
+            }
+          }, 4000);
+
+          return () => {
+            clearInterval(verifyInterval);
+          };
+        }
       } else {
         setUser(null);
         setUserProfile(null);
@@ -466,6 +489,21 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // ─── Email Verification ──────────────────────────────────────────────────
+  const sendVerificationEmail = async () => {
+    try {
+      if (auth.currentUser) {
+        await sendEmailVerification(auth.currentUser);
+        console.log('[AuthContext] Email verification dispatched.');
+      } else {
+        throw new Error('No user is currently signed in.');
+      }
+    } catch (error) {
+      console.log('[AuthContext] Email verification dispatch error:', error);
+      throw error;
+    }
+  };
+
   return (
     <AuthContext.Provider value={{
       user,
@@ -476,7 +514,8 @@ export const AuthProvider = ({ children }) => {
       logout,
       resetPassword,
       updateUserRole,
-      loginWithGoogle
+      loginWithGoogle,
+      sendVerificationEmail
     }}>
       {children}
     </AuthContext.Provider>
