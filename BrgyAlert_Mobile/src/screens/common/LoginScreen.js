@@ -13,10 +13,12 @@ import {
   StatusBar,
   Alert,
   Modal,
-  Image
+  Image,
+  Animated
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { Feather, AntDesign, Ionicons } from '@expo/vector-icons';
+import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import GoogleIcon from '../../components/GoogleIcon';
 import { checkLoginStatus, recordFailedLogin, resetLoginAttempts } from '../../services/rateLimiter';
 import { validateEmail, sanitizeText } from '../../services/inputSanitizer';
@@ -28,6 +30,25 @@ import { auth } from '../../services/firebaseConfig';
 export default function LoginScreen({ navigation }) {
   const { login, loginWithGoogle } = useAuth();
   const [isOnline, setIsOnline] = useState(true);
+
+  // Smooth entrance animations
+  const fadeAnim = React.useRef(new Animated.Value(0)).current;
+  const slideAnim = React.useRef(new Animated.Value(20)).current;
+
+  React.useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
 
   // Proactively request location permissions on mount to prepare for emergencies
   useEffect(() => {
@@ -212,11 +233,25 @@ export default function LoginScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Background Gradient Backdrop */}
+      <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+        <Svg width="100%" height="100%" style={StyleSheet.absoluteFillObject}>
+          <Defs>
+            <LinearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor="#EEF2F6" stopOpacity={0.85} />
+              <Stop offset="0.5" stopColor="#FFFFFF" stopOpacity={1} />
+            </LinearGradient>
+          </Defs>
+          <Rect width="100%" height="100%" fill="url(#bgGrad)" />
+        </Svg>
+      </View>
+
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+        <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+          <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
 
           {/* Header Title with Branding Logo */}
           <View style={styles.headerContainer}>
@@ -226,7 +261,7 @@ export default function LoginScreen({ navigation }) {
               resizeMode="contain"
             />
             <Text style={styles.title}>Welcome Back</Text>
-            <Text style={styles.subtitle}>Your Barangay. Safer. Together. Enter your credentials to log in.</Text>
+            <Text style={styles.subtitle}>Enter your credentials to access your secure Barangay command console.</Text>
           </View>
 
           {/* Offline Mode Alert Banner */}
@@ -239,9 +274,9 @@ export default function LoginScreen({ navigation }) {
               <View style={styles.offlineBannerContent}>
                 <Feather name="wifi-off" size={20} color="#D97706" />
                 <View style={{ marginLeft: 10, flex: 1 }}>
-                  <Text style={styles.offlineBannerTitle}>No Internet Connection</Text>
+                  <Text style={styles.offlineBannerTitle}>No Connection Detected</Text>
                   <Text style={styles.offlineBannerSubtitle}>
-                    Tap here to submit an <Text style={styles.offlineBannerBold}>Offline SMS Report</Text>
+                    Tap here to submit an <Text style={styles.offlineBannerBold}>Offline Report via SMS</Text>
                   </Text>
                 </View>
                 <Feather name="chevron-right" size={20} color="#D97706" />
@@ -253,16 +288,23 @@ export default function LoginScreen({ navigation }) {
           <View style={styles.formContainer}>
             {errorMsg ? (
               <View style={styles.errorBanner}>
+                <Feather name="alert-circle" size={16} color="#DC3545" style={{ marginRight: 8, marginTop: 1 }} />
                 <Text style={styles.errorText}>{errorMsg}</Text>
               </View>
             ) : null}
 
             {/* Email Field */}
-            <Text style={[styles.label, focusedField === 'email' && styles.labelActive]}>Email</Text>
+            <Text style={[styles.label, focusedField === 'email' && styles.labelActive]}>Email Address</Text>
             <View style={[styles.inputContainer, focusedField === 'email' && styles.inputContainerActive]}>
+              <Feather 
+                name="mail" 
+                size={18} 
+                color={focusedField === 'email' ? '#0B2564' : '#A0AEC0'} 
+                style={styles.inputIcon} 
+              />
               <TextInput
                 style={styles.input}
-                placeholder="johndoe@gmail.com"
+                placeholder="name@gmail.com"
                 placeholderTextColor="#A0AEC0"
                 value={email}
                 onChangeText={setEmail}
@@ -286,9 +328,15 @@ export default function LoginScreen({ navigation }) {
             {/* Password Field */}
             <Text style={[styles.label, focusedField === 'password' && styles.labelActive]}>Password</Text>
             <View style={[styles.passwordContainer, focusedField === 'password' && styles.passwordContainerActive]}>
+              <Feather 
+                name="lock" 
+                size={18} 
+                color={focusedField === 'password' ? '#0B2564' : '#A0AEC0'} 
+                style={styles.inputIcon} 
+              />
               <TextInput
                 style={styles.passwordInput}
-                placeholder="********"
+                placeholder="••••••••"
                 placeholderTextColor="#A0AEC0"
                 value={password}
                 onChangeText={setPassword}
@@ -379,7 +427,8 @@ export default function LoginScreen({ navigation }) {
             </TouchableOpacity>
           </View>
 
-        </ScrollView>
+          </ScrollView>
+        </Animated.View>
       </KeyboardAvoidingView>
 
       {/* Loading Overlay Modal */}
@@ -456,19 +505,22 @@ const styles = StyleSheet.create({
     color: '#0B2564',
   },
   inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#DCE1E7',
     borderRadius: 16,
     height: 56,
-    justifyContent: 'center',
   },
   inputContainerActive: {
     borderColor: '#0B2564',
     borderWidth: 1.5,
   },
   input: {
-    paddingHorizontal: 16,
+    flex: 1,
+    paddingLeft: 8,
+    paddingRight: 16,
     fontSize: 16,
     color: '#1A202C',
     height: '100%',
@@ -488,10 +540,15 @@ const styles = StyleSheet.create({
   },
   passwordInput: {
     flex: 1,
-    paddingHorizontal: 16,
+    paddingLeft: 8,
+    paddingRight: 16,
     fontSize: 16,
     color: '#1A202C',
     height: '100%',
+  },
+  inputIcon: {
+    marginLeft: 16,
+    marginRight: 4,
   },
   eyeButton: {
     paddingHorizontal: 16,
@@ -675,5 +732,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     color: '#0B2564',
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+  },
+  errorText: {
+    fontSize: 14,
+    color: '#DC3545',
+    fontWeight: '500',
+    flex: 1,
   },
 });

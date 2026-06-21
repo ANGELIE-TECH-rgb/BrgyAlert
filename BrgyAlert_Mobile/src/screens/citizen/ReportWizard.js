@@ -20,6 +20,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, Ionicons } from '@expo/vector-icons';
+import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import NetInfo from '@react-native-community/netinfo';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -86,6 +87,7 @@ export default function ReportWizard({ navigation }) {
   const [loadingLocation, setLoadingLocation] = useState(true);
   const [currentTimeText, setCurrentTimeText] = useState('');
   const [isCertified, setIsCertified] = useState(false);
+  const [focusedField, setFocusedField] = useState(null);
 
   // AI Integration States
   const [urgency, setUrgency] = useState('medium');
@@ -563,15 +565,24 @@ export default function ReportWizard({ navigation }) {
 
   const renderStep1 = () => (
     <>
-      <View style={styles.stepHeader}>
-        <Text style={styles.stepText}>Step 1 of 2: Incident Details</Text>
-        <Text style={styles.percentText}>{progress1}% Complete</Text>
+      {/* Step Indicator Header */}
+      <View style={styles.stepIndicatorContainer}>
+        <View style={styles.stepIndicatorRow}>
+          {/* Step 1 Circle (Active) */}
+          <View style={[styles.stepCircle, styles.stepCircleActive]}>
+            <Text style={styles.stepCircleTextActive}>1</Text>
+          </View>
+          <View style={styles.stepLine} />
+          {/* Step 2 Circle (Pending) */}
+          <View style={styles.stepCircle}>
+            <Text style={styles.stepCircleTextInactive}>2</Text>
+          </View>
+        </View>
+        <View style={styles.stepLabelsRow}>
+          <Text style={[styles.stepLabel, styles.stepLabelActive]}>Details</Text>
+          <Text style={styles.stepLabel}>Review</Text>
+        </View>
       </View>
-      <View style={styles.progressBar}>
-        <Animated.View style={[styles.progressFill, { width: widthInterpolate1 }]} />
-      </View>
-
-
 
       <View style={styles.formContainer}>
         {errorMsg ? (
@@ -611,8 +622,17 @@ export default function ReportWizard({ navigation }) {
         )}
 
         {/* Incident Type Picker */}
-        <Text style={styles.label}>Incident Type <Text style={styles.req}>*</Text></Text>
-        <TouchableOpacity style={styles.dropdown} onPress={() => setTypeModalVisible(true)}>
+        <Text style={[styles.label, (typeModalVisible || focusedField === 'type') && styles.labelActive]}>Incident Type <Text style={styles.req}>*</Text></Text>
+        <TouchableOpacity 
+          style={[
+            styles.dropdown,
+            (typeModalVisible || focusedField === 'type') && styles.dropdownActive
+          ]} 
+          onPress={() => {
+            setFocusedField('type');
+            setTypeModalVisible(true);
+          }}
+        >
           <Text style={[styles.dropdownText, !incidentType && styles.dropdownPlaceholder]}>
             {incidentType || 'Select Incident Type'}
           </Text>
@@ -620,9 +640,12 @@ export default function ReportWizard({ navigation }) {
         </TouchableOpacity>
 
         {/* Description */}
-        <Text style={styles.label}>Description <Text style={styles.req}>*</Text></Text>
+        <Text style={[styles.label, focusedField === 'description' && styles.labelActive]}>Description <Text style={styles.req}>*</Text></Text>
         <TextInput 
-          style={styles.textArea}
+          style={[
+            styles.textArea,
+            focusedField === 'description' && styles.inputActive
+          ]}
           placeholder="Please Provide specific details about the incident..."
           placeholderTextColor="#9CA3AF"
           multiline={true}
@@ -630,6 +653,8 @@ export default function ReportWizard({ navigation }) {
           value={description}
           onChangeText={setDescription}
           textAlignVertical="top"
+          onFocus={() => setFocusedField('description')}
+          onBlur={() => setFocusedField(null)}
         />
 
         {/* Evidence picker container */}
@@ -672,13 +697,18 @@ export default function ReportWizard({ navigation }) {
         </View>
 
         {/* Witness Info */}
-        <Text style={styles.label}>Witness <Text style={styles.optional}>Optional</Text></Text>
+        <Text style={[styles.label, focusedField === 'witness' && styles.labelActive]}>Witness <Text style={styles.optional}>Optional</Text></Text>
         <TextInput 
-          style={styles.input}
+          style={[
+            styles.input,
+            focusedField === 'witness' && styles.inputActive
+          ]}
           placeholder="Witness Name"
           placeholderTextColor="#9CA3AF"
           value={witness}
           onChangeText={setWitness}
+          onFocus={() => setFocusedField('witness')}
+          onBlur={() => setFocusedField(null)}
         />
 
         {/* Locked GPS Location info box */}
@@ -696,7 +726,10 @@ export default function ReportWizard({ navigation }) {
       {/* Incident Type Select Modal */}
       <GestureModal
         visible={typeModalVisible}
-        onClose={() => setTypeModalVisible(false)}
+        onClose={() => {
+          setTypeModalVisible(false);
+          setFocusedField(null);
+        }}
         title="Select Incident Type"
       >
         <View style={{ maxHeight: 300 }}>
@@ -709,6 +742,7 @@ export default function ReportWizard({ navigation }) {
                 onPress={() => {
                   setIncidentType(item);
                   setTypeModalVisible(false);
+                  setFocusedField(null);
                 }}
               >
                 <Text style={styles.modalItemText}>{item}</Text>
@@ -739,15 +773,24 @@ export default function ReportWizard({ navigation }) {
 
   const renderStep2 = () => (
     <>
-      <View style={styles.stepHeader}>
-        <Text style={styles.stepText}>Step 2 of 2: Review Details</Text>
-        <Text style={styles.percentText}>{progress2}% Complete</Text>
+      {/* Step Indicator Header */}
+      <View style={styles.stepIndicatorContainer}>
+        <View style={styles.stepIndicatorRow}>
+          {/* Step 1 Circle (Completed) */}
+          <View style={[styles.stepCircle, styles.stepCircleCompleted]}>
+            <Feather name="check" size={9} color="#FFFFFF" />
+          </View>
+          <View style={[styles.stepLine, styles.stepLineActive]} />
+          {/* Step 2 Circle (Active) */}
+          <View style={[styles.stepCircle, styles.stepCircleActive]}>
+            <Text style={styles.stepCircleTextActive}>2</Text>
+          </View>
+        </View>
+        <View style={styles.stepLabelsRow}>
+          <Text style={styles.stepLabel}>Details</Text>
+          <Text style={[styles.stepLabel, styles.stepLabelActive]}>Review</Text>
+        </View>
       </View>
-      <View style={styles.progressBar}>
-        <Animated.View style={[styles.progressFill, { width: widthInterpolate2 }]} />
-      </View>
-
-
 
       <View style={styles.formContainer}>
         {errorMsg ? (
@@ -877,6 +920,19 @@ export default function ReportWizard({ navigation }) {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      {/* Background Gradient Backdrop */}
+      <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+        <Svg width="100%" height="100%" style={StyleSheet.absoluteFillObject}>
+          <Defs>
+            <LinearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor="#EEF2F6" stopOpacity={0.85} />
+              <Stop offset="0.5" stopColor="#FFFFFF" stopOpacity={1} />
+            </LinearGradient>
+          </Defs>
+          <Rect width="100%" height="100%" fill="url(#bgGrad)" />
+        </Svg>
+      </View>
+
       <View style={styles.navHeader}>
         <TouchableOpacity 
           style={[styles.backButton, isSubmitting && { opacity: 0.5 }]} 
@@ -967,12 +1023,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   navHeader: {
-    height: 56,
+    height: 64,
     paddingHorizontal: 24,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'transparent',
   },
   backButton: {
     width: 40,
@@ -988,7 +1044,7 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 2,
     borderWidth: 1,
-    borderColor: '#F3F4F6',
+    borderColor: '#ECEEF1',
   },
   statusDotRow: {
     flexDirection: 'row',
@@ -1042,19 +1098,62 @@ const styles = StyleSheet.create({
     backgroundColor: '#0B2564',
     borderRadius: 3,
   },
-  headerTitleContainer: {
-    flex: 1,
-    marginLeft: 16,
+  headerStepIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
+  headerStepCircle: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerStepCircleActive: {
+    borderColor: '#0B2564',
+  },
+  headerStepCircleCompleted: {
+    borderColor: '#0B2564',
+    backgroundColor: '#0B2564',
+  },
+  headerStepCircleTextActive: {
+    color: '#0B2564',
+    fontSize: 9,
+    fontWeight: 'bold',
+  },
+  headerStepCircleTextInactive: {
+    color: '#64748B',
+    fontSize: 9,
+    fontWeight: 'bold',
+  },
+  headerStepLine: {
+    width: 32,
+    height: 1.5,
+    backgroundColor: '#E2E8F0',
+    marginHorizontal: 6,
+  },
+  headerStepLineActive: {
+    backgroundColor: '#0B2564',
+  },
+  titleContainer: {
+    marginTop: 12,
+    marginBottom: 20,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
     color: '#111827',
+    marginBottom: 6,
+    letterSpacing: -0.5,
   },
-  headerSubtitle: {
-    fontSize: 12,
+  subtitle: {
+    fontSize: 14,
     color: '#6B7280',
-    marginTop: 2,
+    lineHeight: 20,
     fontWeight: '500',
   },
   formContainer: {
@@ -1080,6 +1179,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     marginTop: 16,
   },
+  labelActive: {
+    color: '#0B2564',
+  },
   req: {
     color: '#EF4444',
   },
@@ -1097,6 +1199,10 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     fontSize: 16,
     color: '#1F2937',
+  },
+  inputActive: {
+    borderColor: '#0B2564',
+    borderWidth: 1.5,
   },
   textArea: {
     backgroundColor: '#FFFFFF',
@@ -1120,12 +1226,96 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  dropdownActive: {
+    borderColor: '#0B2564',
+    borderWidth: 1.5,
+  },
   dropdownText: {
     fontSize: 16,
     color: '#1F2937',
   },
   dropdownPlaceholder: {
     color: '#9CA3AF',
+  },
+  stepIndicatorContainer: {
+    marginTop: 20,
+    marginBottom: 24,
+    alignItems: 'center',
+  },
+  stepIndicatorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    paddingHorizontal: 32,
+  },
+  headerTitleContainer: {
+    flex: 1,
+    marginLeft: 16,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  stepCircle: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stepCircleActive: {
+    borderColor: '#0B2564',
+    backgroundColor: '#0B2564',
+  },
+  stepCircleCompleted: {
+    borderColor: '#0B2564',
+    backgroundColor: '#0B2564',
+  },
+  stepCircleTextActive: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: 'bold',
+  },
+  stepCircleTextInactive: {
+    color: '#64748B',
+    fontSize: 9,
+    fontWeight: 'bold',
+  },
+  stepLine: {
+    flex: 1,
+    height: 2,
+    backgroundColor: '#E2E8F0',
+    marginHorizontal: 8,
+  },
+  stepLineActive: {
+    backgroundColor: '#0B2564',
+  },
+  stepLabelsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingHorizontal: 20,
+    marginTop: 6,
+  },
+  stepLabel: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  stepLabelActive: {
+    color: '#0B2564',
+    fontWeight: '700',
   },
   evidenceContainer: {
     flexDirection: 'row',

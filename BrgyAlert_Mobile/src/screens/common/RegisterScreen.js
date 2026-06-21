@@ -18,6 +18,7 @@ import {
   PanResponder,
   Dimensions
 } from 'react-native';
+import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import { useAuth } from '../../context/AuthContext';
 import { Feather, AntDesign, Ionicons } from '@expo/vector-icons';
 import GoogleIcon from '../../components/GoogleIcon';
@@ -41,6 +42,31 @@ export default function RegisterScreen({ navigation }) {
   const [errorMsg, setErrorMsg] = useState('');
   const [focusedField, setFocusedField] = useState(null);
   const [signUpLockoutTime, setSignUpLockoutTime] = useState(0);
+
+  // Smooth entrance/transition animations
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+
+  const triggerTransition = () => {
+    fadeAnim.setValue(0);
+    slideAnim.setValue(16);
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 400,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
+
+  useEffect(() => {
+    triggerTransition();
+  }, [step]);
 
   useEffect(() => {
     const initRateLimit = async () => {
@@ -345,14 +371,6 @@ export default function RegisterScreen({ navigation }) {
     const progress = getStep1Progress();
     return (
       <>
-        {/* Step Info */}
-        <View style={styles.stepHeader}>
-          <Text style={styles.stepText}>Step 1 of 2: Credentials</Text>
-          <Text style={styles.percentText}>{progress}% Complete</Text>
-        </View>
-        <View style={styles.progressBar}>
-          <Animated.View style={[styles.progressFill, { width: widthInterpolate1 }]} />
-        </View>
 
         {/* Screen Title */}
         <View style={styles.titleContainer}>
@@ -364,6 +382,7 @@ export default function RegisterScreen({ navigation }) {
         <View style={styles.formContainer}>
           {errorMsg ? (
             <View style={styles.errorBanner}>
+              <Feather name="alert-circle" size={16} color="#DC3545" style={{ marginRight: 8, marginTop: 1 }} />
               <Text style={styles.errorText}>{errorMsg}</Text>
             </View>
           ) : null}
@@ -371,6 +390,12 @@ export default function RegisterScreen({ navigation }) {
           {/* Email */}
           <Text style={[styles.label, focusedField === 'email' && styles.labelActive]}>Email</Text>
           <View style={[styles.inputContainer, focusedField === 'email' && styles.inputContainerActive]}>
+            <Feather 
+              name="mail" 
+              size={18} 
+              color={focusedField === 'email' ? '#0B2564' : '#A0AEC0'} 
+              style={styles.inputIcon} 
+            />
             <TextInput
               style={styles.input}
               placeholder="johndoe@gmail.com"
@@ -390,9 +415,15 @@ export default function RegisterScreen({ navigation }) {
           {/* Password */}
           <Text style={[styles.label, focusedField === 'password' && styles.labelActive]}>Password</Text>
           <View style={[styles.passwordContainer, focusedField === 'password' && styles.passwordContainerActive]}>
+            <Feather 
+              name="lock" 
+              size={18} 
+              color={focusedField === 'password' ? '#0B2564' : '#A0AEC0'} 
+              style={styles.inputIcon} 
+            />
             <TextInput
               style={styles.passwordInput}
-              placeholder="********"
+              placeholder="••••••••"
               placeholderTextColor="#A0AEC0"
               value={password}
               onChangeText={(val) => setPassword(val.replace(/\s/g, ''))}
@@ -405,7 +436,7 @@ export default function RegisterScreen({ navigation }) {
               onBlur={() => setFocusedField(null)}
             />
             <TouchableOpacity style={styles.eyeButton} onPress={() => setShowPassword(!showPassword)}>
-              <Feather name={showPassword ? "eye" : "eye-off"} size={20} color="#A0AEC0" />
+              <Feather name={showPassword ? "eye" : "eye-off"} size={20} color="#A0AEC0" style={styles.eyeIconInner} />
             </TouchableOpacity>
           </View>
 
@@ -510,6 +541,12 @@ export default function RegisterScreen({ navigation }) {
           {/* Confirm Password */}
           <Text style={[styles.label, focusedField === 'confirmPassword' && styles.labelActive]}>Confirm Password</Text>
           <View style={[styles.passwordContainer, focusedField === 'confirmPassword' && styles.passwordContainerActive]}>
+            <Feather 
+              name="lock" 
+              size={18} 
+              color={focusedField === 'confirmPassword' ? '#0B2564' : '#A0AEC0'} 
+              style={styles.inputIcon} 
+            />
             <TextInput
               style={styles.passwordInput}
               placeholder="********"
@@ -677,14 +714,6 @@ export default function RegisterScreen({ navigation }) {
     const progress = getStep2Progress();
     return (
       <>
-        {/* Step Info */}
-        <View style={styles.stepHeader}>
-          <Text style={styles.stepText}>Step 2 of 2: Personal Details</Text>
-          <Text style={styles.percentText}>{progress}% Complete</Text>
-        </View>
-        <View style={styles.progressBar}>
-          <Animated.View style={[styles.progressFill, { width: widthInterpolate2 }]} />
-        </View>
 
         {/* Screen Title */}
         <View style={styles.titleContainer}>
@@ -703,9 +732,15 @@ export default function RegisterScreen({ navigation }) {
           {/* Full Name */}
           <Text style={[styles.label, focusedField === 'fullName' && styles.labelActive]}>Full Name</Text>
           <View style={[styles.inputContainer, focusedField === 'fullName' && styles.inputContainerActive]}>
+            <Feather 
+              name="user" 
+              size={18} 
+              color={focusedField === 'fullName' ? '#0B2564' : '#A0AEC0'} 
+              style={styles.inputIcon} 
+            />
             <TextInput
               style={styles.input}
-              placeholder="johndoe"
+              placeholder="John Doe"
               placeholderTextColor="#A0AEC0"
               value={fullName}
               onChangeText={setFullName}
@@ -729,15 +764,29 @@ export default function RegisterScreen({ navigation }) {
             }}
             disabled={isSubmitting}
           >
-            <Text style={[styles.dropdownText, !dob && styles.dropdownPlaceholder]}>
-              {dob || 'Select your date of birth'}
-            </Text>
-            <Feather name="calendar" size={18} color="#A0AEC0" />
+            <View style={styles.dropdownLeftContent}>
+              <Feather 
+                name="calendar" 
+                size={18} 
+                color={(calendarModalVisible || focusedField === 'dob') ? '#0B2564' : '#A0AEC0'} 
+                style={styles.inputIcon} 
+              />
+              <Text style={[styles.dropdownText, !dob && styles.dropdownPlaceholder]}>
+                {dob || 'Select your date of birth'}
+              </Text>
+            </View>
+            <Feather name="chevron-down" size={16} color="#A0AEC0" style={{ marginRight: 16 }} />
           </TouchableOpacity>
 
           {/* Contact Number */}
           <Text style={[styles.label, focusedField === 'phoneNumber' && styles.labelActive]}>Contact Number</Text>
           <View style={[styles.inputContainer, focusedField === 'phoneNumber' && styles.inputContainerActive]}>
+            <Feather 
+              name="phone" 
+              size={18} 
+              color={focusedField === 'phoneNumber' ? '#0B2564' : '#A0AEC0'} 
+              style={styles.inputIcon} 
+            />
             <TextInput
               style={styles.input}
               placeholder="+63 909 000 0000"
@@ -765,10 +814,18 @@ export default function RegisterScreen({ navigation }) {
             }}
             disabled={isSubmitting}
           >
-            <Text style={[styles.dropdownText, !gender && styles.dropdownPlaceholder]}>
-              {gender || 'Select your gender'}
-            </Text>
-            <Feather name="chevron-down" size={18} color="#A0AEC0" />
+            <View style={styles.dropdownLeftContent}>
+              <Feather 
+                name="users" 
+                size={18} 
+                color={(genderModalVisible || focusedField === 'gender') ? '#0B2564' : '#A0AEC0'} 
+                style={styles.inputIcon} 
+              />
+              <Text style={[styles.dropdownText, !gender && styles.dropdownPlaceholder]}>
+                {gender || 'Select your gender'}
+              </Text>
+            </View>
+            <Feather name="chevron-down" size={16} color="#A0AEC0" style={{ marginRight: 16 }} />
           </TouchableOpacity>
 
           {/* Complete Signup Button */}
@@ -932,20 +989,57 @@ export default function RegisterScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Background Gradient Backdrop */}
+      <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+        <Svg width="100%" height="100%" style={StyleSheet.absoluteFillObject}>
+          <Defs>
+            <LinearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor="#EEF2F6" stopOpacity={0.85} />
+              <Stop offset="0.5" stopColor="#FFFFFF" stopOpacity={1} />
+            </LinearGradient>
+          </Defs>
+          <Rect width="100%" height="100%" fill="url(#bgGrad)" />
+        </Svg>
+      </View>
+
       {/* Custom Header Navigation / Back Button */}
       <View style={styles.navHeader}>
         <TouchableOpacity style={styles.backButton} onPress={handleBack}>
           <Ionicons name="arrow-back" size={22} color="#1A202C" />
         </TouchableOpacity>
+
+        {/* Centered Step Indicator */}
+        <View style={styles.headerStepIndicator}>
+          <View style={[
+            styles.headerStepCircle,
+            styles.headerStepCircleActive,
+            step === 2 && styles.headerStepCircleCompleted
+          ]}>
+            {step === 2 ? (
+              <Feather name="check" size={9} color="#FFFFFF" />
+            ) : (
+              <Text style={styles.headerStepCircleTextActive}>1</Text>
+            )}
+          </View>
+          <View style={[styles.headerStepLine, step === 2 && styles.headerStepLineActive]} />
+          <View style={[
+            styles.headerStepCircle,
+            step === 2 && styles.headerStepCircleActive
+          ]}>
+            <Text style={step === 2 ? styles.headerStepCircleTextActive : styles.headerStepCircleTextInactive}>2</Text>
+          </View>
+        </View>
       </View>
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-          {step === 1 ? renderStep1() : renderStep2()}
-        </ScrollView>
+        <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+          <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+            {step === 1 ? renderStep1() : renderStep2()}
+          </ScrollView>
+        </Animated.View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -959,11 +1053,16 @@ const styles = StyleSheet.create({
   navHeader: {
     height: 64,
     paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'transparent',
     marginTop: Platform.OS === 'android' ? StatusBar.currentHeight : 10,
+    position: 'relative',
   },
   backButton: {
+    position: 'absolute',
+    left: 16,
     width: 48,
     height: 48,
     borderRadius: 24,
@@ -977,6 +1076,48 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 1,
+    zIndex: 10,
+  },
+  headerStepIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerStepCircle: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerStepCircleActive: {
+    borderColor: '#0B2564',
+  },
+  headerStepCircleCompleted: {
+    borderColor: '#0B2564',
+    backgroundColor: '#0B2564',
+  },
+  headerStepCircleTextActive: {
+    color: '#0B2564',
+    fontSize: 9,
+    fontWeight: 'bold',
+  },
+  headerStepCircleTextInactive: {
+    color: '#64748B',
+    fontSize: 9,
+    fontWeight: 'bold',
+  },
+  headerStepLine: {
+    width: 32,
+    height: 1.5,
+    backgroundColor: '#E2E8F0',
+    marginHorizontal: 6,
+  },
+  headerStepLineActive: {
+    backgroundColor: '#0B2564',
   },
   keyboardView: {
     flex: 1,
@@ -985,6 +1126,71 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: 24,
     paddingBottom: 40,
+  },
+  stepIndicatorContainer: {
+    marginTop: 20,
+    marginBottom: 24,
+    alignItems: 'center',
+  },
+  stepIndicatorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    paddingHorizontal: 32,
+  },
+  stepCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stepCircleActive: {
+    borderColor: '#0B2564',
+    backgroundColor: '#0B2564',
+  },
+  stepCircleCompleted: {
+    borderColor: '#0B2564',
+    backgroundColor: '#0B2564',
+  },
+  stepCircleTextActive: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  stepCircleTextInactive: {
+    color: '#64748B',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  stepLine: {
+    flex: 1,
+    height: 2,
+    backgroundColor: '#E2E8F0',
+    marginHorizontal: 8,
+  },
+  stepLineActive: {
+    backgroundColor: '#0B2564',
+  },
+  stepLabelsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingHorizontal: 20,
+    marginTop: 6,
+  },
+  stepLabel: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  stepLabelActive: {
+    color: '#0B2564',
+    fontWeight: '700',
   },
   stepHeader: {
     flexDirection: 'row',
@@ -1057,19 +1263,22 @@ const styles = StyleSheet.create({
     color: '#0B2564',
   },
   inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#DCE1E7',
     borderRadius: 16,
     height: 56,
-    justifyContent: 'center',
   },
   inputContainerActive: {
     borderColor: '#0B2564',
     borderWidth: 1.5,
   },
   input: {
-    paddingHorizontal: 16,
+    flex: 1,
+    paddingLeft: 8,
+    paddingRight: 16,
     fontSize: 16,
     color: '#1A202C',
     height: '100%',
@@ -1089,9 +1298,20 @@ const styles = StyleSheet.create({
   },
   passwordInput: {
     flex: 1,
-    paddingHorizontal: 16,
+    paddingLeft: 8,
+    paddingRight: 16,
     fontSize: 16,
     color: '#1A202C',
+    height: '100%',
+  },
+  inputIcon: {
+    marginLeft: 16,
+    marginRight: 4,
+  },
+  dropdownLeftContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
     height: '100%',
   },
   eyeButton: {

@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Dimensions,
   Platform,
+  Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
@@ -32,6 +33,28 @@ const CHART_HEIGHT = 160;
 
 export default function AdminAnalytics({ navigation }) {
   const insets = useSafeAreaInsets();
+  const fadeAnim = React.useRef(new Animated.Value(0)).current;
+  const slideAnim = React.useRef(new Animated.Value(20)).current;
+
+  React.useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      fadeAnim.setValue(0);
+      slideAnim.setValue(20);
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    });
+    return unsubscribe;
+  }, [navigation]);
 
   const [loading, setLoading] = useState(true);
   const [alerts, setAlerts] = useState([]);
@@ -285,7 +308,8 @@ export default function AdminAnalytics({ navigation }) {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-      {/* Header Panel */}
+      <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+        {/* Header Panel */}
       <View style={styles.header}>
         <View style={styles.headerTextRow}>
           <Text style={styles.headerTitle}>Analytics</Text>
@@ -580,6 +604,7 @@ export default function AdminAnalytics({ navigation }) {
           </View>
         </ScrollView>
       )}
+      </Animated.View>
 
       {/* Bottom Smooth Gradient Background Fade */}
       <View style={styles.bottomGradient} pointerEvents="none">

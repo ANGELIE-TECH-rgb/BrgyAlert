@@ -235,7 +235,20 @@ export default function StatusTracker({ route, navigation }) {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
+
+      {/* Background Gradient Backdrop */}
+      <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+        <Svg width="100%" height="100%" style={StyleSheet.absoluteFillObject}>
+          <Defs>
+            <LinearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor="#EEF2F6" stopOpacity={0.85} />
+              <Stop offset="0.5" stopColor="#FFFFFF" stopOpacity={1} />
+            </LinearGradient>
+          </Defs>
+          <Rect width="100%" height="100%" fill="url(#bgGrad)" />
+        </Svg>
+      </View>
 
       {/* Header (Mockup Alignment) */}
       <View style={styles.navHeader}>
@@ -522,7 +535,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'transparent',
   },
   backButton: {
     width: 40,
@@ -538,7 +551,7 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 2,
     borderWidth: 1,
-    borderColor: '#F3F4F6',
+    borderColor: '#ECEEF1',
   },
   headerTitleContainer: {
     flex: 1,
@@ -729,12 +742,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   circleCompleted: {
-    borderColor: '#0F2C59',
-    backgroundColor: '#0F2C59',
+    borderColor: '#0B2564',
+    backgroundColor: '#0B2564',
   },
   circleActive: {
-    borderColor: '#0F2C59',
-    backgroundColor: '#0F2C59',
+    borderColor: '#0B2564',
+    backgroundColor: '#0B2564',
   },
   lineConnector: {
     width: 2,
@@ -743,7 +756,7 @@ const styles = StyleSheet.create({
     marginVertical: 4,
   },
   lineCompleted: {
-    backgroundColor: '#0F2C59',
+    backgroundColor: '#0B2564',
   },
   stepDetails: {
     flex: 1,
@@ -787,13 +800,13 @@ const styles = StyleSheet.create({
     zIndex: 10, // Sit on top of linear gradient
   },
   messageButton: {
-    backgroundColor: '#0F2C59',
+    backgroundColor: '#0B2564',
     borderRadius: 30,
     paddingVertical: 16,
     alignItems: 'center',
     justifyContent: 'center',
     // Smooth soft shadow matching dashboard primary buttons
-    shadowColor: '#0F2C5940',
+    shadowColor: '#0B256440',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.1,
     shadowRadius: 20,

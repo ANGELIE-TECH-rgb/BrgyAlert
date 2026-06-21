@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Modal,
   useWindowDimensions,
+  Animated
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -32,6 +33,30 @@ export default function AdminConsole({ navigation }) {
   const { user, userProfile } = useAuth();
   const insets = useSafeAreaInsets();
   const { height: H } = useWindowDimensions();
+
+  // Smooth entrance animations
+  const fadeAnim = React.useRef(new Animated.Value(0)).current;
+  const slideAnim = React.useRef(new Animated.Value(20)).current;
+
+  React.useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      fadeAnim.setValue(0);
+      slideAnim.setValue(20);
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    });
+    return unsubscribe;
+  }, [navigation]);
   
   const [allAlerts, setAllAlerts] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -244,7 +269,21 @@ export default function AdminConsole({ navigation }) {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      {/* Background Gradient Backdrop */}
+      <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+        <Svg width="100%" height="100%" style={StyleSheet.absoluteFillObject}>
+          <Defs>
+            <LinearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor="#EEF2F6" stopOpacity={0.85} />
+              <Stop offset="0.5" stopColor="#FFFFFF" stopOpacity={1} />
+            </LinearGradient>
+          </Defs>
+          <Rect width="100%" height="100%" fill="url(#bgGrad)" />
+        </Svg>
+      </View>
+
+      <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
         {/* Top Header (Styled like Citizen Dashboard) */}
         <View style={styles.header}>
@@ -504,6 +543,7 @@ export default function AdminConsole({ navigation }) {
         </View>
 
       </ScrollView>
+    </Animated.View>
 
       {/* Bottom Smooth Gradient Background Fade */}
       <View style={styles.bottomGradient} pointerEvents="none">
@@ -626,7 +666,7 @@ export default function AdminConsole({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'transparent',
   },
   header: {
     flexDirection: 'row',

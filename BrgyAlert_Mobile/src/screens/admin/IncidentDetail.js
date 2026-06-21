@@ -380,11 +380,24 @@ export default function IncidentDetail({ route, navigation }) {
   const isDeclined = currentStatusKey === 'declined';
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
+
+      {/* Background Gradient Backdrop */}
+      <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+        <Svg width="100%" height="100%" style={StyleSheet.absoluteFillObject}>
+          <Defs>
+            <LinearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor="#EEF2F6" stopOpacity={0.85} />
+              <Stop offset="0.5" stopColor="#FFFFFF" stopOpacity={1} />
+            </LinearGradient>
+          </Defs>
+          <Rect width="100%" height="100%" fill="url(#bgGrad)" />
+        </Svg>
+      </View>
 
       {/* Header */}
-      <View style={styles.navHeader}>
+      <View style={[styles.navHeader, { paddingTop: insets.top, height: 64 + insets.top }]}>
         <TouchableOpacity 
           style={styles.backButton} 
           onPress={() => {
@@ -484,7 +497,7 @@ export default function IncidentDetail({ route, navigation }) {
             {/* ─── ACTION PANEL ─────────────────────────────────────────── */}
             <View style={styles.actionCard}>
               <View style={styles.reviewHeaderRow}>
-                <Feather name="settings" size={18} color="#0F2C59" style={{ marginRight: 8 }} />
+                <Feather name="settings" size={18} color="#0B2564" style={{ marginRight: 8 }} />
                 <Text style={styles.reviewHeader}>Manage Incident Status</Text>
               </View>
               <Text style={styles.actionSubtitle}>
@@ -505,7 +518,7 @@ export default function IncidentDetail({ route, navigation }) {
                 </View>
                 <View style={styles.statusTriggerRight}>
                   <Text style={styles.editBtnText}>Edit</Text>
-                  <Feather name="chevron-right" size={16} color="#0F2C59" />
+                  <Feather name="chevron-right" size={16} color="#0B2564" />
                 </View>
               </TouchableOpacity>
             </View>
@@ -513,7 +526,7 @@ export default function IncidentDetail({ route, navigation }) {
             {/* ─── INCIDENT DETAILS CARD ────────────────────────────────── */}
             <View style={styles.reviewCard}>
               <View style={styles.reviewHeaderRow}>
-                <Feather name="alert-triangle" size={18} color="#0F2C59" style={{ marginRight: 8 }} />
+                <Feather name="alert-triangle" size={18} color="#0B2564" style={{ marginRight: 8 }} />
                 <Text style={styles.reviewHeader}>Incident Details</Text>
               </View>
 
@@ -549,8 +562,8 @@ export default function IncidentDetail({ route, navigation }) {
                     }}
                     style={{ flexDirection: 'row', alignItems: 'center' }}
                   >
-                    <Feather name="edit-2" size={12} color="#0F2C59" style={{ marginRight: 4 }} />
-                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#0F2C59' }}>Edit</Text>
+                    <Feather name="edit-2" size={12} color="#0B2564" style={{ marginRight: 4 }} />
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#0B2564' }}>Edit</Text>
                   </TouchableOpacity>
                 </View>
                 <Text style={styles.reviewValue}>{incident.adminNotes || 'No notes added yet.'}</Text>
@@ -579,7 +592,7 @@ export default function IncidentDetail({ route, navigation }) {
             {incident.location?.latitude && incident.location?.longitude && (
               <View style={styles.reviewCard}>
                 <View style={styles.reviewHeaderRow}>
-                  <Feather name="map-pin" size={18} color="#0F2C59" style={{ marginRight: 8 }} />
+                  <Feather name="map-pin" size={18} color="#0B2564" style={{ marginRight: 8 }} />
                   <Text style={styles.reviewHeader}>Incident Location</Text>
                 </View>
 
@@ -618,7 +631,7 @@ export default function IncidentDetail({ route, navigation }) {
 
                   {/* Coordinates badge overlay */}
                   <View style={styles.coordsBadge}>
-                    <Feather name="navigation" size={10} color="#0F2C59" style={{ marginRight: 4 }} />
+                    <Feather name="navigation" size={10} color="#0B2564" style={{ marginRight: 4 }} />
                     <Text style={styles.coordsText}>
                       {incident.location.latitude.toFixed(5)}, {incident.location.longitude.toFixed(5)}
                     </Text>
@@ -641,7 +654,7 @@ export default function IncidentDetail({ route, navigation }) {
             {incident.mediaUrls && incident.mediaUrls.length > 0 && (
               <View style={styles.reviewCard}>
                 <View style={styles.reviewHeaderRow}>
-                  <Feather name="image" size={18} color="#0F2C59" style={{ marginRight: 8 }} />
+                  <Feather name="image" size={18} color="#0B2564" style={{ marginRight: 8 }} />
                   <Text style={styles.reviewHeader}>Evidence</Text>
                 </View>
                 <View style={styles.reviewThumbnailsRow}>
@@ -852,7 +865,7 @@ export default function IncidentDetail({ route, navigation }) {
       >
         <View style={styles.declineModalHeader}>
           <View style={[styles.declineIconCircle, { backgroundColor: '#E8F0FE' }]}>
-            <Feather name="edit-2" size={20} color="#0F2C59" />
+            <Feather name="edit-2" size={20} color="#0B2564" />
           </View>
           <View style={{ flex: 1, marginLeft: 12 }}>
             <Text style={styles.declineModalTitle}>Edit Admin Notes</Text>
@@ -884,7 +897,7 @@ export default function IncidentDetail({ route, navigation }) {
             <Text style={styles.cancelModalButtonText}>Cancel</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.confirmDeclineButton, { backgroundColor: '#0F2C59', shadowColor: '#0F2C59' }, editNotesSubmitting && { opacity: 0.6 }]}
+            style={[styles.confirmDeclineButton, { backgroundColor: '#0B2564', shadowColor: '#0B2564' }, editNotesSubmitting && { opacity: 0.6 }]}
             onPress={saveAdminNotes}
             disabled={editNotesSubmitting}
           >
@@ -924,13 +937,13 @@ export default function IncidentDetail({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF' },
+  container: { flex: 1, backgroundColor: 'transparent' },
 
   // ── Header ──────────────────────────────────────────────────────────
   navHeader: {
-    height: 64, paddingHorizontal: 24,
+    paddingHorizontal: 24,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'transparent',
   },
   backButton: {
     width: 40, height: 40, borderRadius: 20,
@@ -949,7 +962,7 @@ const styles = StyleSheet.create({
   centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
   loadingText: { fontSize: 14, color: '#6B7280', marginTop: 12 },
   errorText: { fontSize: 16, color: '#EF4444', fontWeight: '700', textAlign: 'center' },
-  retryButton: { backgroundColor: '#0F2C59', paddingVertical: 12, paddingHorizontal: 24, borderRadius: 20, marginTop: 20 },
+  retryButton: { backgroundColor: '#0B2564', paddingVertical: 12, paddingHorizontal: 24, borderRadius: 20, marginTop: 20 },
   retryButtonText: { color: '#FFFFFF', fontWeight: '700' },
 
   // ── Scroll content ───────────────────────────────────────────────────
@@ -1016,7 +1029,7 @@ const styles = StyleSheet.create({
   actionCard: {
     backgroundColor: '#FFFFFF', borderRadius: 20, padding: 18,
     borderWidth: 1, borderColor: '#F3F4F6', marginBottom: 20,
-    shadowColor: '#0F2C59', shadowOffset: { width: 0, height: 8 },
+    shadowColor: '#0B2564', shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.04, shadowRadius: 16, elevation: 2,
   },
   actionSubtitle: { fontSize: 13, color: '#6B7280', marginBottom: 14, fontWeight: '500' },
@@ -1042,7 +1055,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.03, shadowRadius: 16, elevation: 2,
   },
   reviewHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
-  reviewHeader: { fontSize: 16, fontWeight: '700', color: '#0F2C59' },
+  reviewHeader: { fontSize: 16, fontWeight: '700', color: '#0B2564' },
   reviewRow: { marginBottom: 12, borderBottomWidth: 1, borderBottomColor: '#F9FAFB', paddingBottom: 8 },
   reviewLabel: { fontSize: 12, color: '#9CA3AF', fontWeight: '600', marginBottom: 2 },
   reviewValue: { fontSize: 15, fontWeight: '700', color: '#1F2937', lineHeight: 20 },
@@ -1060,10 +1073,10 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: '#E5E7EB',
     backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center',
   },
-  circleCompleted: { borderColor: '#0F2C59', backgroundColor: '#0F2C59' },
-  circleActive:    { borderColor: '#0F2C59', backgroundColor: '#0F2C59' },
+  circleCompleted: { borderColor: '#0B2564', backgroundColor: '#0B2564' },
+  circleActive:    { borderColor: '#0B2564', backgroundColor: '#0B2564' },
   lineConnector:   { width: 2, flex: 1, backgroundColor: '#E5E7EB', marginVertical: 4 },
-  lineCompleted:   { backgroundColor: '#0F2C59' },
+  lineCompleted:   { backgroundColor: '#0B2564' },
   stepDetails:     { flex: 1, paddingTop: 2 },
   stepLabel:       { fontSize: 15, fontWeight: '700', color: '#9CA3AF' },
   stepLabelCompleted: { color: '#1F2937' },
@@ -1115,10 +1128,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#0F2C59',
+    backgroundColor: '#0B2564',
     borderRadius: 14,
     paddingVertical: 12,
-    shadowColor: '#0F2C59',
+    shadowColor: '#0B2564',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 10,
@@ -1214,12 +1227,12 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   messageButton: {
-    backgroundColor: '#0F2C59',
+    backgroundColor: '#0B2564',
     borderRadius: 30,
     paddingVertical: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#0F2C5940',
+    shadowColor: '#0B256440',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.1,
     shadowRadius: 20,
@@ -1263,7 +1276,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   statusTriggerValue: {
-    color: '#0F2C59',
+    color: '#0B2564',
     fontWeight: '700',
   },
   statusTriggerRight: {
@@ -1273,7 +1286,7 @@ const styles = StyleSheet.create({
   editBtnText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#0F2C59',
+    color: '#0B2564',
     marginRight: 4,
   },
   statusModalSheet: {
@@ -1350,7 +1363,7 @@ const styles = StyleSheet.create({
     padding: 14,
     marginTop: 8,
     marginBottom: 16,
-    shadowColor: '#0F2C59',
+    shadowColor: '#0B2564',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.05,
     shadowRadius: 8,

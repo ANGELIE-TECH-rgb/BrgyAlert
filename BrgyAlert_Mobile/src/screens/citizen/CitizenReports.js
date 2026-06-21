@@ -34,6 +34,7 @@ export default function CitizenReports({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
 
   // Monitor Network Connectivity State
   useEffect(() => {
@@ -297,7 +298,20 @@ export default function CitizenReports({ navigation }) {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
+
+      {/* Background Gradient Backdrop */}
+      <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+        <Svg width="100%" height="100%" style={StyleSheet.absoluteFillObject}>
+          <Defs>
+            <LinearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor="#EEF2F6" stopOpacity={0.85} />
+              <Stop offset="0.5" stopColor="#FFFFFF" stopOpacity={1} />
+            </LinearGradient>
+          </Defs>
+          <Rect width="100%" height="100%" fill="url(#bgGrad)" />
+        </Svg>
+      </View>
 
       {/* Header */}
       <View style={styles.header}>
@@ -313,14 +327,21 @@ export default function CitizenReports({ navigation }) {
 
       {/* Search Bar */}
       <View style={styles.searchContainer}>
-        <View style={styles.searchBar}>
-          <Feather name="search" size={18} color="#9CA3AF" style={styles.searchIcon} />
+        <View style={[styles.searchBar, searchFocused && styles.searchBarFocused]}>
+          <Feather 
+            name="search" 
+            size={18} 
+            color={searchFocused ? '#0B2564' : '#9CA3AF'} 
+            style={styles.searchIcon} 
+          />
           <TextInput
             style={styles.searchInput}
             placeholder="Search reports..."
             placeholderTextColor="#9CA3AF"
             value={searchQuery}
             onChangeText={setSearchQuery}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
@@ -382,7 +403,7 @@ export default function CitizenReports({ navigation }) {
               navigation.navigate('ReportWizard');
             }
           }}
-          accentColor="#0F2C59"
+          accentColor="#0B2564"
         />
       ) : (
         <FlatList
@@ -443,6 +464,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 16,
     marginBottom: 16,
+    backgroundColor: 'transparent',
   },
   headerLeft: {
     flexDirection: 'row',
@@ -485,10 +507,21 @@ const styles = StyleSheet.create({
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#F8FAFC',
     borderRadius: 16,
-    paddingHorizontal: 16,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 14,
     height: 48,
+  },
+  searchBarFocused: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#0B2564',
+    shadowColor: '#0B2564',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   searchIcon: {
     marginRight: 10,
@@ -519,8 +552,8 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   chipActive: {
-    backgroundColor: '#E8F0FE',
-    borderColor: '#0F2C59',
+    backgroundColor: '#EFF6FF',
+    borderColor: '#0B2564',
   },
   chipText: {
     fontSize: 13,
@@ -528,7 +561,7 @@ const styles = StyleSheet.create({
     color: '#4B5563',
   },
   chipTextActive: {
-    color: '#0F2C59',
+    color: '#0B2564',
   },
   listContent: {
     paddingHorizontal: 24,
@@ -663,10 +696,10 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#0F2C59',
+    backgroundColor: '#0B2564',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#0F2C59',
+    shadowColor: '#0B2564',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,

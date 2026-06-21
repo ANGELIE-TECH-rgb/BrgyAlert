@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "BrgyAlert_Mobile",
-    "slug": "BrgyAlert_Mobile",
+    "name": "BrgyAlert",
+    "slug": "BrgyAlert",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/logo.png",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
@@ -17,11 +17,11 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "foregroundImage": "./assets/logo.png",
+        "backgroundImage": "./assets/logo.png",
+        "monochromeImage": "./assets/logo.png"
       },
-      "package": "com.anonymous.BrgyAlert_Mobile",
+      "package": "com.anonymous.BrgyAlert",
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyD6dt6618BrcQrz8othFF1pyujiiHjwrY8"
@@ -29,7 +29,7 @@
       }
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/logo.png"
     },
     "plugins": [
       "expo-web-browser",
@@ -42,7 +42,7 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/icon.png",
+          "icon": "./assets/logo.png",
           "color": "#0F2C59"
         }
       ],

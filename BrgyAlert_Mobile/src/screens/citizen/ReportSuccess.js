@@ -3,6 +3,8 @@ import { StyleSheet, Text, View, TouchableOpacity, StatusBar } from 'react-nativ
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
+import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
+import { ScrollView } from 'react-native';
 
 export default function ReportSuccess({ route, navigation }) {
   const insets = useSafeAreaInsets();
@@ -15,7 +17,20 @@ export default function ReportSuccess({ route, navigation }) {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
+
+      {/* Background Gradient Backdrop */}
+      <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+        <Svg width="100%" height="100%" style={StyleSheet.absoluteFillObject}>
+          <Defs>
+            <LinearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor="#EEF2F6" stopOpacity={0.85} />
+              <Stop offset="0.5" stopColor="#FFFFFF" stopOpacity={1} />
+            </LinearGradient>
+          </Defs>
+          <Rect width="100%" height="100%" fill="url(#bgGrad)" />
+        </Svg>
+      </View>
 
       {/* Navigation Header */}
       <View style={styles.navHeader}>
@@ -27,50 +42,54 @@ export default function ReportSuccess({ route, navigation }) {
         </TouchableOpacity>
       </View>
 
-      {/* Main Content Container */}
-      <View style={styles.content}>
+      {/* Scrollable Content Wrapper */}
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         
-        {/* Concentric Circle Success Badge */}
-        <View style={styles.iconOuterRing}>
-          <View style={styles.iconMiddleRing}>
-            <View style={styles.iconInnerCircle}>
-              <Ionicons 
-                name={isOffline ? "chatbubble-ellipses" : "shield-checkmark"} 
-                size={56} 
-                color="#2563EB" 
-              />
+        {/* Main Content Container inside Secure Card */}
+        <View style={styles.secureCard}>
+          
+          {/* Concentric Circle Success Badge */}
+          <View style={styles.iconOuterRing}>
+            <View style={styles.iconMiddleRing}>
+              <View style={styles.iconInnerCircle}>
+                <Ionicons 
+                  name={isOffline ? "chatbubble-ellipses" : "shield-checkmark"} 
+                  size={56} 
+                  color="#2563EB" 
+                />
+              </View>
+            </View>
+          </View>
+
+          {/* Success Title */}
+          <Text style={styles.title}>
+            {isOffline ? 'SMS Report Compiled' : 'Report Successfully Submitted'}
+          </Text>
+          
+          {/* Subtitle */}
+          <Text style={styles.subtitle}>
+            {isOffline 
+              ? 'We have compiled your report details into an SMS. Please make sure to press SEND on the native messaging screen to transmit it.'
+              : `Thank you for helping keep our community safe. Your report (Report #${displayId}) has been received and is being reviewed by the Barangay Command Center.`
+            }
+          </Text>
+
+          {/* Transmission Card */}
+          <View style={styles.timeCard}>
+            <View style={styles.clockIconWrapper}>
+              <Feather name={isOffline ? "message-square" : "clock"} size={20} color="#2563EB" />
+            </View>
+            <View style={styles.timeTextWrapper}>
+              <Text style={styles.timeLabel}>
+                {isOffline ? 'TRANSMISSION CHANNEL' : 'ESTIMATED REVIEW TIME'}
+              </Text>
+              <Text style={styles.timeValue}>
+                {isOffline ? 'Native SMS Client' : estimatedTime}
+              </Text>
             </View>
           </View>
         </View>
-
-        {/* Success Title */}
-        <Text style={styles.title}>
-          {isOffline ? 'SMS Report Compiled' : 'Report Successfully Submitted'}
-        </Text>
-        
-        {/* Subtitle */}
-        <Text style={styles.subtitle}>
-          {isOffline 
-            ? 'We have compiled your report details into an SMS. Please make sure to press SEND on the native messaging screen to transmit it.'
-            : `Thank you for helping keep our community safe. Your report (Report #${displayId}) has been received and is being reviewed by the Barangay Command Center.`
-          }
-        </Text>
-
-        {/* Transmission Card */}
-        <View style={styles.timeCard}>
-          <View style={styles.clockIconWrapper}>
-            <Feather name={isOffline ? "message-square" : "clock"} size={20} color="#2563EB" />
-          </View>
-          <View style={styles.timeTextWrapper}>
-            <Text style={styles.timeLabel}>
-              {isOffline ? 'TRANSMISSION CHANNEL' : 'ESTIMATED REVIEW TIME'}
-            </Text>
-            <Text style={styles.timeValue}>
-              {isOffline ? 'Native SMS Client' : estimatedTime}
-            </Text>
-          </View>
-        </View>
-      </View>
+      </ScrollView>
 
       {/* Footer Buttons */}
       <View style={styles.footer}>
@@ -118,10 +137,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   navHeader: {
-    height: 56,
+    height: 64,
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-    marginTop: 8,
+    backgroundColor: 'transparent',
   },
   backButton: {
     width: 40,
@@ -137,7 +155,7 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 2,
     borderWidth: 1,
-    borderColor: '#F3F4F6',
+    borderColor: '#ECEEF1',
   },
   content: {
     flex: 1,
@@ -193,6 +211,26 @@ const styles = StyleSheet.create({
     marginBottom: 36,
     fontWeight: '500',
   },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingBottom: 16,
+  },
+  secureCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#0B2564',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    elevation: 4,
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 16,
+  },
   timeCard: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
@@ -202,12 +240,6 @@ const styles = StyleSheet.create({
     padding: 16,
     alignItems: 'center',
     width: '100%',
-    // Smooth, soft shadow
-    shadowColor: '#00000040',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.03,
-    shadowRadius: 16,
-    elevation: 2,
   },
   clockIconWrapper: {
     backgroundColor: '#EFF6FF',

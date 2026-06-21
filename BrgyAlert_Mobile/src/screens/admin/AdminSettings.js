@@ -11,7 +11,8 @@ import {
   Switch,
   Alert,
   Modal,
-  Linking
+  Linking,
+  Animated
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -27,6 +28,25 @@ import GestureModal from '../../components/GestureModal';
 export default function AdminSettings({ navigation }) {
   const { user, userProfile, logout, resetPassword, updateUserRole } = useAuth();
   const insets = useSafeAreaInsets();
+
+  // Smooth entrance animations
+  const fadeAnim = React.useRef(new Animated.Value(0)).current;
+  const slideAnim = React.useRef(new Animated.Value(20)).current;
+
+  React.useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
 
   // Profile Form States
   const [fullName, setFullName] = useState(userProfile?.fullName || '');
@@ -399,15 +419,29 @@ export default function AdminSettings({ navigation }) {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
+
+      {/* Background Gradient Backdrop */}
+      <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+        <Svg width="100%" height="100%" style={StyleSheet.absoluteFillObject}>
+          <Defs>
+            <LinearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor="#EEF2F6" stopOpacity={0.85} />
+              <Stop offset="0.5" stopColor="#FFFFFF" stopOpacity={1} />
+            </LinearGradient>
+          </Defs>
+          <Rect width="100%" height="100%" fill="url(#bgGrad)" />
+        </Svg>
+      </View>
 
       {/* Header Block */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <Text style={styles.headerTitle}>Admin Settings</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
         {/* Profile Card Summary */}
         <View style={styles.profileCard}>
@@ -455,7 +489,7 @@ export default function AdminSettings({ navigation }) {
                   onPress={() => setIsEditing(true)}
                   activeOpacity={0.7}
                 >
-                  <Feather name="edit-2" size={14} color="#0F2C59" style={{ marginRight: 6 }} />
+                  <Feather name="edit-2" size={14} color="#0B2564" style={{ marginRight: 6 }} />
                   <Text style={styles.editProfileButtonText}>Edit Profile</Text>
                 </TouchableOpacity>
               </View>
@@ -668,7 +702,7 @@ export default function AdminSettings({ navigation }) {
                   </Text>
                   <Text style={{ fontSize: 13, color: '#6B7280', marginBottom: 10 }}>{searchedUser.email}</Text>
 
-                  <Text style={styles.inputLabel}>Current Role: <Text style={{ color: '#0F2C59', fontWeight: '700' }}>{searchedUser.role}</Text></Text>
+                  <Text style={styles.inputLabel}>Current Role: <Text style={{ color: '#0B2564', fontWeight: '700' }}>{searchedUser.role}</Text></Text>
                   <Text style={[styles.inputLabel, { marginTop: 10 }]}>New Role</Text>
                   <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
                     {['citizen', 'responder', 'admin'].map((role) => (
@@ -679,8 +713,8 @@ export default function AdminSettings({ navigation }) {
                           {
                             flex: 1, paddingVertical: 10, borderRadius: 10,
                             borderWidth: 1.5,
-                            borderColor: newUserRole === role ? '#0F2C59' : '#D1D5DB',
-                            backgroundColor: newUserRole === role ? '#0F2C59' : '#FFFFFF',
+                            borderColor: newUserRole === role ? '#0B2564' : '#D1D5DB',
+                            backgroundColor: newUserRole === role ? '#0B2564' : '#FFFFFF',
                             alignItems: 'center'
                           }
                         ]}
@@ -717,8 +751,8 @@ export default function AdminSettings({ navigation }) {
             {/* Sound Chimes Row */}
             <View style={styles.settingRow}>
               <View style={styles.settingRowLeft}>
-                <View style={[styles.rowIconWrapper, { backgroundColor: '#EFF6FF' }]}>
-                  <Feather name="volume-2" size={18} color="#2563EB" />
+                <View style={[styles.rowIconWrapper, { backgroundColor: '#E8F0FE' }]}>
+                  <Feather name="volume-2" size={18} color="#0B2564" />
                 </View>
                 <View>
                   <Text style={styles.settingTitle}>Notification Chime</Text>
@@ -729,7 +763,7 @@ export default function AdminSettings({ navigation }) {
                 value={soundEnabled}
                 onValueChange={handleToggleSound}
                 trackColor={{ false: '#D1D5DB', true: '#BFDBFE' }}
-                thumbColor={soundEnabled ? '#2563EB' : '#9CA3AF'}
+                thumbColor={soundEnabled ? '#0B2564' : '#9CA3AF'}
               />
             </View>
 
@@ -740,8 +774,8 @@ export default function AdminSettings({ navigation }) {
               activeOpacity={0.7}
             >
               <View style={styles.settingRowLeft}>
-                <View style={[styles.rowIconWrapper, { backgroundColor: '#FFF9E6' }]}>
-                  <Feather name="lock" size={18} color="#D97706" />
+                <View style={[styles.rowIconWrapper, { backgroundColor: '#E8F0FE' }]}>
+                  <Feather name="lock" size={18} color="#0B2564" />
                 </View>
                 <View>
                   <Text style={styles.settingTitle}>Reset Password</Text>
@@ -758,8 +792,8 @@ export default function AdminSettings({ navigation }) {
               activeOpacity={0.7}
             >
               <View style={styles.settingRowLeft}>
-                <View style={[styles.rowIconWrapper, { backgroundColor: '#F3F4F6' }]}>
-                  <Feather name="key" size={18} color="#4B5563" />
+                <View style={[styles.rowIconWrapper, { backgroundColor: '#E8F0FE' }]}>
+                  <Feather name="key" size={18} color="#0B2564" />
                 </View>
                 <View>
                   <Text style={styles.settingTitle}>Change Password</Text>
@@ -776,8 +810,8 @@ export default function AdminSettings({ navigation }) {
               activeOpacity={0.7}
             >
               <View style={styles.settingRowLeft}>
-                <View style={[styles.rowIconWrapper, { backgroundColor: '#EFF6FF' }]}>
-                  <Feather name="help-circle" size={18} color="#2563EB" />
+                <View style={[styles.rowIconWrapper, { backgroundColor: '#E8F0FE' }]}>
+                  <Feather name="help-circle" size={18} color="#0B2564" />
                 </View>
                 <View>
                   <Text style={styles.settingTitle}>Replay App Tour</Text>
@@ -794,8 +828,8 @@ export default function AdminSettings({ navigation }) {
               activeOpacity={0.7}
             >
               <View style={styles.settingRowLeft}>
-                <View style={[styles.rowIconWrapper, { backgroundColor: '#FEF2F2' }]}>
-                  <Feather name="trash-2" size={18} color="#EF4444" />
+                <View style={[styles.rowIconWrapper, { backgroundColor: '#E8F0FE' }]}>
+                  <Feather name="trash-2" size={18} color="#0B2564" />
                 </View>
                 <View>
                   <Text style={styles.settingTitle}>Clear App Cache</Text>
@@ -820,8 +854,8 @@ export default function AdminSettings({ navigation }) {
               activeOpacity={0.7}
             >
               <View style={styles.settingRowLeft}>
-                <View style={[styles.rowIconWrapper, { backgroundColor: '#EFF6FF' }]}>
-                  <Feather name="mail" size={18} color="#2563EB" />
+                <View style={[styles.rowIconWrapper, { backgroundColor: '#E8F0FE' }]}>
+                  <Feather name="mail" size={18} color="#0B2564" />
                 </View>
                 <View>
                   <Text style={styles.settingTitle}>Contact Support</Text>
@@ -838,8 +872,8 @@ export default function AdminSettings({ navigation }) {
               activeOpacity={0.7}
             >
               <View style={styles.settingRowLeft}>
-                <View style={[styles.rowIconWrapper, { backgroundColor: '#ECFDF5' }]}>
-                  <Feather name="shield" size={18} color="#10B981" />
+                <View style={[styles.rowIconWrapper, { backgroundColor: '#E8F0FE' }]}>
+                  <Feather name="shield" size={18} color="#0B2564" />
                 </View>
                 <View>
                   <Text style={styles.settingTitle}>Privacy Policy</Text>
@@ -856,8 +890,8 @@ export default function AdminSettings({ navigation }) {
               activeOpacity={0.7}
             >
               <View style={styles.settingRowLeft}>
-                <View style={[styles.rowIconWrapper, { backgroundColor: '#FFF9E6' }]}>
-                  <Feather name="file-text" size={18} color="#D97706" />
+                <View style={[styles.rowIconWrapper, { backgroundColor: '#E8F0FE' }]}>
+                  <Feather name="file-text" size={18} color="#0B2564" />
                 </View>
                 <View>
                   <Text style={styles.settingTitle}>Terms of Service</Text>
@@ -874,8 +908,8 @@ export default function AdminSettings({ navigation }) {
               activeOpacity={0.7}
             >
               <View style={styles.settingRowLeft}>
-                <View style={[styles.rowIconWrapper, { backgroundColor: '#FEF2F2' }]}>
-                  <Feather name="alert-circle" size={18} color="#EF4444" />
+                <View style={[styles.rowIconWrapper, { backgroundColor: '#E8F0FE' }]}>
+                  <Feather name="alert-circle" size={18} color="#0B2564" />
                 </View>
                 <View>
                   <Text style={styles.settingTitle}>Report a Bug</Text>
@@ -901,6 +935,7 @@ export default function AdminSettings({ navigation }) {
         </TouchableOpacity>
 
       </ScrollView>
+    </Animated.View>
 
       {/* Change Password Modal */}
       <Modal
@@ -920,7 +955,7 @@ export default function AdminSettings({ navigation }) {
             {/* Header */}
             <View style={styles.modalHeaderRow}>
               <View style={styles.modalHeaderTitleGroup}>
-                <Feather name="key" size={20} color="#0F2C59" style={{ marginRight: 8 }} />
+                <Feather name="key" size={20} color="#0B2564" style={{ marginRight: 8 }} />
                 <Text style={styles.modalHeaderTitle}>Change Password</Text>
               </View>
               <TouchableOpacity
@@ -1076,7 +1111,7 @@ export default function AdminSettings({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'transparent',
   },
   header: {
     paddingHorizontal: 24,
@@ -1229,7 +1264,7 @@ const styles = StyleSheet.create({
   },
   genderChipActive: {
     backgroundColor: '#E8F0FE',
-    borderColor: '#0F2C59',
+    borderColor: '#0B2564',
   },
   genderChipText: {
     fontSize: 13,
@@ -1237,7 +1272,7 @@ const styles = StyleSheet.create({
     color: '#4B5563',
   },
   genderChipTextActive: {
-    color: '#0F2C59',
+    color: '#0B2564',
   },
   saveButton: {
     backgroundColor: '#0B2564',
@@ -1329,7 +1364,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   editProfileButtonText: {
-    color: '#0F2C59',
+    color: '#0B2564',
     fontSize: 13,
     fontWeight: '700',
   },
@@ -1385,7 +1420,7 @@ const styles = StyleSheet.create({
   modalHeaderTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#0F2C59',
+    color: '#0B2564',
   },
   modalCloseButton: {
     width: 32,

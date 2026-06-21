@@ -117,7 +117,7 @@ export default function AdminMapScreen({ navigation }) {
       )}
 
       {/* ── Top Bar Overlay ──────────────────────────────────────── */}
-      <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.topBar, { top: insets.top + 8 }]}>
         {/* Back Button */}
         <TouchableOpacity
           style={styles.backBtn}
@@ -208,21 +208,21 @@ const styles = StyleSheet.create({
   // ── Top Bar ────────────────────────────────────────────────────────
   topBar: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
+    left: 16,
+    right: 16,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingBottom: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.96)',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.06)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 4,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+    shadowColor: '#0B2564',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    elevation: 6,
   },
   backBtn: {
     width: 40,

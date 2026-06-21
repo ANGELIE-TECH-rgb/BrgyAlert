@@ -15,6 +15,7 @@ import {
   Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, getDoc, doc, updateDoc, where, getDocs, increment, writeBatch } from 'firebase/firestore';
 import { Feather } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
@@ -614,14 +615,27 @@ export default function ChatScreen({ route, navigation }) {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.container, { paddingTop: insets.top }]}
+      style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
     >
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
+
+      {/* Background Gradient Backdrop */}
+      <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+        <Svg width="100%" height="100%" style={StyleSheet.absoluteFillObject}>
+          <Defs>
+            <LinearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor="#EEF2F6" stopOpacity={0.85} />
+              <Stop offset="0.5" stopColor="#FFFFFF" stopOpacity={1} />
+            </LinearGradient>
+          </Defs>
+          <Rect width="100%" height="100%" fill="url(#bgGrad)" />
+        </Svg>
+      </View>
 
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top, height: 64 + insets.top }]}>
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
           <Feather name="arrow-left" size={20} color="#1F2937" />
         </TouchableOpacity>
@@ -838,15 +852,15 @@ export default function ChatScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'transparent',
   },
   header: {
-    height: 64,
     paddingHorizontal: 24,
     flexDirection: 'row',
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderColor: '#F3F4F6',
+    borderColor: 'rgba(0,0,0,0.06)',
+    backgroundColor: 'transparent',
   },
   backButton: {
     width: 40,
@@ -1009,7 +1023,7 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 4,
   },
   bubbleRight: {
-    backgroundColor: '#0F2C59',
+    backgroundColor: '#0B2564',
     borderBottomRightRadius: 4,
   },
   senderNameText: {
@@ -1067,11 +1081,11 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#0F2C59',
+    backgroundColor: '#0B2564',
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 10,
-    shadowColor: '#0F2C5940',
+    shadowColor: '#0B256440',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 10,
@@ -1227,7 +1241,7 @@ const styles = StyleSheet.create({
   emptyWelcomeTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#0F2C59',
+    color: '#0B2564',
     marginBottom: 8,
   },
   emptyWelcomeDesc: {

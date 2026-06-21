@@ -33,6 +33,7 @@ import TutorialOverlay from '../../components/TutorialOverlay';
 import SkeletonLoader from '../../components/SkeletonLoader';
 import ConnectionBlocker from '../../components/ConnectionBlocker';
 import EmptyState from '../../components/EmptyState';
+import GestureModal from '../../components/GestureModal';
 
 export default function CitizenDashboard({ navigation }) {
   const { user, userProfile, sendVerificationEmail } = useAuth();
@@ -128,12 +129,61 @@ export default function CitizenDashboard({ navigation }) {
   const [isHolding, setIsHolding]         = useState(false);
   const secondsRef = useRef(3);
 
-  // ─── Panic button animations ────────────────────────────────────────────
+  // ─── Animations ────────────────────────────────────────────
   const pulseAnim   = useRef(new Animated.Value(1)).current;  // idle breathing ring
-  const scaleAnim   = useRef(new Animated.Value(1)).current;  // button press scale
+  const scaleAnim   = useRef(new Animated.Value(0.3)).current;  // button press & entrance scale
   const arcProgress = useRef(new Animated.Value(0)).current;  // 0→1 countdown sweep
   const subtitleOpacity = useRef(new Animated.Value(1)).current;
   const pulseLoopRef = useRef(null);
+
+  const tooltipY = useRef(new Animated.Value(0)).current;  // FAB Tooltip vertical float
+  const servicesEntryAnim = useRef(new Animated.Value(0)).current; // Services slide-in
+  const logsEntryAnim = useRef(new Animated.Value(0)).current; // Logs slide-in
+
+  // Entrance and loop animations on mount
+  useEffect(() => {
+    // 1. Spring scale-in for Panic button
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      tension: 45,
+      friction: 6,
+      useNativeDriver: true,
+    }).start();
+
+    // 2. Continuous loop for FAB Tooltip floating
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(tooltipY, {
+          toValue: -6,
+          duration: 1400,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(tooltipY, {
+          toValue: 0,
+          duration: 1400,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+
+    // 3. Staggered slide up & fade in of service and log containers
+    Animated.stagger(150, [
+      Animated.timing(servicesEntryAnim, {
+        toValue: 1,
+        duration: 550,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(logsEntryAnim, {
+        toValue: 1,
+        duration: 550,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      })
+    ]).start();
+  }, []);
 
   // Idle pulse loop (starts on mount, stops while holding)
   useEffect(() => {
@@ -156,8 +206,14 @@ export default function CitizenDashboard({ navigation }) {
       );
       pulseLoopRef.current.start();
     };
-    startPulse();
-    return () => { if (pulseLoopRef.current) pulseLoopRef.current.stop(); };
+    // Wait for the entrance animation to finish before starting idle pulse
+    const timer = setTimeout(() => {
+      startPulse();
+    }, 600);
+    return () => {
+      clearTimeout(timer);
+      if (pulseLoopRef.current) pulseLoopRef.current.stop();
+    };
   }, []);
 
 
@@ -425,6 +481,19 @@ export default function CitizenDashboard({ navigation }) {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
+      {/* Background Gradient Backdrop */}
+      <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+        <Svg width="100%" height="100%" style={StyleSheet.absoluteFillObject}>
+          <Defs>
+            <LinearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor="#EEF2F6" stopOpacity={0.85} />
+              <Stop offset="0.5" stopColor="#FFFFFF" stopOpacity={1} />
+            </LinearGradient>
+          </Defs>
+          <Rect width="100%" height="100%" fill="url(#bgGrad)" />
+        </Svg>
+      </View>
+
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
         {/* Email Verification Banner */}
@@ -582,7 +651,18 @@ export default function CitizenDashboard({ navigation }) {
         </View>
 
         {/* Quick Services section */}
-        <View style={styles.sectionContainer}>
+        <Animated.View style={[
+          styles.sectionContainer,
+          {
+            opacity: servicesEntryAnim,
+            transform: [{
+              translateY: servicesEntryAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [25, 0]
+              })
+            }]
+          }
+        ]}>
           <Text style={styles.sectionTitle}>Quick Services</Text>
           <View style={styles.servicesGrid}>
 
@@ -608,10 +688,22 @@ export default function CitizenDashboard({ navigation }) {
               <Text style={styles.serviceText}>My Reports</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </Animated.View>
 
         {/* Recent Logs Section */}
-        <View style={[styles.sectionContainer, styles.logsSection]}>
+        <Animated.View style={[
+          styles.sectionContainer,
+          styles.logsSection,
+          {
+            opacity: logsEntryAnim,
+            transform: [{
+              translateY: logsEntryAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [25, 0]
+              })
+            }]
+          }
+        ]}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Recent logs</Text>
             <TouchableOpacity onPress={() => navigation.navigate('CitizenReports')}>
@@ -639,16 +731,19 @@ export default function CitizenDashboard({ navigation }) {
               />
             ))
           )}
-        </View>
+        </Animated.View>
 
       </ScrollView>
 
       {/* Floating Action Button with pointer label tooltip on the left (Image 3) */}
       <View style={styles.fabContainer}>
-        <View style={styles.fabTooltip}>
+        <Animated.View style={[
+          styles.fabTooltip,
+          { transform: [{ translateY: tooltipY }] }
+        ]}>
           <Text style={styles.fabTooltipText}>Add a new report</Text>
           <View style={styles.fabTooltipPointer} />
-        </View>
+        </Animated.View>
         <TouchableOpacity
           style={styles.fabCircleButton}
           onPress={() => navigation.navigate('ReportWizard')}
@@ -761,113 +856,86 @@ export default function CitizenDashboard({ navigation }) {
         </TouchableOpacity>
       </Modal>
 
-      {/* Emergency Hotlines Modal */}
-      <Modal
+      {/* Emergency Hotlines Bottom Sheet Modal */}
+      <GestureModal
         visible={showHotlinesModal}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowHotlinesModal(false)}
+        onClose={() => setShowHotlinesModal(false)}
+        title={`${barangayConfig.barangayName || 'Barangay'} Hotlines`}
       >
-        <View style={styles.hotlinesModalOverlay}>
-          <TouchableOpacity
-            style={styles.modalOverlayDismiss}
-            activeOpacity={1}
-            onPress={() => setShowHotlinesModal(false)}
-          />
-          <View style={styles.hotlinesModalContent}>
+        <View style={styles.hotlinesModalContent}>
+          <Text style={styles.hotlinesSubtitle}>
+            Tapping an emergency hotline will immediately launch your phone dialer app.
+          </Text>
+
+          {/* List of Hotlines */}
+          <View style={styles.hotlinesList}>
             
-            {/* Header */}
-            <View style={styles.hotlinesHeader}>
-              <View style={styles.hotlinesHeaderTitleRow}>
-                <Feather name="phone-call" size={22} color="#0F2C59" style={{ marginRight: 8 }} />
-                <Text style={styles.hotlinesModalTitle} numberOfLines={1}>
-                  {barangayConfig.barangayName || 'Barangay'} Hotlines
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => setShowHotlinesModal(false)}
-                style={styles.closeButton}
-                activeOpacity={0.7}
-              >
-                <Feather name="x" size={20} color="#6B7280" />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.hotlinesSubtitle}>
-              Tapping an emergency hotline will immediately launch your phone dialer app.
-            </Text>
-
-            {/* List of Hotlines */}
-            <View style={styles.hotlinesList}>
-              
-              {/* Police */}
-              <TouchableOpacity
-                style={styles.hotlineItem}
-                onPress={() => handleDial(barangayConfig.hotlinePolice)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.hotlineLeft}>
-                  <View style={[styles.hotlineIconWrapper, { backgroundColor: '#EFF6FF' }]}>
-                    <Feather name="shield" size={20} color="#2563EB" />
-                  </View>
-                  <View>
-                    <Text style={styles.hotlineName}>Police Station</Text>
-                    <Text style={styles.hotlineNum}>{barangayConfig.hotlinePolice || 'Not Configured'}</Text>
-                  </View>
-                </View>
-                <Feather name="phone" size={18} color="#2563EB" />
-              </TouchableOpacity>
-
-              {/* Fire */}
-              <TouchableOpacity
-                style={styles.hotlineItem}
-                onPress={() => handleDial(barangayConfig.hotlineFire)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.hotlineLeft}>
-                  <View style={[styles.hotlineIconWrapper, { backgroundColor: '#FEF2F2' }]}>
-                    <Feather name="flame" size={20} color="#EF4444" />
-                  </View>
-                  <View>
-                    <Text style={styles.hotlineName}>Fire Station</Text>
-                    <Text style={styles.hotlineNum}>{barangayConfig.hotlineFire || 'Not Configured'}</Text>
-                  </View>
-                </View>
-                <Feather name="phone" size={18} color="#EF4444" />
-              </TouchableOpacity>
-
-              {/* Ambulance */}
-              <TouchableOpacity
-                style={styles.hotlineItem}
-                onPress={() => handleDial(barangayConfig.hotlineAmbulance)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.hotlineLeft}>
-                  <View style={[styles.hotlineIconWrapper, { backgroundColor: '#ECFDF5' }]}>
-                    <MaterialCommunityIcons name="ambulance" size={20} color="#10B981" />
-                  </View>
-                  <View>
-                    <Text style={styles.hotlineName}>Ambulance & Medical</Text>
-                    <Text style={styles.hotlineNum}>{barangayConfig.hotlineAmbulance || 'Not Configured'}</Text>
-                  </View>
-                </View>
-                <Feather name="phone" size={18} color="#10B981" />
-              </TouchableOpacity>
-
-            </View>
-
-            {/* Back / Dismiss button */}
+            {/* Police */}
             <TouchableOpacity
-              style={styles.dismissButton}
-              onPress={() => setShowHotlinesModal(false)}
-              activeOpacity={0.8}
+              style={styles.hotlineItem}
+              onPress={() => handleDial(barangayConfig.hotlinePolice)}
+              activeOpacity={0.7}
             >
-              <Text style={styles.dismissButtonText}>Done</Text>
+              <View style={styles.hotlineLeft}>
+                <View style={[styles.hotlineIconWrapper, { backgroundColor: '#EFF6FF' }]}>
+                  <Feather name="shield" size={20} color="#2563EB" />
+                </View>
+                <View>
+                  <Text style={styles.hotlineName}>Police Station</Text>
+                  <Text style={styles.hotlineNum}>{barangayConfig.hotlinePolice || 'Not Configured'}</Text>
+                </View>
+              </View>
+              <Feather name="phone" size={18} color="#2563EB" />
+            </TouchableOpacity>
+
+            {/* Fire */}
+            <TouchableOpacity
+              style={styles.hotlineItem}
+              onPress={() => handleDial(barangayConfig.hotlineFire)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.hotlineLeft}>
+                <View style={[styles.hotlineIconWrapper, { backgroundColor: '#FEF2F2' }]}>
+                  <Feather name="flame" size={20} color="#EF4444" />
+                </View>
+                <View>
+                  <Text style={styles.hotlineName}>Fire Station</Text>
+                  <Text style={styles.hotlineNum}>{barangayConfig.hotlineFire || 'Not Configured'}</Text>
+                </View>
+              </View>
+              <Feather name="phone" size={18} color="#EF4444" />
+            </TouchableOpacity>
+
+            {/* Ambulance */}
+            <TouchableOpacity
+              style={styles.hotlineItem}
+              onPress={() => handleDial(barangayConfig.hotlineAmbulance)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.hotlineLeft}>
+                <View style={[styles.hotlineIconWrapper, { backgroundColor: '#ECFDF5' }]}>
+                  <MaterialCommunityIcons name="ambulance" size={20} color="#10B981" />
+                </View>
+                <View>
+                  <Text style={styles.hotlineName}>Ambulance & Medical</Text>
+                  <Text style={styles.hotlineNum}>{barangayConfig.hotlineAmbulance || 'Not Configured'}</Text>
+                </View>
+              </View>
+              <Feather name="phone" size={18} color="#10B981" />
             </TouchableOpacity>
 
           </View>
+
+          {/* Dismiss button */}
+          <TouchableOpacity
+            style={styles.dismissButton}
+            onPress={() => setShowHotlinesModal(false)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.dismissButtonText}>Done</Text>
+          </TouchableOpacity>
         </View>
-      </Modal>
+      </GestureModal>
 
       {/* Connection Loss Blocker for Citizens */}
       {!isOnline && <ConnectionBlocker navigation={navigation} />}
@@ -903,6 +971,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 16,
     marginBottom: 24,
+    backgroundColor: 'transparent',
   },
   headerLeft: {
     flex: 1,
@@ -990,14 +1059,13 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.25)',
     shadowColor: '#FF3B3F',
     shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.4,
+    shadowOpacity: 0.18,
     shadowRadius: 28,
     elevation: 10,
   },
   panicButtonHolding: {
     backgroundColor: '#DC2626',
     borderColor: '#FECACA',
-    transform: [{ scale: 1.05 }],
   },
   holdTimerText: {
     color: '#FFFFFF',
@@ -1036,13 +1104,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginHorizontal: 5,
     borderWidth: 1,
-    borderColor: '#F3F4F6',
-    // Smooth very faint shadow
-    shadowColor: '#00000047',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.02,
+    borderColor: '#E5E7EB',
+    // Premium soft card shadow
+    shadowColor: '#0F2C59',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.015,
     shadowRadius: 16,
-    elevation: 2,
+    elevation: 1,
   },
   serviceIconWrapper: {
     backgroundColor: '#EFF6FF',
@@ -1071,7 +1139,7 @@ const styles = StyleSheet.create({
   },
   seeAllText: {
     fontSize: 13,
-    color: '#9CA3AF',
+    color: '#2563EB',
     fontWeight: '600',
   },
   logsLoader: {
@@ -1113,13 +1181,13 @@ const styles = StyleSheet.create({
     marginRight: 10,
     position: 'relative',
     // Smooth soft shadow for label bubble
-    shadowColor: '#00000068',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.02, // Faint low opacity shadow
+    shadowOpacity: 0.04, // Faint low opacity shadow
     shadowRadius: 16,
-    elevation: 2,
+    elevation: 3,
     borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.02)',
+    borderColor: '#E2E8F0',
   },
   fabTooltipText: {
     fontSize: 12,
@@ -1134,6 +1202,9 @@ const styles = StyleSheet.create({
     height: 8,
     backgroundColor: '#FFFFFF',
     transform: [{ rotate: '45deg' }],
+    borderTopWidth: 1,
+    borderRightWidth: 1,
+    borderColor: '#E2E8F0',
   },
   fabCircleButton: {
     width: 56,
@@ -1147,7 +1218,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.1, // Low opacity smooth blue shadow
     shadowRadius: 20,
-    elevation: 4,
+    elevation: 5,
   },
   bottomGradient: {
     position: 'absolute',
@@ -1296,15 +1367,8 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
   hotlinesModalContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
     width: '100%',
-    padding: 24,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
-    elevation: 5,
+    paddingBottom: 8,
   },
   hotlinesHeader: {
     flexDirection: 'row',
@@ -1332,10 +1396,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   hotlinesSubtitle: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#6B7280',
     marginBottom: 20,
-    lineHeight: 18,
+    lineHeight: 19,
   },
   hotlinesList: {
     marginBottom: 20,
@@ -1348,8 +1412,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#F3F4F6',
+    borderColor: '#E5E7EB',
     marginBottom: 12,
+    // Soft card shadow
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.02,
+    shadowRadius: 8,
+    elevation: 1,
   },
   hotlineLeft: {
     flexDirection: 'row',
@@ -1376,14 +1446,20 @@ const styles = StyleSheet.create({
   },
   dismissButton: {
     backgroundColor: '#0F2C59',
-    borderRadius: 12,
-    height: 46,
+    borderRadius: 16,
+    height: 52,
     justifyContent: 'center',
     alignItems: 'center',
+    marginTop: 8,
+    shadowColor: '#0F2C59',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
   },
   dismissButtonText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700',
   },
   verificationWarningBanner: {
@@ -1391,9 +1467,15 @@ const styles = StyleSheet.create({
     borderColor: '#FFEEBA',
     borderWidth: 1,
     borderRadius: 16,
-    marginHorizontal: 16,
+    marginHorizontal: 24,
     marginTop: 16,
     padding: 16,
+    // Soft warning shadow
+    shadowColor: '#856404',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 2,
   },
   verificationBannerMain: {
     flexDirection: 'row',

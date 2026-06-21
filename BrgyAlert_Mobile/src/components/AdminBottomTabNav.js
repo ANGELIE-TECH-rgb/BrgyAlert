@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, Animated } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
@@ -15,6 +15,18 @@ export default function AdminBottomTabNav() {
   const [hasUnreadQueue, setHasUnreadQueue] = useState(false);
   
   const activeTab = route.name;
+
+  const activeScale = useRef(new Animated.Value(0.75)).current;
+
+  useEffect(() => {
+    activeScale.setValue(0.75);
+    Animated.spring(activeScale, {
+      toValue: 1,
+      tension: 140,
+      friction: 8,
+      useNativeDriver: true,
+    }).start();
+  }, [activeTab]);
 
   useEffect(() => {
     if (!user) return;
@@ -84,30 +96,37 @@ export default function AdminBottomTabNav() {
           return (
             <TouchableOpacity 
               key={tab.name}
-              style={[styles.tabButton, isSelected && styles.tabButtonSelected]}
               onPress={() => handlePress(tab.name)}
               activeOpacity={0.8}
             >
-              <View style={styles.iconContainer}>
-                <Feather 
-                  name={tab.icon} 
-                  size={22} 
-                  color={isSelected ? '#0F2C59' : '#6C757D'} 
-                  style={styles.tabIcon}
-                />
-                {tab.name === 'AdminMessages' && hasUnreadMessages && (
-                  <View style={styles.redDot} />
-                )}
-                {tab.name === 'AdminQueue' && hasUnreadQueue && (
-                  <View style={styles.redDot} />
-                )}
-              </View>
-              <View style={styles.labelWrapper}>
-                <Text style={[styles.labelText, isSelected && styles.labelTextSelected]}>
-                  {tab.label}
-                </Text>
-                {isSelected && <View style={styles.underline} />}
-              </View>
+              <Animated.View
+                style={[
+                  styles.tabButton,
+                  isSelected && styles.tabButtonSelected,
+                  isSelected && { transform: [{ scale: activeScale }] }
+                ]}
+              >
+                <View style={styles.iconContainer}>
+                  <Feather 
+                    name={tab.icon} 
+                    size={22} 
+                    color={isSelected ? '#0F2C59' : '#6C757D'} 
+                    style={styles.tabIcon}
+                  />
+                  {tab.name === 'AdminMessages' && hasUnreadMessages && (
+                    <View style={styles.redDot} />
+                  )}
+                  {tab.name === 'AdminQueue' && hasUnreadQueue && (
+                    <View style={styles.redDot} />
+                  )}
+                </View>
+                <View style={styles.labelWrapper}>
+                  <Text style={[styles.labelText, isSelected && styles.labelTextSelected]}>
+                    {tab.label}
+                  </Text>
+                  {isSelected && <View style={styles.underline} />}
+                </View>
+              </Animated.View>
             </TouchableOpacity>
           );
         })}

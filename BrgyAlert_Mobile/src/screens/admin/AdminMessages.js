@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   TextInput,
   Alert,
+  Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { collection, query, orderBy, onSnapshot, doc, writeBatch, getDocs, where } from 'firebase/firestore';
@@ -56,9 +57,34 @@ const getRelativeTime = (dateInput) => {
 export default function AdminMessages({ navigation }) {
   const insets = useSafeAreaInsets();
 
+  // Smooth entrance animations
+  const fadeAnim = React.useRef(new Animated.Value(0)).current;
+  const slideAnim = React.useRef(new Animated.Value(20)).current;
+
+  React.useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      fadeAnim.setValue(0);
+      slideAnim.setValue(20);
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    });
+    return unsubscribe;
+  }, [navigation]);
+
   const [loading, setLoading] = useState(true);
   const [chatThreads, setChatThreads] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
   const [readFilter, setReadFilter] = useState('all'); // all | unread | read
   const [refreshing, setRefreshing] = useState(false);
 
@@ -343,11 +369,25 @@ export default function AdminMessages({ navigation }) {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
 
-      {/* Header */}
-      <View style={styles.header}>
+      {/* Background Gradient Backdrop */}
+      <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+        <Svg width="100%" height="100%" style={StyleSheet.absoluteFillObject}>
+          <Defs>
+            <LinearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor="#EEF2F6" stopOpacity={0.85} />
+              <Stop offset="0.5" stopColor="#FFFFFF" stopOpacity={1} />
+            </LinearGradient>
+          </Defs>
+          <Rect width="100%" height="100%" fill="url(#bgGrad)" />
+        </Svg>
+      </View>
+
+      <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+        {/* Header */}
+        <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <View style={styles.headerTitleContainer}>
           <View style={styles.headerMainRow}>
             <Text style={styles.headerTitle}>Incident Chats</Text>
@@ -368,8 +408,13 @@ export default function AdminMessages({ navigation }) {
       {!loading && chatThreads.length > 0 && (
         <View style={styles.searchFilterContainer}>
           {/* Search Bar */}
-          <View style={styles.searchBar}>
-            <Feather name="search" size={18} color="#9CA3AF" style={styles.searchIcon} />
+          <View style={[styles.searchBar, searchFocused && styles.searchBarFocused]}>
+            <Feather 
+              name="search" 
+              size={18} 
+              color={searchFocused ? '#0B2564' : '#9CA3AF'} 
+              style={styles.searchIcon} 
+            />
             <TextInput
               style={styles.searchInput}
               placeholder="Search conversations..."
@@ -377,9 +422,11 @@ export default function AdminMessages({ navigation }) {
               value={searchQuery}
               onChangeText={setSearchQuery}
               autoCorrect={false}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setSearchFocused(false)}
             />
             {searchQuery ? (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
                 <Feather name="x" size={16} color="#6B7280" />
               </TouchableOpacity>
             ) : null}
@@ -440,6 +487,7 @@ export default function AdminMessages({ navigation }) {
           onRefresh={handleRefresh}
         />
       )}
+      </Animated.View>
 
       {/* Bottom Smooth Gradient Background Fade */}
       <View style={styles.bottomGradient} pointerEvents="none">
@@ -464,11 +512,10 @@ export default function AdminMessages({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'transparent',
   },
   header: {
     paddingHorizontal: 24,
-    paddingTop: 16,
     marginBottom: 20,
   },
   headerTitleContainer: {
@@ -665,11 +712,26 @@ const styles = StyleSheet.create({
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#F8FAFC',
     borderRadius: 16,
-    paddingHorizontal: 12,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 14,
     height: 48,
     marginBottom: 12,
+  },
+  searchBarFocused: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#0B2564',
+    shadowColor: '#0B2564',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  clearButton: {
+    padding: 4,
+    marginRight: -4,
   },
   searchIcon: {
     marginRight: 8,

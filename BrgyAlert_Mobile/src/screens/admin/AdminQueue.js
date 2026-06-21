@@ -13,6 +13,7 @@ import {
   Modal,
   Alert,
   Platform,
+  Animated
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -58,9 +59,34 @@ export default function AdminQueue({ route, navigation }) {
   const insets = useSafeAreaInsets();
   const { height: H } = useWindowDimensions();
 
+  // Smooth entrance animations
+  const fadeAnim = React.useRef(new Animated.Value(0)).current;
+  const slideAnim = React.useRef(new Animated.Value(20)).current;
+
+  React.useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      fadeAnim.setValue(0);
+      slideAnim.setValue(20);
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    });
+    return unsubscribe;
+  }, [navigation]);
+
   const [allAlerts, setAllAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all'); // all | submitted | under_review | dispatched | resolved | declined
   const [showTutorial, setShowTutorial] = useState(false);
 
@@ -465,11 +491,25 @@ export default function AdminQueue({ route, navigation }) {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
 
-      {/* Header */}
-      <View style={styles.header}>
+      {/* Background Gradient Backdrop */}
+      <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+        <Svg width="100%" height="100%" style={StyleSheet.absoluteFillObject}>
+          <Defs>
+            <LinearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor="#EEF2F6" stopOpacity={0.85} />
+              <Stop offset="0.5" stopColor="#FFFFFF" stopOpacity={1} />
+            </LinearGradient>
+          </Defs>
+          <Rect width="100%" height="100%" fill="url(#bgGrad)" />
+        </Svg>
+      </View>
+
+      <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+        {/* Header */}
+        <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <View>
           <Text style={styles.headerTitle}>Incident Records</Text>
           <Text style={styles.headerSubtitle}>
@@ -488,14 +528,21 @@ export default function AdminQueue({ route, navigation }) {
 
       {/* Search & Actions Bar */}
       <View style={[styles.searchContainer, { flexDirection: 'row', alignItems: 'center' }]}>
-        <View style={[styles.searchBar, { flex: 1 }]}>
-          <Feather name="search" size={18} color="#9CA3AF" style={styles.searchIcon} />
+        <View style={[styles.searchBar, { flex: 1 }, searchFocused && styles.searchBarFocused]}>
+          <Feather 
+            name="search" 
+            size={18} 
+            color={searchFocused ? '#0B2564' : '#9CA3AF'} 
+            style={styles.searchIcon} 
+          />
           <TextInput
             style={styles.searchInput}
             placeholder="Search category, location..."
             placeholderTextColor="#9CA3AF"
             value={searchQuery}
             onChangeText={setSearchQuery}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
@@ -873,7 +920,7 @@ export default function AdminQueue({ route, navigation }) {
           </View>
         </ScrollView>
       </GestureModal>
-
+      </Animated.View>
       {/* Floating Bottom Tab Nav Bar */}
       <AdminBottomTabNav />
     </View>
@@ -883,14 +930,13 @@ export default function AdminQueue({ route, navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'transparent',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 24,
-    paddingTop: 16,
     marginBottom: 16,
   },
   headerTitle: {
@@ -928,10 +974,21 @@ const styles = StyleSheet.create({
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#F8FAFC',
     borderRadius: 16,
-    paddingHorizontal: 16,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 14,
     height: 48,
+  },
+  searchBarFocused: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#0B2564',
+    shadowColor: '#0B2564',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   searchIcon: {
     marginRight: 10,
