@@ -4,32 +4,38 @@
     "slug": "BrgyAlert",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/logo.png",
+    "icon": "./assets/iconLogo_square.png",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "BrgyAlert uses your location to tag incident reports to the correct Purok and dispatch emergency responders to your exact coordinates.",
         "NSCameraUsageDescription": "BrgyAlert uses your camera to capture and attach real-time photo evidence for reporting incidents.",
-        "NSPhotoLibraryUsageDescription": "BrgyAlert uses your photo library to select and attach existing images as evidence for your incident reports."
-      }
+        "NSPhotoLibraryUsageDescription": "BrgyAlert uses your photo library to select and attach existing images as evidence for your incident reports.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "bundleIdentifier": "com.anonymous.BrgyAlert"
     },
     "android": {
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/logo.png",
-        "backgroundImage": "./assets/logo.png",
-        "monochromeImage": "./assets/logo.png"
+        "foregroundImage": "./assets/iconLogo_square.png",
+        "backgroundColor": "#E6F4FE"
       },
       "package": "com.anonymous.BrgyAlert",
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyD6dt6618BrcQrz8othFF1pyujiiHjwrY8"
         }
-      }
+      },
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
-      "favicon": "./assets/logo.png"
+      "favicon": "./assets/iconLogo_square.png"
     },
     "plugins": [
       "expo-web-browser",
@@ -42,7 +48,7 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/logo.png",
+          "icon": "./assets/iconLogo_square.png",
           "color": "#0F2C59"
         }
       ],
@@ -59,7 +65,23 @@
           "cameraPermission": "BrgyAlert uses your camera to capture and attach real-time photo evidence for reporting incidents."
         }
       ],
-      "@react-native-community/datetimepicker"
-    ]
+      "@react-native-community/datetimepicker",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "newArchEnabled": true
+          },
+          "ios": {
+            "newArchEnabled": true
+          }
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "0e18707c-30df-4121-b542-8270d2cce4b7"
+      }
+    }
   }
 }
