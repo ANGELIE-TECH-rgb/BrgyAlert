@@ -19,8 +19,5 @@ config.resolver.resolverMainFields = ['react-native', 'browser', 'main'];
 // Keep .cjs extension support for Firebase modular SDK
 config.resolver.sourceExts = [...config.resolver.sourceExts, 'cjs'];
 
-// Ensure wasm files are blocked (not needed and can cause crashes in Hermes)
-config.resolver.assetExts = config.resolver.assetExts.filter((ext) => ext !== 'svg');
-
 module.exports = config;
 
