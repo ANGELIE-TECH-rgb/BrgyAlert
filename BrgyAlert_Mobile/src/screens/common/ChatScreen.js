@@ -20,7 +20,7 @@ import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, getDoc
 import { Feather } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services/firebaseConfig';
-import { checkChatMessageStatus, recordChatMessageSent } from '../../services/rateLimiter';
+import { checkChatMessageStatus, recordChatMessageSent, checkChatEditStatus, recordChatEditPerformed } from '../../services/rateLimiter';
 import { sanitizeText } from '../../services/inputSanitizer';
 import { setActiveChat, sendAndSaveNotification } from '../../services/notificationService';
 import { notifyAllAdmins } from '../../services/adminNotifier';
@@ -30,6 +30,7 @@ export default function ChatScreen({ route, navigation }) {
   const { user, userProfile } = useAuth();
   const insets = useSafeAreaInsets();
   const flatListRef = useRef(null);
+  const isSendingRef = useRef(false);
 
   const isAdmin = userProfile?.role === 'admin' || userProfile?.role === 'responder';
 
@@ -39,6 +40,9 @@ export default function ChatScreen({ route, navigation }) {
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(true);
   const [citizenProfile, setCitizenProfile] = useState(null);
+  const [showIncidentDetails, setShowIncidentDetails] = useState(false);
+  const [editingMessageId, setEditingMessageId] = useState(null);
+  const [actionLoading, setActionLoading] = useState(false);
 
   // Typing animation & status refs/states
   const typingTimeoutRef = useRef(null);
@@ -47,8 +51,8 @@ export default function ChatScreen({ route, navigation }) {
   const dot2 = useRef(new Animated.Value(0)).current;
   const dot3 = useRef(new Animated.Value(0)).current;
 
-  const isOtherTyping = isAdmin 
-    ? activeAlert?.typingCitizen === true 
+  const isOtherTyping = isAdmin
+    ? activeAlert?.typingCitizen === true
     : activeAlert?.typingAdmin === true;
 
   const updateTypingStatus = async (typing) => {
@@ -351,9 +355,73 @@ export default function ChatScreen({ route, navigation }) {
     return () => unsubscribe();
   }, [currentAlertId, isAdmin, user]);
 
+  const handleMessageLongPress = (msg) => {
+    if (msg.senderId !== user.uid) return;
+    if (msg.isDeleted) return;
+
+    Alert.alert(
+      'Message Options',
+      'Choose an action for this message:',
+      [
+        {
+          text: 'Edit Message',
+          onPress: () => {
+            setEditingMessageId(msg.id);
+            setInputText(msg.text);
+          }
+        },
+        {
+          text: 'Delete Message',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Delete Message',
+              'Are you sure you want to delete this message?',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Delete', style: 'destructive', onPress: () => handleDeleteMessage(msg.id) }
+              ]
+            );
+          }
+        },
+        { text: 'Cancel', style: 'cancel' }
+      ]
+    );
+  };
+
+  const handleDeleteMessage = async (msgId) => {
+    if (!currentAlertId) return;
+    setActionLoading(true);
+    try {
+      const editLimit = await checkChatEditStatus();
+      if (editLimit.locked) {
+        Alert.alert('Rate Limited', `Please wait ${editLimit.secondsRemaining} seconds before editing or deleting messages again.`);
+        setActionLoading(false);
+        return;
+      }
+
+      await updateDoc(doc(db, 'alerts', currentAlertId, 'messages', msgId), {
+        text: 'This message was deleted',
+        isDeleted: true,
+        updatedAt: serverTimestamp()
+      });
+
+      await recordChatEditPerformed();
+    } catch (err) {
+      console.log('Error deleting message:', err);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingMessageId(null);
+    setInputText('');
+  };
+
   // Send message
   const handleSend = async () => {
-    if (!inputText.trim() || !currentAlertId) return;
+    if (!inputText.trim() || !currentAlertId || isSendingRef.current) return;
 
     // Verify email requirement for citizens
     if (!isAdmin && user && !user.emailVerified) {
@@ -367,17 +435,53 @@ export default function ChatScreen({ route, navigation }) {
       return;
     }
 
-    // Rate limit check for citizen messages (lenient)
+    const messageText = sanitizeText(inputText.trim(), 500);
+    if (!messageText) return; // do not send empty/stripped messages
+
+    isSendingRef.current = true;
+    setActionLoading(true);
+
+    if (editingMessageId) {
+      // Message Editing Flow
+      try {
+        const editLimit = await checkChatEditStatus();
+        if (editLimit.locked) {
+          Alert.alert('Rate Limited', `Please wait ${editLimit.secondsRemaining} seconds before editing or deleting messages again.`);
+          isSendingRef.current = false;
+          setActionLoading(false);
+          return;
+        }
+
+        await updateDoc(doc(db, 'alerts', currentAlertId, 'messages', editingMessageId), {
+          text: messageText,
+          isEdited: true,
+          editedAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+
+        await recordChatEditPerformed();
+        setEditingMessageId(null);
+        setInputText('');
+      } catch (err) {
+        console.log('Error editing message:', err);
+      } finally {
+        isSendingRef.current = false;
+        setActionLoading(false);
+      }
+      return;
+    }
+
+    // New Message Flow
     if (!isAdmin) {
       const rateStatus = await checkChatMessageStatus();
       if (rateStatus.locked) {
         Alert.alert('Rate Limited', `Please wait ${rateStatus.secondsRemaining} seconds before sending another message.`);
+        isSendingRef.current = false;
+        setActionLoading(false);
         return;
       }
     }
 
-    const messageText = sanitizeText(inputText.trim(), 500);
-    if (!messageText) return; // do not send empty/stripped messages
     setInputText('');
 
     if (typingTimeoutRef.current) {
@@ -387,7 +491,7 @@ export default function ChatScreen({ route, navigation }) {
 
     try {
       const messagesRef = collection(db, 'alerts', currentAlertId, 'messages');
-      
+
       // 1. Add message to Firestore subcollection
       await addDoc(messagesRef, {
         text: messageText,
@@ -409,8 +513,6 @@ export default function ChatScreen({ route, navigation }) {
         updateData.unreadCountCitizen = increment(1);
 
         // Directly save notification to the citizen's Firestore subcollection.
-        // This is more reliable than waiting for the citizen's onSnapshot listener,
-        // which only works if the citizen's app is active and online.
         const citizenId = activeAlert?.userId;
         if (citizenId && citizenId !== 'anonymous' && citizenId !== user.uid) {
           sendAndSaveNotification(citizenId, {
@@ -418,16 +520,15 @@ export default function ChatScreen({ route, navigation }) {
             body: messageText.length > 80 ? messageText.substring(0, 80) + '...' : messageText,
             type: 'message',
             relatedId: currentAlertId,
-          }, true /* skipLocalNotification — citizen is on a different device */).catch((e) => console.log('[ChatScreen] Could not save citizen notification:', e));
+          }, true).catch((e) => console.log('[ChatScreen] Could not save citizen notification:', e));
         }
       } else {
         updateData.unreadCountAdmin = increment(1);
         // Record chat message sent for rate limiting
         await recordChatMessageSent();
 
-        // Notify all admins/responders directly — works even if their app is in background
+        // Notify all admins/responders directly
         const reporterName = userProfile?.fullName || 'Citizen';
-        const alertCategory = activeAlert?.category || 'Incident';
         notifyAllAdmins(user.uid, {
           title: `💬 Message from ${reporterName}`,
           body: messageText.length > 80 ? messageText.substring(0, 80) + '...' : messageText,
@@ -439,15 +540,29 @@ export default function ChatScreen({ route, navigation }) {
       await updateDoc(doc(db, 'alerts', currentAlertId), updateData);
     } catch (err) {
       console.log('Error sending message:', err);
+    } finally {
+      isSendingRef.current = false;
+      setActionLoading(false);
     }
   };
 
   const handleUpdateStatus = async (newStatus) => {
     if (!currentAlertId) return;
     try {
-      await updateDoc(doc(db, 'alerts', currentAlertId), {
-        status: newStatus
-      });
+      const updateData = {
+        status: newStatus,
+        updatedAt: serverTimestamp()
+      };
+
+      if (newStatus === 'under_review') {
+        updateData.underReviewAt = serverTimestamp();
+      } else if (newStatus === 'dispatched') {
+        updateData.dispatchedAt = serverTimestamp();
+      } else if (newStatus === 'done' || newStatus === 'resolved') {
+        updateData.resolvedAt = serverTimestamp();
+      }
+
+      await updateDoc(doc(db, 'alerts', currentAlertId), updateData);
       Alert.alert('Status Updated', `Incident status set to ${newStatus.replace('_', ' ').toUpperCase()}`);
     } catch (err) {
       console.log('Error updating status from chat:', err);
@@ -473,15 +588,37 @@ export default function ChatScreen({ route, navigation }) {
     }
   };
 
+  const getUrgencyBadgeStyle = (urgency) => {
+    switch (urgency) {
+      case 'critical': return { color: '#7F1D1D', bg: '#FEE2E2', label: 'CRITICAL' };
+      case 'high': return { color: '#EF4444', bg: '#FEF2F2', label: 'HIGH' };
+      case 'medium': return { color: '#F59E0B', bg: '#FFF7ED', label: 'MEDIUM' };
+      case 'low': return { color: '#10B981', bg: '#ECFDF5', label: 'LOW' };
+      default: return { color: '#6B7280', bg: '#F3F4F6', label: 'NORMAL' };
+    }
+  };
+
+  const getFormattedIncidentDate = (createdAt) => {
+    if (!createdAt) return '';
+    try {
+      const date = createdAt.toDate ? createdAt.toDate() : new Date(createdAt);
+      const datePart = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const timePart = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+      return `${datePart} • ${timePart}`;
+    } catch (e) {
+      return '';
+    }
+  };
+
   // Render message bubble item
   const renderMessageItem = ({ item, index }) => {
     const isMe = item.senderId === user.uid;
     const timeString = item.createdAt
       ? new Date(item.createdAt.toDate ? item.createdAt.toDate() : item.createdAt).toLocaleTimeString('en-US', {
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: true,
-        })
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      })
       : '';
 
     // Date separator logic
@@ -538,20 +675,36 @@ export default function ChatScreen({ route, navigation }) {
               </Text>
             </View>
           )}
-          <View style={[styles.bubble, isMe ? styles.bubbleRight : styles.bubbleLeft]}>
+          <TouchableOpacity
+            style={[
+              styles.bubble,
+              isMe ? styles.bubbleRight : styles.bubbleLeft,
+              item.isDeleted && styles.bubbleDeleted
+            ]}
+            onLongPress={() => handleMessageLongPress(item)}
+            delayLongPress={500}
+            activeOpacity={0.85}
+          >
             {!isMe && <Text style={styles.senderNameText}>{item.senderName}</Text>}
-            <Text 
-              style={[styles.bubbleText, isMe ? styles.bubbleTextRight : styles.bubbleTextLeft]}
-              textBreakStrategy="simple"
+            <Text
+              style={[
+                styles.bubbleText,
+                isMe ? styles.bubbleTextRight : styles.bubbleTextLeft,
+                item.isDeleted && styles.bubbleTextDeleted
+              ]}
             >
-              {item.text}
-              <Text style={{ color: 'transparent' }}>{"  "}</Text>
+              {item.isDeleted ? `🗑️ ${item.text} ` : `${item.text} `}
             </Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 4 }}>
+              {item.isEdited && !item.isDeleted && (
+                <Text style={[styles.editedIndicatorText, isMe ? styles.messageTimeRight : styles.messageTimeLeft, { marginRight: 4, fontStyle: 'italic' }]}>
+                  (edited)
+                </Text>
+              )}
               <Text style={[styles.messageTime, isMe ? styles.messageTimeRight : styles.messageTimeLeft, { marginTop: 0 }]}>
                 {timeString}
               </Text>
-              {isMe && (
+              {isMe && !item.isDeleted && (
                 item.read ? (
                   <View style={{ flexDirection: 'row', marginLeft: 4 }}>
                     <Feather name="check" size={12} color="#93C5FD" />
@@ -562,7 +715,7 @@ export default function ChatScreen({ route, navigation }) {
                 )
               )}
             </View>
-          </View>
+          </TouchableOpacity>
         </View>
       </View>
     );
@@ -597,8 +750,8 @@ export default function ChatScreen({ route, navigation }) {
           </View>
           <Text style={styles.emptyWelcomeTitle}>Start the Conversation</Text>
           <Text style={styles.emptyWelcomeDesc}>
-            {isAdmin 
-              ? "Send a message to coordinate with the citizen regarding this incident report." 
+            {isAdmin
+              ? "Send a message to coordinate with the citizen regarding this incident report."
               : "This thread is open for direct coordination with the Barangay Command Center responders."}
           </Text>
         </View>
@@ -639,7 +792,7 @@ export default function ChatScreen({ route, navigation }) {
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
           <Feather name="arrow-left" size={20} color="#1F2937" />
         </TouchableOpacity>
-        
+
         <View style={styles.headerTitleContainer}>
           <Text style={styles.headerTitle}>{isAdmin ? citizenProfile?.fullName || userName || 'Citizen Chat' : 'Barangay Support'}</Text>
           <Text style={styles.headerSubtitle}>
@@ -705,8 +858,8 @@ export default function ChatScreen({ route, navigation }) {
                           alertItem.status === 'submitted'
                             ? '#D97706'
                             : alertItem.status === 'dispatched'
-                            ? '#10B981'
-                            : '#9CA3AF',
+                              ? '#10B981'
+                              : '#9CA3AF',
                       },
                     ]}
                   />
@@ -719,57 +872,132 @@ export default function ChatScreen({ route, navigation }) {
 
       {/* Incident Details Context Subheader (Both Citizen and Admin) */}
       {activeAlert && (
-        <View style={styles.contextSubheader}>
-          <View style={styles.contextLeft}>
-            <Feather name="alert-circle" size={14} color="#6B7280" style={{ marginRight: 6 }} />
-            <Text style={styles.contextTitle}>
-              {currentSerial} • {activeAlert.category}
-            </Text>
-          </View>
-          
-          {/* Admin Quick-Status Transition Chips */}
-          {isAdmin ? (
-            <View style={styles.adminStatusChips}>
-              {activeAlert.status !== 'under_review' && activeAlert.status !== 'resolved' && activeAlert.status !== 'done' && (
-                <TouchableOpacity 
-                  style={[styles.statusChip, { backgroundColor: '#EFF6FF' }]} 
-                  onPress={() => handleUpdateStatus('under_review')}
-                >
-                  <Text style={[styles.statusChipText, { color: '#2563EB' }]}>Review</Text>
-                </TouchableOpacity>
-              )}
-              {activeAlert.status !== 'dispatched' && activeAlert.status !== 'resolved' && activeAlert.status !== 'done' && (
-                <TouchableOpacity 
-                  style={[styles.statusChip, { backgroundColor: '#ECFDF5' }]} 
-                  onPress={() => handleUpdateStatus('dispatched')}
-                >
-                  <Text style={[styles.statusChipText, { color: '#10B981' }]}>Dispatch</Text>
-                </TouchableOpacity>
-              )}
-              {activeAlert.status !== 'resolved' && activeAlert.status !== 'done' && (
-                <TouchableOpacity 
-                  style={[styles.statusChip, { backgroundColor: '#F3F4F6' }]} 
-                  onPress={() => handleUpdateStatus('resolved')}
-                >
-                  <Text style={[styles.statusChipText, { color: '#4B5563' }]}>Resolve</Text>
-                </TouchableOpacity>
-              )}
-              {activeBadge && (activeAlert.status === 'resolved' || activeAlert.status === 'done' || activeAlert.status === 'declined') && (
+        <View style={{ borderBottomWidth: 1, borderColor: 'rgba(255, 255, 255, 0.4)', backgroundColor: 'rgba(249, 250, 251, 0.65)' }}>
+          <TouchableOpacity
+            style={styles.contextSubheader}
+            onPress={() => setShowIncidentDetails(!showIncidentDetails)}
+            activeOpacity={0.8}
+          >
+            <View style={styles.contextLeft}>
+              <Feather name="alert-circle" size={14} color="#0B2564" style={{ marginRight: 6 }} />
+              <Text style={styles.contextTitle}>
+                {currentSerial} • {activeAlert.category}
+              </Text>
+              <Feather
+                name={showIncidentDetails ? 'chevron-up' : 'chevron-down'}
+                size={14}
+                color="#6B7280"
+                style={{ marginLeft: 6 }}
+              />
+            </View>
+
+            {/* Admin Quick-Status Transition Chips */}
+            {isAdmin ? (
+              <View style={styles.adminStatusChips}>
+                {activeAlert.status !== 'under_review' && activeAlert.status !== 'resolved' && activeAlert.status !== 'done' && (
+                  <TouchableOpacity
+                    style={[styles.statusChip, { backgroundColor: '#EFF6FF' }]}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      handleUpdateStatus('under_review');
+                    }}
+                  >
+                    <Text style={[styles.statusChipText, { color: '#2563EB' }]}>Review</Text>
+                  </TouchableOpacity>
+                )}
+                {activeAlert.status !== 'dispatched' && activeAlert.status !== 'resolved' && activeAlert.status !== 'done' && (
+                  <TouchableOpacity
+                    style={[styles.statusChip, { backgroundColor: '#ECFDF5' }]}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      handleUpdateStatus('dispatched');
+                    }}
+                  >
+                    <Text style={[styles.statusChipText, { color: '#10B981' }]}>Dispatch</Text>
+                  </TouchableOpacity>
+                )}
+                {activeAlert.status !== 'resolved' && activeAlert.status !== 'done' && (
+                  <TouchableOpacity
+                    style={[styles.statusChip, { backgroundColor: '#F3F4F6' }]}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      handleUpdateStatus('resolved');
+                    }}
+                  >
+                    <Text style={[styles.statusChipText, { color: '#4B5563' }]}>Resolve</Text>
+                  </TouchableOpacity>
+                )}
+                {activeBadge && (activeAlert.status === 'resolved' || activeAlert.status === 'done' || activeAlert.status === 'declined') && (
+                  <View style={[styles.contextBadge, { backgroundColor: activeBadge.bg }]}>
+                    <Text style={[styles.contextBadgeText, { color: activeBadge.text }]}>
+                      {activeBadge.label}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            ) : (
+              activeBadge && (
                 <View style={[styles.contextBadge, { backgroundColor: activeBadge.bg }]}>
                   <Text style={[styles.contextBadgeText, { color: activeBadge.text }]}>
                     {activeBadge.label}
                   </Text>
                 </View>
-              )}
-            </View>
-          ) : (
-            activeBadge && (
-              <View style={[styles.contextBadge, { backgroundColor: activeBadge.bg }]}>
-                <Text style={[styles.contextBadgeText, { color: activeBadge.text }]}>
-                  {activeBadge.label}
+              )
+            )}
+          </TouchableOpacity>
+
+          {/* Collapsible expanded Incident Details card */}
+          {showIncidentDetails && (
+            <View style={styles.expandedDetailsCard}>
+              <View style={styles.detailsHeaderRow}>
+                <View style={[styles.detailBadge, { backgroundColor: activeBadge.bg }]}>
+                  <Text style={[styles.detailBadgeText, { color: activeBadge.text }]}>
+                    STATUS: {activeBadge.label}
+                  </Text>
+                </View>
+                {activeAlert.urgency && (
+                  <View style={[styles.detailBadge, { backgroundColor: getUrgencyBadgeStyle(activeAlert.urgency).bg, marginLeft: 8 }]}>
+                    <Text style={[styles.detailBadgeText, { color: getUrgencyBadgeStyle(activeAlert.urgency).color }]}>
+                      URGENCY: {getUrgencyBadgeStyle(activeAlert.urgency).label}
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              {activeAlert.details ? (
+                <View style={styles.detailSection}>
+                  <Text style={styles.detailLabel}>Description</Text>
+                  <Text style={styles.detailBody}>{activeAlert.details}</Text>
+                </View>
+              ) : null}
+
+              {activeAlert.location?.addressText ? (
+                <View style={styles.detailSection}>
+                  <Text style={styles.detailLabel}>Location Address</Text>
+                  <View style={styles.addressRow}>
+                    <Feather name="map-pin" size={12} color="#EF4444" style={{ marginRight: 4, marginTop: 2 }} />
+                    <Text style={styles.detailBody}>{activeAlert.location.addressText}</Text>
+                  </View>
+                </View>
+              ) : null}
+
+              <View style={styles.detailSection}>
+                <Text style={styles.detailLabel}>Reported On</Text>
+                <Text style={styles.detailBody}>
+                  {getFormattedIncidentDate(activeAlert.createdAt)}
                 </Text>
               </View>
-            )
+
+              {isAdmin && (activeAlert.reporterName || activeAlert.phoneNumber) ? (
+                <View style={styles.detailSection}>
+                  <Text style={styles.detailLabel}>Reporter Details</Text>
+                  <Text style={styles.detailBody}>
+                    {activeAlert.reporterName || 'Anonymous Witness'}
+                    {activeAlert.phoneNumber ? ` (${activeAlert.phoneNumber})` : ''}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
           )}
         </View>
       )}
@@ -810,40 +1038,69 @@ export default function ChatScreen({ route, navigation }) {
 
       {/* Input Composer Panel */}
       <View style={[styles.composerContainer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-        <View style={{ flex: 1, position: 'relative', justifyContent: 'center' }}>
-          <TextInput
-            style={[styles.input, isInputDisabled && styles.inputDisabled, { paddingRight: inputText.length >= 400 ? 64 : 16 }]}
-            placeholder={
-              isIncidentResolved 
-                ? "Chat is read-only" 
-                : isUnverifiedCitizen 
-                ? "Verify email to type..." 
-                : "Type your message here..."
-            }
-            placeholderTextColor="#9CA3AF"
-            value={inputText}
-            onChangeText={handleTextChange}
-            onBlur={() => updateTypingStatus(false)}
-            multiline
-            maxLength={500}
-            editable={!isInputDisabled}
-          />
-          {inputText.length >= 400 && (
-            <Text style={styles.charCounter}>{inputText.length}/500</Text>
+        <View style={{ width: '100%' }}>
+          {editingMessageId && (
+            <View style={styles.editBarContainer}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Feather name="edit-2" size={12} color="#0B2564" style={{ marginRight: 6 }} />
+                <Text style={styles.editBarText}>Editing message</Text>
+              </View>
+              <TouchableOpacity onPress={handleCancelEdit} style={styles.editCancelBtn}>
+                <Feather name="x" size={14} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
           )}
+
+          <View style={{ flexDirection: 'row', alignItems: 'center', width: '100%', marginTop: editingMessageId ? 8 : 0 }}>
+            <View style={{ flex: 1, position: 'relative', justifyContent: 'center' }}>
+              <TextInput
+                style={[
+                  styles.input,
+                  (isInputDisabled || actionLoading) && styles.inputDisabled,
+                  { paddingRight: inputText.length >= 400 ? 64 : 16 }
+                ]}
+                placeholder={
+                  isIncidentResolved
+                    ? "Chat is read-only"
+                    : isUnverifiedCitizen
+                      ? "Verify email to type..."
+                      : editingMessageId
+                        ? "Edit your message..."
+                        : "Type your message here..."
+                }
+                placeholderTextColor="#9CA3AF"
+                value={inputText}
+                onChangeText={handleTextChange}
+                onBlur={() => updateTypingStatus(false)}
+                multiline
+                maxLength={500}
+                editable={!isInputDisabled && !actionLoading}
+              />
+              {inputText.length >= 400 && (
+                <Text style={styles.charCounter}>{inputText.length}/500</Text>
+              )}
+            </View>
+            <TouchableOpacity
+              style={[
+                styles.sendButton,
+                (!inputText.trim() || isInputDisabled || actionLoading) && styles.sendButtonDisabled
+              ]}
+              onPress={handleSend}
+              disabled={!inputText.trim() || isInputDisabled || actionLoading}
+              activeOpacity={0.8}
+            >
+              {actionLoading ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : isInputDisabled ? (
+                <Feather name="lock" size={18} color="#FFFFFF" />
+              ) : editingMessageId ? (
+                <Feather name="check" size={18} color="#FFFFFF" />
+              ) : (
+                <Feather name="send" size={18} color="#FFFFFF" />
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
-        <TouchableOpacity
-          style={[styles.sendButton, (!inputText.trim() || isInputDisabled) && styles.sendButtonDisabled]}
-          onPress={handleSend}
-          disabled={!inputText.trim() || isInputDisabled}
-          activeOpacity={0.8}
-        >
-          {isInputDisabled ? (
-            <Feather name="lock" size={18} color="#FFFFFF" />
-          ) : (
-            <Feather name="send" size={18} color="#FFFFFF" />
-          )}
-        </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
   );
@@ -957,11 +1214,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: 'transparent',
     paddingHorizontal: 24,
     paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderColor: '#F3F4F6',
   },
   contextLeft: {
     flexDirection: 'row',
@@ -1249,5 +1504,76 @@ const styles = StyleSheet.create({
     color: '#64748B',
     textAlign: 'center',
     lineHeight: 18,
+  },
+  expandedDetailsCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.6)',
+    borderTopWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+    padding: 16,
+  },
+  detailsHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  detailBadge: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+  },
+  detailBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  detailSection: {
+    marginBottom: 10,
+  },
+  detailLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#9CA3AF',
+    textTransform: 'uppercase',
+    marginBottom: 2,
+  },
+  detailBody: {
+    fontSize: 13,
+    color: '#374151',
+    lineHeight: 18,
+  },
+  addressRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  bubbleDeleted: {
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  bubbleTextDeleted: {
+    color: '#9CA3AF',
+    fontStyle: 'italic',
+  },
+  editedIndicatorText: {
+    fontSize: 9,
+    color: '#9CA3AF',
+  },
+  editBarContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#EEF2F6',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  editBarText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#0B2564',
+  },
+  editCancelBtn: {
+    padding: 2,
   },
 });

@@ -390,11 +390,11 @@ export default function RegisterScreen({ navigation }) {
           {/* Email */}
           <Text style={[styles.label, focusedField === 'email' && styles.labelActive]}>Email</Text>
           <View style={[styles.inputContainer, focusedField === 'email' && styles.inputContainerActive]}>
-            <Feather 
-              name="mail" 
-              size={18} 
-              color={focusedField === 'email' ? '#0B2564' : '#A0AEC0'} 
-              style={styles.inputIcon} 
+            <Feather
+              name="mail"
+              size={18}
+              color={focusedField === 'email' ? '#0B2564' : '#A0AEC0'}
+              style={styles.inputIcon}
             />
             <TextInput
               style={styles.input}
@@ -415,11 +415,11 @@ export default function RegisterScreen({ navigation }) {
           {/* Password */}
           <Text style={[styles.label, focusedField === 'password' && styles.labelActive]}>Password</Text>
           <View style={[styles.passwordContainer, focusedField === 'password' && styles.passwordContainerActive]}>
-            <Feather 
-              name="lock" 
-              size={18} 
-              color={focusedField === 'password' ? '#0B2564' : '#A0AEC0'} 
-              style={styles.inputIcon} 
+            <Feather
+              name="lock"
+              size={18}
+              color={focusedField === 'password' ? '#0B2564' : '#A0AEC0'}
+              style={styles.inputIcon}
             />
             <TextInput
               style={styles.passwordInput}
@@ -443,10 +443,10 @@ export default function RegisterScreen({ navigation }) {
           {password.length > 0 && (
             <View style={styles.passwordStrengthContainer}>
               <View style={styles.strengthBarBg}>
-                <View 
+                <View
                   style={[
-                    styles.strengthBarFill, 
-                    { 
+                    styles.strengthBarFill,
+                    {
                       width: (() => {
                         let score = 0;
                         if (password.length >= 8) score++;
@@ -464,7 +464,7 @@ export default function RegisterScreen({ navigation }) {
                         return score <= 1 ? '#DC3545' : score === 2 ? '#FD7E14' : score === 3 ? '#FFC107' : '#28A745';
                       })()
                     }
-                  ]} 
+                  ]}
                 />
               </View>
               <Text style={[
@@ -496,40 +496,40 @@ export default function RegisterScreen({ navigation }) {
             <View style={styles.passwordRequirementsContainer}>
               <Text style={styles.requirementsTitle}>Password Requirements:</Text>
               <View style={styles.requirementRow}>
-                <Feather 
-                  name={password.length >= 8 ? "check-circle" : "circle"} 
-                  size={14} 
-                  color={password.length >= 8 ? "#28A745" : "#A0AEC0"} 
+                <Feather
+                  name={password.length >= 8 ? "check-circle" : "circle"}
+                  size={14}
+                  color={password.length >= 8 ? "#28A745" : "#A0AEC0"}
                 />
                 <Text style={[styles.requirementText, password.length >= 8 && styles.requirementMet]}>
                   Minimum of 8 characters
                 </Text>
               </View>
               <View style={styles.requirementRow}>
-                <Feather 
-                  name={(/[A-Z]/.test(password) && /[a-z]/.test(password)) ? "check-circle" : "circle"} 
-                  size={14} 
-                  color={(/[A-Z]/.test(password) && /[a-z]/.test(password)) ? "#28A745" : "#A0AEC0"} 
+                <Feather
+                  name={(/[A-Z]/.test(password) && /[a-z]/.test(password)) ? "check-circle" : "circle"}
+                  size={14}
+                  color={(/[A-Z]/.test(password) && /[a-z]/.test(password)) ? "#28A745" : "#A0AEC0"}
                 />
                 <Text style={[styles.requirementText, (/[A-Z]/.test(password) && /[a-z]/.test(password)) && styles.requirementMet]}>
                   Both uppercase and lowercase letters
                 </Text>
               </View>
               <View style={styles.requirementRow}>
-                <Feather 
-                  name={/\d/.test(password) ? "check-circle" : "circle"} 
-                  size={14} 
-                  color={/\d/.test(password) ? "#28A745" : "#A0AEC0"} 
+                <Feather
+                  name={/\d/.test(password) ? "check-circle" : "circle"}
+                  size={14}
+                  color={/\d/.test(password) ? "#28A745" : "#A0AEC0"}
                 />
                 <Text style={[styles.requirementText, /\d/.test(password) && styles.requirementMet]}>
                   At least one number
                 </Text>
               </View>
               <View style={styles.requirementRow}>
-                <Feather 
-                  name={/[!@#$%^&*(),.?":{}|<>]/.test(password) ? "check-circle" : "circle"} 
-                  size={14} 
-                  color={/[!@#$%^&*(),.?":{}|<>]/.test(password) ? "#28A745" : "#A0AEC0"} 
+                <Feather
+                  name={/[!@#$%^&*(),.?":{}|<>]/.test(password) ? "check-circle" : "circle"}
+                  size={14}
+                  color={/[!@#$%^&*(),.?":{}|<>]/.test(password) ? "#28A745" : "#A0AEC0"}
                 />
                 <Text style={[styles.requirementText, /[!@#$%^&*(),.?":{}|<>]/.test(password) && styles.requirementMet]}>
                   At least one special character (e.g., !@#$)
@@ -541,11 +541,11 @@ export default function RegisterScreen({ navigation }) {
           {/* Confirm Password */}
           <Text style={[styles.label, focusedField === 'confirmPassword' && styles.labelActive]}>Confirm Password</Text>
           <View style={[styles.passwordContainer, focusedField === 'confirmPassword' && styles.passwordContainerActive]}>
-            <Feather 
-              name="lock" 
-              size={18} 
-              color={focusedField === 'confirmPassword' ? '#0B2564' : '#A0AEC0'} 
-              style={styles.inputIcon} 
+            <Feather
+              name="lock"
+              size={18}
+              color={focusedField === 'confirmPassword' ? '#0B2564' : '#A0AEC0'}
+              style={styles.inputIcon}
             />
             <TextInput
               style={styles.passwordInput}
@@ -590,8 +590,8 @@ export default function RegisterScreen({ navigation }) {
           </View>
 
           {/* Continue Button */}
-          <TouchableOpacity 
-            style={[styles.primaryButton, !acceptTerms && styles.primaryButtonDisabled]} 
+          <TouchableOpacity
+            style={[styles.primaryButton, !acceptTerms && styles.primaryButtonDisabled]}
             onPress={handleNextStep}
           >
             <Text style={styles.primaryButtonText}>Sign up</Text>
@@ -732,11 +732,11 @@ export default function RegisterScreen({ navigation }) {
           {/* Full Name */}
           <Text style={[styles.label, focusedField === 'fullName' && styles.labelActive]}>Full Name</Text>
           <View style={[styles.inputContainer, focusedField === 'fullName' && styles.inputContainerActive]}>
-            <Feather 
-              name="user" 
-              size={18} 
-              color={focusedField === 'fullName' ? '#0B2564' : '#A0AEC0'} 
-              style={styles.inputIcon} 
+            <Feather
+              name="user"
+              size={18}
+              color={focusedField === 'fullName' ? '#0B2564' : '#A0AEC0'}
+              style={styles.inputIcon}
             />
             <TextInput
               style={styles.input}
@@ -765,11 +765,11 @@ export default function RegisterScreen({ navigation }) {
             disabled={isSubmitting}
           >
             <View style={styles.dropdownLeftContent}>
-              <Feather 
-                name="calendar" 
-                size={18} 
-                color={(calendarModalVisible || focusedField === 'dob') ? '#0B2564' : '#A0AEC0'} 
-                style={styles.inputIcon} 
+              <Feather
+                name="calendar"
+                size={18}
+                color={(calendarModalVisible || focusedField === 'dob') ? '#0B2564' : '#A0AEC0'}
+                style={styles.inputIcon}
               />
               <Text style={[styles.dropdownText, !dob && styles.dropdownPlaceholder]}>
                 {dob || 'Select your date of birth'}
@@ -781,11 +781,11 @@ export default function RegisterScreen({ navigation }) {
           {/* Contact Number */}
           <Text style={[styles.label, focusedField === 'phoneNumber' && styles.labelActive]}>Contact Number</Text>
           <View style={[styles.inputContainer, focusedField === 'phoneNumber' && styles.inputContainerActive]}>
-            <Feather 
-              name="phone" 
-              size={18} 
-              color={focusedField === 'phoneNumber' ? '#0B2564' : '#A0AEC0'} 
-              style={styles.inputIcon} 
+            <Feather
+              name="phone"
+              size={18}
+              color={focusedField === 'phoneNumber' ? '#0B2564' : '#A0AEC0'}
+              style={styles.inputIcon}
             />
             <TextInput
               style={styles.input}
@@ -815,11 +815,11 @@ export default function RegisterScreen({ navigation }) {
             disabled={isSubmitting}
           >
             <View style={styles.dropdownLeftContent}>
-              <Feather 
-                name="users" 
-                size={18} 
-                color={(genderModalVisible || focusedField === 'gender') ? '#0B2564' : '#A0AEC0'} 
-                style={styles.inputIcon} 
+              <Feather
+                name="users"
+                size={18}
+                color={(genderModalVisible || focusedField === 'gender') ? '#0B2564' : '#A0AEC0'}
+                style={styles.inputIcon}
               />
               <Text style={[styles.dropdownText, !gender && styles.dropdownPlaceholder]}>
                 {gender || 'Select your gender'}
@@ -866,8 +866,8 @@ export default function RegisterScreen({ navigation }) {
             <Text style={styles.termsText}>
               The Barangay Command Center retains full operational discretion to decline, update, or escalate incident logs based on response unit availability, safety conditions, and reported priority levels.
             </Text>
-            <TouchableOpacity 
-              style={[styles.primaryButton, { marginTop: 24, marginBottom: 32 }]} 
+            <TouchableOpacity
+              style={[styles.primaryButton, { marginTop: 24, marginBottom: 32 }]}
               onPress={() => {
                 setAcceptTerms(true);
                 setTermsModalVisible(false);

@@ -23,6 +23,7 @@ import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 
 import { useAuth } from '../../context/AuthContext';
 import { db, auth } from '../../services/firebaseConfig';
 import BottomTabNav from '../../components/BottomTabNav';
+import BottomGradient from '../../components/BottomGradient';
 import GestureModal from '../../components/GestureModal';
 
 export default function CitizenSettings({ navigation }) {
@@ -70,6 +71,7 @@ export default function CitizenSettings({ navigation }) {
   const [legalModalVisible, setLegalModalVisible] = useState(false);
   const [legalModalType, setLegalModalType] = useState('terms'); // terms | privacy
   const [resendingVerification, setResendingVerification] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
   // Load preferences on load
   useEffect(() => {
@@ -198,11 +200,11 @@ export default function CitizenSettings({ navigation }) {
       if (!activeUser || !activeUser.email) {
         throw new Error('No active authenticated user found.');
       }
-      
+
       const credential = EmailAuthProvider.credential(activeUser.email, currentPassword);
       await reauthenticateWithCredential(activeUser, credential);
       await updatePassword(activeUser, newPassword);
-      
+
       Alert.alert('Success', 'Password changed successfully.');
       setCurrentPassword('');
       setNewPassword('');
@@ -242,7 +244,19 @@ export default function CitizenSettings({ navigation }) {
       'Are you sure you want to sign out of BrgyAlert?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Sign Out', style: 'destructive', onPress: () => logout() }
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: async () => {
+            setSigningOut(true);
+            try {
+              await logout();
+            } catch (err) {
+              console.log('Logout error:', err);
+              setSigningOut(false);
+            }
+          }
+        }
       ]
     );
   };
@@ -289,351 +303,351 @@ export default function CitizenSettings({ navigation }) {
       <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
-        {/* Profile Card Summary */}
-        <View style={styles.profileCard}>
-          <View style={styles.avatarContainer}>
-            <View style={styles.avatarGradient}>
-              <Text style={styles.avatarText}>{getInitials()}</Text>
+          {/* Profile Card Summary */}
+          <View style={styles.profileCard}>
+            <View style={styles.avatarContainer}>
+              <View style={styles.avatarGradient}>
+                <Text style={styles.avatarText}>{getInitials()}</Text>
+              </View>
+            </View>
+            <View style={styles.profileInfo}>
+              <Text style={styles.profileName}>{fullName || 'Citizen User'}</Text>
+              <Text style={styles.profileEmail}>{user?.email || ''}</Text>
+              <View style={styles.badgeRow}>
+                <View style={styles.roleBadge}>
+                  <Text style={styles.roleBadgeText}>Citizen Portal</Text>
+                </View>
+                {user?.emailVerified ? (
+                  <View style={[styles.verificationBadge, { backgroundColor: '#10B98120' }]}>
+                    <Feather name="check-circle" size={10} color="#10B981" style={{ marginRight: 3 }} />
+                    <Text style={[styles.verificationBadgeText, { color: '#10B981' }]}>Verified</Text>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.verificationBadge, { backgroundColor: '#F59E0B20' }]}
+                    onPress={handleResendVerification}
+                    disabled={resendingVerification}
+                  >
+                    <Feather name="alert-triangle" size={10} color="#F59E0B" style={{ marginRight: 3 }} />
+                    <Text style={[styles.verificationBadgeText, { color: '#F59E0B' }]}>
+                      {resendingVerification ? 'Sending...' : 'Unverified • Verify Now'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
           </View>
-          <View style={styles.profileInfo}>
-            <Text style={styles.profileName}>{fullName || 'Citizen User'}</Text>
-            <Text style={styles.profileEmail}>{user?.email || ''}</Text>
-            <View style={styles.badgeRow}>
-              <View style={styles.roleBadge}>
-                <Text style={styles.roleBadgeText}>Citizen Portal</Text>
-              </View>
-              {user?.emailVerified ? (
-                <View style={[styles.verificationBadge, { backgroundColor: '#10B98120' }]}>
-                  <Feather name="check-circle" size={10} color="#10B981" style={{ marginRight: 3 }} />
-                  <Text style={[styles.verificationBadgeText, { color: '#10B981' }]}>Verified</Text>
+
+          {/* Profile Details Form */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Profile Information</Text>
+            <View style={styles.card}>
+              {!isEditing ? (
+                <View>
+                  <View style={styles.profileDetailRow}>
+                    <Text style={styles.detailLabel}>Full Name</Text>
+                    <Text style={styles.detailValue}>{fullName || 'Not Set'}</Text>
+                  </View>
+                  <View style={styles.profileDetailRow}>
+                    <Text style={styles.detailLabel}>Phone Number</Text>
+                    <Text style={styles.detailValue}>{phoneNumber || 'Not Set'}</Text>
+                  </View>
+                  <View style={styles.profileDetailRow}>
+                    <Text style={styles.detailLabel}>Date of Birth</Text>
+                    <Text style={styles.detailValue}>{dob || 'Not Set'}</Text>
+                  </View>
+                  <View style={[styles.profileDetailRow, { borderBottomWidth: 0 }]}>
+                    <Text style={styles.detailLabel}>Gender</Text>
+                    <Text style={styles.detailValue}>{gender || 'Not Set'}</Text>
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.editProfileButton}
+                    onPress={() => setIsEditing(true)}
+                    activeOpacity={0.7}
+                  >
+                    <Feather name="edit-2" size={14} color="#0B2564" style={{ marginRight: 6 }} />
+                    <Text style={styles.editProfileButtonText}>Edit Profile</Text>
+                  </TouchableOpacity>
                 </View>
               ) : (
-                <TouchableOpacity
-                  style={[styles.verificationBadge, { backgroundColor: '#F59E0B20' }]}
-                  onPress={handleResendVerification}
-                  disabled={resendingVerification}
-                >
-                  <Feather name="alert-triangle" size={10} color="#F59E0B" style={{ marginRight: 3 }} />
-                  <Text style={[styles.verificationBadgeText, { color: '#F59E0B' }]}>
-                    {resendingVerification ? 'Sending...' : 'Unverified • Verify Now'}
-                  </Text>
-                </TouchableOpacity>
+                <View>
+                  <Text style={styles.inputLabel}>Full Name</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={fullName}
+                    onChangeText={setFullName}
+                    placeholder="Your Full Name"
+                    placeholderTextColor="#9CA3AF"
+                  />
+
+                  <Text style={styles.inputLabel}>Phone Number</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={phoneNumber}
+                    onChangeText={setPhoneNumber}
+                    placeholder="e.g. 09123456789"
+                    placeholderTextColor="#9CA3AF"
+                    keyboardType="phone-pad"
+                  />
+
+                  <Text style={styles.inputLabel}>Date of Birth</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={dob}
+                    onChangeText={setDob}
+                    placeholder="YYYY-MM-DD"
+                    placeholderTextColor="#9CA3AF"
+                  />
+
+                  <Text style={styles.inputLabel}>Gender</Text>
+                  <View style={styles.genderRow}>
+                    {['Male', 'Female', 'Other'].map((item) => {
+                      const isSelected = gender === item;
+                      return (
+                        <TouchableOpacity
+                          key={item}
+                          style={[styles.genderChip, isSelected && styles.genderChipActive]}
+                          onPress={() => setGender(item)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={[styles.genderChipText, isSelected && styles.genderChipTextActive]}>
+                            {item}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  <View style={styles.buttonRow}>
+                    <TouchableOpacity
+                      style={[styles.saveButton, { flex: 2, marginRight: 8 }]}
+                      onPress={handleSaveProfile}
+                      disabled={saving}
+                      activeOpacity={0.8}
+                    >
+                      {saving ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                      ) : (
+                        <Text style={styles.saveButtonText}>Save Changes</Text>
+                      )}
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.cancelButton}
+                      onPress={() => {
+                        setFullName(userProfile?.fullName || '');
+                        setPhoneNumber(userProfile?.phoneNumber || '');
+                        setDob(userProfile?.dob || '');
+                        setGender(userProfile?.gender || 'Male');
+                        setIsEditing(false);
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.cancelButtonText}>Cancel</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
               )}
             </View>
           </View>
-        </View>
 
-        {/* Profile Details Form */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Profile Information</Text>
-          <View style={styles.card}>
-            {!isEditing ? (
-              <View>
-                <View style={styles.profileDetailRow}>
-                  <Text style={styles.detailLabel}>Full Name</Text>
-                  <Text style={styles.detailValue}>{fullName || 'Not Set'}</Text>
-                </View>
-                <View style={styles.profileDetailRow}>
-                  <Text style={styles.detailLabel}>Phone Number</Text>
-                  <Text style={styles.detailValue}>{phoneNumber || 'Not Set'}</Text>
-                </View>
-                <View style={styles.profileDetailRow}>
-                  <Text style={styles.detailLabel}>Date of Birth</Text>
-                  <Text style={styles.detailValue}>{dob || 'Not Set'}</Text>
-                </View>
-                <View style={[styles.profileDetailRow, { borderBottomWidth: 0 }]}>
-                  <Text style={styles.detailLabel}>Gender</Text>
-                  <Text style={styles.detailValue}>{gender || 'Not Set'}</Text>
-                </View>
+          {/* Preferences Section */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Preferences</Text>
+            <View style={styles.card}>
 
-                <TouchableOpacity
-                  style={styles.editProfileButton}
-                  onPress={() => setIsEditing(true)}
-                  activeOpacity={0.7}
-                >
-                  <Feather name="edit-2" size={14} color="#0B2564" style={{ marginRight: 6 }} />
-                  <Text style={styles.editProfileButtonText}>Edit Profile</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View>
-                <Text style={styles.inputLabel}>Full Name</Text>
-                <TextInput
-                  style={styles.input}
-                  value={fullName}
-                  onChangeText={setFullName}
-                  placeholder="Your Full Name"
-                  placeholderTextColor="#9CA3AF"
+              {/* Sound Chimes Row */}
+              <View style={styles.settingRow}>
+                <View style={styles.settingRowLeft}>
+                  <View style={[styles.rowIconWrapper, { backgroundColor: '#E8F0FE' }]}>
+                    <Feather name="volume-2" size={18} color="#0B2564" />
+                  </View>
+                  <View>
+                    <Text style={styles.settingTitle}>Notification Chime</Text>
+                    <Text style={styles.settingSubtitle}>Play sound for new alerts</Text>
+                  </View>
+                </View>
+                <Switch
+                  value={soundEnabled}
+                  onValueChange={handleToggleSound}
+                  trackColor={{ false: '#D1D5DB', true: '#BFDBFE' }}
+                  thumbColor={soundEnabled ? '#0B2564' : '#9CA3AF'}
                 />
-
-                <Text style={styles.inputLabel}>Phone Number</Text>
-                <TextInput
-                  style={styles.input}
-                  value={phoneNumber}
-                  onChangeText={setPhoneNumber}
-                  placeholder="e.g. 09123456789"
-                  placeholderTextColor="#9CA3AF"
-                  keyboardType="phone-pad"
-                />
-
-                <Text style={styles.inputLabel}>Date of Birth</Text>
-                <TextInput
-                  style={styles.input}
-                  value={dob}
-                  onChangeText={setDob}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor="#9CA3AF"
-                />
-
-                <Text style={styles.inputLabel}>Gender</Text>
-                <View style={styles.genderRow}>
-                  {['Male', 'Female', 'Other'].map((item) => {
-                    const isSelected = gender === item;
-                    return (
-                      <TouchableOpacity
-                        key={item}
-                        style={[styles.genderChip, isSelected && styles.genderChipActive]}
-                        onPress={() => setGender(item)}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={[styles.genderChipText, isSelected && styles.genderChipTextActive]}>
-                          {item}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-
-                <View style={styles.buttonRow}>
-                  <TouchableOpacity
-                    style={[styles.saveButton, { flex: 2, marginRight: 8 }]}
-                    onPress={handleSaveProfile}
-                    disabled={saving}
-                    activeOpacity={0.8}
-                  >
-                    {saving ? (
-                      <ActivityIndicator size="small" color="#FFFFFF" />
-                    ) : (
-                      <Text style={styles.saveButtonText}>Save Changes</Text>
-                    )}
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.cancelButton}
-                    onPress={() => {
-                      setFullName(userProfile?.fullName || '');
-                      setPhoneNumber(userProfile?.phoneNumber || '');
-                      setDob(userProfile?.dob || '');
-                      setGender(userProfile?.gender || 'Male');
-                      setIsEditing(false);
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.cancelButtonText}>Cancel</Text>
-                  </TouchableOpacity>
-                </View>
               </View>
-            )}
-          </View>
-        </View>
 
-        {/* Preferences Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Preferences</Text>
-          <View style={styles.card}>
-            
-            {/* Sound Chimes Row */}
-            <View style={styles.settingRow}>
-              <View style={styles.settingRowLeft}>
-                <View style={[styles.rowIconWrapper, { backgroundColor: '#E8F0FE' }]}>
-                  <Feather name="volume-2" size={18} color="#0B2564" />
+              {/* Push Notifications Row */}
+              <View style={[styles.settingRow, styles.borderTop]}>
+                <View style={styles.settingRowLeft}>
+                  <View style={[styles.rowIconWrapper, { backgroundColor: '#E8F0FE' }]}>
+                    <Feather name="bell" size={18} color="#0B2564" />
+                  </View>
+                  <View>
+                    <Text style={styles.settingTitle}>Push Notifications</Text>
+                    <Text style={styles.settingSubtitle}>Receive real-time system alerts</Text>
+                  </View>
                 </View>
-                <View>
-                  <Text style={styles.settingTitle}>Notification Chime</Text>
-                  <Text style={styles.settingSubtitle}>Play sound for new alerts</Text>
-                </View>
+                <Switch
+                  value={pushEnabled}
+                  onValueChange={handleTogglePush}
+                  trackColor={{ false: '#D1D5DB', true: '#BFDBFE' }}
+                  thumbColor={pushEnabled ? '#0B2564' : '#9CA3AF'}
+                />
               </View>
-              <Switch
-                value={soundEnabled}
-                onValueChange={handleToggleSound}
-                trackColor={{ false: '#D1D5DB', true: '#BFDBFE' }}
-                thumbColor={soundEnabled ? '#0B2564' : '#9CA3AF'}
-              />
+
+              {/* Reset Password Row */}
+              <TouchableOpacity
+                style={[styles.settingRow, styles.borderTop]}
+                onPress={handlePasswordReset}
+                activeOpacity={0.7}
+              >
+                <View style={styles.settingRowLeft}>
+                  <View style={[styles.rowIconWrapper, { backgroundColor: '#E8F0FE' }]}>
+                    <Feather name="lock" size={18} color="#0B2564" />
+                  </View>
+                  <View>
+                    <Text style={styles.settingTitle}>Reset Password</Text>
+                    <Text style={styles.settingSubtitle}>Send password reset email link</Text>
+                  </View>
+                </View>
+                <Feather name="chevron-right" size={18} color="#9CA3AF" />
+              </TouchableOpacity>
+
+              {/* Change Password Row */}
+              <TouchableOpacity
+                style={[styles.settingRow, styles.borderTop]}
+                onPress={() => setShowChangePasswordModal(true)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.settingRowLeft}>
+                  <View style={[styles.rowIconWrapper, { backgroundColor: '#E8F0FE' }]}>
+                    <Feather name="key" size={18} color="#0B2564" />
+                  </View>
+                  <View>
+                    <Text style={styles.settingTitle}>Change Password</Text>
+                    <Text style={styles.settingSubtitle}>Update your password directly in-app</Text>
+                  </View>
+                </View>
+                <Feather name="chevron-right" size={18} color="#9CA3AF" />
+              </TouchableOpacity>
+
+              {/* Replay App Tour Row */}
+              <TouchableOpacity
+                style={[styles.settingRow, styles.borderTop]}
+                onPress={handleReplayTour}
+                activeOpacity={0.7}
+              >
+                <View style={styles.settingRowLeft}>
+                  <View style={[styles.rowIconWrapper, { backgroundColor: '#E8F0FE' }]}>
+                    <Feather name="help-circle" size={18} color="#0B2564" />
+                  </View>
+                  <View>
+                    <Text style={styles.settingTitle}>Replay App Tour</Text>
+                    <Text style={styles.settingSubtitle}>Show step-by-step interactive overlay</Text>
+                  </View>
+                </View>
+                <Feather name="chevron-right" size={18} color="#9CA3AF" />
+              </TouchableOpacity>
+
             </View>
+          </View>
 
-            {/* Push Notifications Row */}
-            <View style={[styles.settingRow, styles.borderTop]}>
-              <View style={styles.settingRowLeft}>
-                <View style={[styles.rowIconWrapper, { backgroundColor: '#E8F0FE' }]}>
-                  <Feather name="bell" size={18} color="#0B2564" />
+          {/* ─── Support & Legal ──────────────────────────────── */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Support & Legal</Text>
+            <View style={styles.card}>
+
+              {/* Contact Support */}
+              <TouchableOpacity
+                style={styles.settingRow}
+                onPress={() => Linking.openURL('mailto:support@brgylert.ph?subject=BrgyAlert%20Support')}
+                activeOpacity={0.7}
+              >
+                <View style={styles.settingRowLeft}>
+                  <View style={[styles.rowIconWrapper, { backgroundColor: '#E8F0FE' }]}>
+                    <Feather name="mail" size={18} color="#0B2564" />
+                  </View>
+                  <View>
+                    <Text style={styles.settingTitle}>Contact Support</Text>
+                    <Text style={styles.settingSubtitle}>Email us for help or inquiries</Text>
+                  </View>
                 </View>
-                <View>
-                  <Text style={styles.settingTitle}>Push Notifications</Text>
-                  <Text style={styles.settingSubtitle}>Receive real-time system alerts</Text>
+                <Feather name="chevron-right" size={18} color="#9CA3AF" />
+              </TouchableOpacity>
+
+              {/* Privacy Policy */}
+              <TouchableOpacity
+                style={[styles.settingRow, styles.borderTop]}
+                onPress={() => openLegalModal('privacy')}
+                activeOpacity={0.7}
+              >
+                <View style={styles.settingRowLeft}>
+                  <View style={[styles.rowIconWrapper, { backgroundColor: '#E8F0FE' }]}>
+                    <Feather name="shield" size={18} color="#0B2564" />
+                  </View>
+                  <View>
+                    <Text style={styles.settingTitle}>Privacy Policy</Text>
+                    <Text style={styles.settingSubtitle}>How we handle your data</Text>
+                  </View>
                 </View>
-              </View>
-              <Switch
-                value={pushEnabled}
-                onValueChange={handleTogglePush}
-                trackColor={{ false: '#D1D5DB', true: '#BFDBFE' }}
-                thumbColor={pushEnabled ? '#0B2564' : '#9CA3AF'}
-              />
+                <Feather name="chevron-right" size={18} color="#9CA3AF" />
+              </TouchableOpacity>
+
+              {/* Terms of Service */}
+              <TouchableOpacity
+                style={[styles.settingRow, styles.borderTop]}
+                onPress={() => openLegalModal('terms')}
+                activeOpacity={0.7}
+              >
+                <View style={styles.settingRowLeft}>
+                  <View style={[styles.rowIconWrapper, { backgroundColor: '#E8F0FE' }]}>
+                    <Feather name="file-text" size={18} color="#0B2564" />
+                  </View>
+                  <View>
+                    <Text style={styles.settingTitle}>Terms of Service</Text>
+                    <Text style={styles.settingSubtitle}>Usage rules and responsibilities</Text>
+                  </View>
+                </View>
+                <Feather name="chevron-right" size={18} color="#9CA3AF" />
+              </TouchableOpacity>
+
+              {/* Report a Bug */}
+              <TouchableOpacity
+                style={[styles.settingRow, styles.borderTop]}
+                onPress={() => Linking.openURL('mailto:bugs@brgylert.ph?subject=Bug%20Report%20-%20BrgyAlert%20Mobile')}
+                activeOpacity={0.7}
+              >
+                <View style={styles.settingRowLeft}>
+                  <View style={[styles.rowIconWrapper, { backgroundColor: '#E8F0FE' }]}>
+                    <Feather name="alert-circle" size={18} color="#0B2564" />
+                  </View>
+                  <View>
+                    <Text style={styles.settingTitle}>Report a Bug</Text>
+                    <Text style={styles.settingSubtitle}>Help us improve the app</Text>
+                  </View>
+                </View>
+                <Feather name="chevron-right" size={18} color="#9CA3AF" />
+              </TouchableOpacity>
+
             </View>
-
-            {/* Reset Password Row */}
-            <TouchableOpacity
-              style={[styles.settingRow, styles.borderTop]}
-              onPress={handlePasswordReset}
-              activeOpacity={0.7}
-            >
-              <View style={styles.settingRowLeft}>
-                <View style={[styles.rowIconWrapper, { backgroundColor: '#E8F0FE' }]}>
-                  <Feather name="lock" size={18} color="#0B2564" />
-                </View>
-                <View>
-                  <Text style={styles.settingTitle}>Reset Password</Text>
-                  <Text style={styles.settingSubtitle}>Send password reset email link</Text>
-                </View>
-              </View>
-              <Feather name="chevron-right" size={18} color="#9CA3AF" />
-            </TouchableOpacity>
-
-            {/* Change Password Row */}
-            <TouchableOpacity
-              style={[styles.settingRow, styles.borderTop]}
-              onPress={() => setShowChangePasswordModal(true)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.settingRowLeft}>
-                <View style={[styles.rowIconWrapper, { backgroundColor: '#E8F0FE' }]}>
-                  <Feather name="key" size={18} color="#0B2564" />
-                </View>
-                <View>
-                  <Text style={styles.settingTitle}>Change Password</Text>
-                  <Text style={styles.settingSubtitle}>Update your password directly in-app</Text>
-                </View>
-              </View>
-              <Feather name="chevron-right" size={18} color="#9CA3AF" />
-            </TouchableOpacity>
-
-            {/* Replay App Tour Row */}
-            <TouchableOpacity
-              style={[styles.settingRow, styles.borderTop]}
-              onPress={handleReplayTour}
-              activeOpacity={0.7}
-            >
-              <View style={styles.settingRowLeft}>
-                <View style={[styles.rowIconWrapper, { backgroundColor: '#E8F0FE' }]}>
-                  <Feather name="help-circle" size={18} color="#0B2564" />
-                </View>
-                <View>
-                  <Text style={styles.settingTitle}>Replay App Tour</Text>
-                  <Text style={styles.settingSubtitle}>Show step-by-step interactive overlay</Text>
-                </View>
-              </View>
-              <Feather name="chevron-right" size={18} color="#9CA3AF" />
-            </TouchableOpacity>
-
           </View>
-        </View>
 
-        {/* ─── Support & Legal ──────────────────────────────── */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Support & Legal</Text>
-          <View style={styles.card}>
-
-            {/* Contact Support */}
-            <TouchableOpacity
-              style={styles.settingRow}
-              onPress={() => Linking.openURL('mailto:support@brgylert.ph?subject=BrgyAlert%20Support')}
-              activeOpacity={0.7}
-            >
-              <View style={styles.settingRowLeft}>
-                <View style={[styles.rowIconWrapper, { backgroundColor: '#E8F0FE' }]}>
-                  <Feather name="mail" size={18} color="#0B2564" />
-                </View>
-                <View>
-                  <Text style={styles.settingTitle}>Contact Support</Text>
-                  <Text style={styles.settingSubtitle}>Email us for help or inquiries</Text>
-                </View>
-              </View>
-              <Feather name="chevron-right" size={18} color="#9CA3AF" />
-            </TouchableOpacity>
-
-            {/* Privacy Policy */}
-            <TouchableOpacity
-              style={[styles.settingRow, styles.borderTop]}
-              onPress={() => openLegalModal('privacy')}
-              activeOpacity={0.7}
-            >
-              <View style={styles.settingRowLeft}>
-                <View style={[styles.rowIconWrapper, { backgroundColor: '#E8F0FE' }]}>
-                  <Feather name="shield" size={18} color="#0B2564" />
-                </View>
-                <View>
-                  <Text style={styles.settingTitle}>Privacy Policy</Text>
-                  <Text style={styles.settingSubtitle}>How we handle your data</Text>
-                </View>
-              </View>
-              <Feather name="chevron-right" size={18} color="#9CA3AF" />
-            </TouchableOpacity>
-
-            {/* Terms of Service */}
-            <TouchableOpacity
-              style={[styles.settingRow, styles.borderTop]}
-              onPress={() => openLegalModal('terms')}
-              activeOpacity={0.7}
-            >
-              <View style={styles.settingRowLeft}>
-                <View style={[styles.rowIconWrapper, { backgroundColor: '#E8F0FE' }]}>
-                  <Feather name="file-text" size={18} color="#0B2564" />
-                </View>
-                <View>
-                  <Text style={styles.settingTitle}>Terms of Service</Text>
-                  <Text style={styles.settingSubtitle}>Usage rules and responsibilities</Text>
-                </View>
-              </View>
-              <Feather name="chevron-right" size={18} color="#9CA3AF" />
-            </TouchableOpacity>
-
-            {/* Report a Bug */}
-            <TouchableOpacity
-              style={[styles.settingRow, styles.borderTop]}
-              onPress={() => Linking.openURL('mailto:bugs@brgylert.ph?subject=Bug%20Report%20-%20BrgyAlert%20Mobile')}
-              activeOpacity={0.7}
-            >
-              <View style={styles.settingRowLeft}>
-                <View style={[styles.rowIconWrapper, { backgroundColor: '#E8F0FE' }]}>
-                  <Feather name="alert-circle" size={18} color="#0B2564" />
-                </View>
-                <View>
-                  <Text style={styles.settingTitle}>Report a Bug</Text>
-                  <Text style={styles.settingSubtitle}>Help us improve the app</Text>
-                </View>
-              </View>
-              <Feather name="chevron-right" size={18} color="#9CA3AF" />
-            </TouchableOpacity>
-
+          {/* System Information */}
+          <View style={styles.infoWrapper}>
+            <Text style={styles.infoText}>BrgyAlert Mobile • Version 1.0.0</Text>
           </View>
-        </View>
 
-        {/* System Information */}
-        <View style={styles.infoWrapper}>
-          <Text style={styles.infoText}>BrgyAlert Mobile • Version 1.0.0</Text>
-        </View>
+          {/* Danger/Sign Out */}
+          <TouchableOpacity
+            style={styles.signOutButton}
+            onPress={handleSignOut}
+            activeOpacity={0.8}
+          >
+            <Feather name="log-out" size={20} color="#EF4444" style={{ marginRight: 8 }} />
+            <Text style={styles.signOutButtonText}>Sign Out Account</Text>
+          </TouchableOpacity>
 
-        {/* Danger/Sign Out */}
-        <TouchableOpacity
-          style={styles.signOutButton}
-          onPress={handleSignOut}
-          activeOpacity={0.8}
-        >
-          <Feather name="log-out" size={20} color="#EF4444" style={{ marginRight: 8 }} />
-          <Text style={styles.signOutButtonText}>Sign Out Account</Text>
-        </TouchableOpacity>
-
-      </ScrollView>
-    </Animated.View>
+        </ScrollView>
+      </Animated.View>
 
       {/* Change Password Modal */}
       <Modal
@@ -649,7 +663,7 @@ export default function CitizenSettings({ navigation }) {
             onPress={() => setShowChangePasswordModal(false)}
           />
           <View style={styles.passwordModalContent}>
-            
+
             {/* Header */}
             <View style={styles.modalHeaderRow}>
               <View style={styles.modalHeaderTitleGroup}>
@@ -786,21 +800,22 @@ export default function CitizenSettings({ navigation }) {
       </GestureModal>
 
       {/* Bottom Smooth Gradient Background Fade */}
-      <View style={styles.bottomGradient} pointerEvents="none">
-        <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
-          <Defs>
-            <LinearGradient id="fadeGrad" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0"   stopColor="#FFFFFF" stopOpacity="0"    />
-              <Stop offset="0.6" stopColor="#FFFFFF" stopOpacity="0.85" />
-              <Stop offset="1"   stopColor="#FFFFFF" stopOpacity="1"    />
-            </LinearGradient>
-          </Defs>
-          <Rect width="100" height="100" fill="url(#fadeGrad)" />
-        </Svg>
-      </View>
+      <BottomGradient />
 
       {/* Floating Bottom Nav */}
       <BottomTabNav />
+
+      {/* Sign Out Loading Overlay */}
+      {signingOut && (
+        <View style={StyleSheet.absoluteFillObject}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', zIndex: 99999 }}>
+            <View style={{ backgroundColor: '#FFFFFF', padding: 24, borderRadius: 20, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 5 }}>
+              <ActivityIndicator size="large" color="#0B2564" />
+              <Text style={{ marginTop: 12, fontSize: 14, fontWeight: '600', color: '#1F2937' }}>Signing out...</Text>
+            </View>
+          </View>
+        </View>
+      )}
 
     </View>
   );
@@ -825,14 +840,7 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 140,
   },
-  bottomGradient: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 180,
-    zIndex: 5,
-  },
+
   profileCard: {
     flexDirection: 'row',
     alignItems: 'center',

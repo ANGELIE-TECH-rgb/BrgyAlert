@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -10,6 +10,7 @@ import {
   ScrollView,
   ActivityIndicator,
   useWindowDimensions,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -24,6 +25,7 @@ import NetInfo from '@react-native-community/netinfo';
 import SkeletonLoader from '../../components/SkeletonLoader';
 import ConnectionBlocker from '../../components/ConnectionBlocker';
 import EmptyState from '../../components/EmptyState';
+import BottomGradient from '../../components/BottomGradient';
 
 export default function CitizenReports({ navigation }) {
   const { user } = useAuth();
@@ -31,10 +33,12 @@ export default function CitizenReports({ navigation }) {
   const { height: H } = useWindowDimensions();
 
   const [allAlerts, setAllAlerts] = useState([]);
+  const [offlineAlerts, setOfflineAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
+  const searchInputRef = useRef(null);
 
   // Monitor Network Connectivity State
   useEffect(() => {
@@ -48,6 +52,21 @@ export default function CitizenReports({ navigation }) {
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
+      const loadOfflineReports = async () => {
+        if (!user) return;
+        try {
+          const raw = await AsyncStorage.getItem(`offline_reports_${user.uid}`);
+          if (raw) {
+            setOfflineAlerts(JSON.parse(raw));
+          } else {
+            setOfflineAlerts([]);
+          }
+        } catch (e) {
+          console.log('Error loading offline reports:', e);
+        }
+      };
+      loadOfflineReports();
+
       const checkTutorial = async () => {
         try {
           const val = await AsyncStorage.getItem('hasSeenReportsTutorial');
@@ -142,6 +161,8 @@ export default function CitizenReports({ navigation }) {
   // Helper for Status Badge colors and text
   const getStatusBadgeStyle = (status) => {
     switch (status) {
+      case 'offline_pending':
+        return { bg: '#F3F4F6', text: '#6B7280', label: 'OFFLINE (SMS)' };
       case 'submitted':
         return { bg: '#FFF9E6', text: '#D97706', label: 'PENDING' };
       case 'under_review':
@@ -179,13 +200,21 @@ export default function CitizenReports({ navigation }) {
     }
   };
 
+  const sortedAlerts = [...offlineAlerts, ...allAlerts].sort((a, b) => {
+    const timeA = a.createdAt ? (a.createdAt.toDate ? a.createdAt.toDate().getTime() : new Date(a.createdAt).getTime()) : 0;
+    const timeB = b.createdAt ? (b.createdAt.toDate ? b.createdAt.toDate().getTime() : new Date(b.createdAt).getTime()) : 0;
+    return timeB - timeA;
+  });
+
   // Filter and search computation
-  const filteredAlerts = allAlerts.filter((alert) => {
+  const filteredAlerts = sortedAlerts.filter((alert) => {
     // 1. Filter by Status Chip
     if (statusFilter === 'all') {
       if (alert.status === 'declined') return false;
     } else if (statusFilter === 'resolved') {
       if (alert.status !== 'done' && alert.status !== 'resolved') return false;
+    } else if (statusFilter === 'submitted') {
+      if (alert.status !== 'submitted' && alert.status !== 'offline_pending') return false;
     } else {
       if (alert.status !== statusFilter) return false;
     }
@@ -213,7 +242,9 @@ export default function CitizenReports({ navigation }) {
   const renderItem = ({ item, index }) => {
     const badge = getStatusBadgeStyle(item.status);
     const catStyle = getCategoryStyle(item.category);
-    const serialCode = item.id ? `#INC-${item.id.substring(0, 3).toUpperCase()}` : `#INC-00${index + 1}`;
+    const serialCode = item.isOffline
+      ? `#SMS-${item.id.substring(8, 12).toUpperCase()}`
+      : (item.id ? `#INC-${item.id.substring(0, 3).toUpperCase()}` : `#INC-00${index + 1}`);
 
     // Format Date & Time
     let dateText = '';
@@ -247,7 +278,13 @@ export default function CitizenReports({ navigation }) {
     return (
       <TouchableOpacity
         style={styles.card}
-        onPress={() => navigation.navigate('StatusTracker', { alertId: item.id })}
+        onPress={() => {
+          if (item.isOffline) {
+            Alert.alert('Offline Record', 'This incident report was sent via SMS while offline. It will be uploaded automatically once internet connection is restored.');
+          } else {
+            navigation.navigate('StatusTracker', { alertId: item.id });
+          }
+        }}
         activeOpacity={0.7}
       >
         <View style={styles.cardLeft}>
@@ -327,14 +364,19 @@ export default function CitizenReports({ navigation }) {
 
       {/* Search Bar */}
       <View style={styles.searchContainer}>
-        <View style={[styles.searchBar, searchFocused && styles.searchBarFocused]}>
-          <Feather 
-            name="search" 
-            size={18} 
-            color={searchFocused ? '#0B2564' : '#9CA3AF'} 
-            style={styles.searchIcon} 
+        <TouchableOpacity
+          style={[styles.searchBar, searchFocused && styles.searchBarFocused]}
+          activeOpacity={1}
+          onPress={() => searchInputRef.current?.focus()}
+        >
+          <Feather
+            name="search"
+            size={18}
+            color={searchFocused ? '#0B2564' : '#9CA3AF'}
+            style={styles.searchIcon}
           />
           <TextInput
+            ref={searchInputRef}
             style={styles.searchInput}
             placeholder="Search reports..."
             placeholderTextColor="#9CA3AF"
@@ -348,7 +390,7 @@ export default function CitizenReports({ navigation }) {
               <Feather name="x" size={16} color="#6B7280" />
             </TouchableOpacity>
           )}
-        </View>
+        </TouchableOpacity>
       </View>
 
       {/* Filter Chips */}
@@ -425,18 +467,7 @@ export default function CitizenReports({ navigation }) {
       </TouchableOpacity>
 
       {/* Bottom Smooth Gradient Background Fade */}
-      <View style={styles.bottomGradient} pointerEvents="none">
-        <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
-          <Defs>
-            <LinearGradient id="fadeGrad" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0" stopColor="#FFFFFF" stopOpacity="0" />
-              <Stop offset="0.6" stopColor="#FFFFFF" stopOpacity="0.85" />
-              <Stop offset="1" stopColor="#FFFFFF" stopOpacity="1" />
-            </LinearGradient>
-          </Defs>
-          <Rect width="100" height="100" fill="url(#fadeGrad)" />
-        </Svg>
-      </View>
+      <BottomGradient />
 
       {/* Connection Loss Blocker for Citizens */}
       {!isOnline && <ConnectionBlocker navigation={navigation} />}
@@ -507,16 +538,16 @@ const styles = StyleSheet.create({
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8FAFC',
+    backgroundColor: 'rgba(255, 255, 255, 0.65)',
     borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: '#E2E8F0',
+    borderColor: 'rgba(255, 255, 255, 0.5)',
     paddingHorizontal: 14,
     height: 48,
   },
   searchBarFocused: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#0B2564',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderColor: 'rgba(11, 37, 100, 0.8)',
     shadowColor: '#0B2564',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
@@ -671,14 +702,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     lineHeight: 22,
   },
-  bottomGradient: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 180,
-    zIndex: 5,
-  },
+
   urgencyDot: {
     width: 8,
     height: 8,

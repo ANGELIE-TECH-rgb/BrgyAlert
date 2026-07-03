@@ -23,6 +23,7 @@ import TutorialOverlay from '../../components/TutorialOverlay';
 import NetInfo from '@react-native-community/netinfo';
 import SkeletonLoader from '../../components/SkeletonLoader';
 import ConnectionBlocker from '../../components/ConnectionBlocker';
+import BottomGradient from '../../components/BottomGradient';
 
 const STATUS_STEPS = [
   { key: 'submitted', label: 'Report Submitted', desc: 'Your report has been successfully recorded in the system.' },
@@ -424,7 +425,14 @@ export default function StatusTracker({ route, navigation }) {
                         
                         {isCompleted && (
                           <Text style={styles.stepTime}>
-                            {idx === 0 ? formatStepTime(incident.createdAt) : formatStepTime(incident.updatedAt || incident.createdAt)}
+                            {idx === 0 
+                              ? formatStepTime(incident.createdAt) 
+                              : idx === 1 
+                              ? formatStepTime(incident.underReviewAt || incident.updatedAt || incident.createdAt)
+                              : idx === 2
+                              ? formatStepTime(incident.dispatchedAt || incident.updatedAt || incident.createdAt)
+                              : formatStepTime(incident.resolvedAt || incident.updatedAt || incident.createdAt)
+                            }
                           </Text>
                         )}
                         
@@ -439,18 +447,7 @@ export default function StatusTracker({ route, navigation }) {
           </ScrollView>
 
           {/* Bottom Smooth Gradient Background Fade */}
-          <View style={styles.bottomGradient} pointerEvents="none">
-            <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
-              <Defs>
-                <LinearGradient id="fadeGrad" x1="0" y1="0" x2="0" y2="1">
-                  <Stop offset="0" stopColor="#FFFFFF" stopOpacity="0" />
-                  <Stop offset="0.6" stopColor="#FFFFFF" stopOpacity="0.85" />
-                  <Stop offset="1" stopColor="#FFFFFF" stopOpacity="1" />
-                </LinearGradient>
-              </Defs>
-              <Rect width="100" height="100" fill="url(#fadeGrad)" />
-            </Svg>
-          </View>
+          <BottomGradient />
 
           {/* Sticky Message Responder Footer Button */}
           <View style={styles.footerContainer}>
@@ -822,14 +819,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
-  bottomGradient: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 180,
-    zIndex: 5,
-  },
+
   imageOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.9)',

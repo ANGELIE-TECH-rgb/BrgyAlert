@@ -15,7 +15,7 @@ import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { Feather } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services/firebaseConfig';
-import { markAsRead, markAllAsRead } from '../../services/notificationService';
+import { markAsRead, markAllAsRead, cleanupOrphanedNotifications } from '../../services/notificationService';
 import NetInfo from '@react-native-community/netinfo';
 import SkeletonLoader from '../../components/SkeletonLoader';
 import ConnectionBlocker from '../../components/ConnectionBlocker';
@@ -28,6 +28,8 @@ export default function NotificationsScreen({ navigation }) {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(true);
+  const verifiedAlertsRef = React.useRef({});
+  const [hiddenNotificationIds, setHiddenNotificationIds] = useState(new Set());
 
   // Monitor Network Connectivity State
   useEffect(() => {
@@ -90,6 +92,18 @@ export default function NotificationsScreen({ navigation }) {
     return () => unsubscribe();
   }, [user]);
 
+  // Clean up any notifications pointing to deleted incident alerts on Firestore
+  useEffect(() => {
+    if (!user || notifications.length === 0) return;
+    cleanupOrphanedNotifications(user.uid, notifications, verifiedAlertsRef.current, (orphanId) => {
+      setHiddenNotificationIds(prev => {
+        const newSet = new Set(prev);
+        newSet.add(orphanId);
+        return newSet;
+      });
+    });
+  }, [notifications, user]);
+
   // Format timestamp into relative or clean short string
   const formatTime = (createdAt) => {
     if (!createdAt) return '';
@@ -115,6 +129,7 @@ export default function NotificationsScreen({ navigation }) {
   const getTypeConfig = (type) => {
     switch (type) {
       case 'incident':
+      case 'emergency':
         return {
           icon: 'alert-triangle',
           color: '#EF4444',
@@ -152,13 +167,7 @@ export default function NotificationsScreen({ navigation }) {
 
     if (item.type === 'message') {
       navigation.navigate('ChatScreen', { alertId: item.relatedId });
-    } else if (item.type === 'incident') {
-      if (isAdmin) {
-        navigation.navigate('IncidentDetail', { alertId: item.relatedId });
-      } else {
-        navigation.navigate('StatusTracker', { alertId: item.relatedId });
-      }
-    } else if (item.type === 'status') {
+    } else if (item.type === 'incident' || item.type === 'status' || item.type === 'emergency') {
       if (isAdmin) {
         navigation.navigate('IncidentDetail', { alertId: item.relatedId });
       } else {
@@ -167,7 +176,8 @@ export default function NotificationsScreen({ navigation }) {
     }
   };
 
-  const hasUnread = notifications.some(n => !n.read);
+  const visibleNotifications = notifications.filter(n => !hiddenNotificationIds.has(n.id));
+  const hasUnread = visibleNotifications.some(n => !n.read);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -213,7 +223,7 @@ export default function NotificationsScreen({ navigation }) {
       {/* Content Area */}
       {loading ? (
         <SkeletonLoader type="notification" count={5} />
-      ) : notifications.length === 0 ? (
+      ) : visibleNotifications.length === 0 ? (
         <View style={styles.centered}>
           <View style={styles.emptyIconWrapper}>
             <Feather name="bell-off" size={48} color="#9CA3AF" />
@@ -223,7 +233,7 @@ export default function NotificationsScreen({ navigation }) {
         </View>
       ) : (
         <FlatList
-          data={notifications}
+          data={visibleNotifications}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}

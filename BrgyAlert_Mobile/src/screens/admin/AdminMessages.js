@@ -19,6 +19,7 @@ import { db } from '../../services/firebaseConfig';
 import AdminBottomTabNav from '../../components/AdminBottomTabNav';
 import SkeletonLoader from '../../components/SkeletonLoader';
 import EmptyState from '../../components/EmptyState';
+import BottomGradient from '../../components/BottomGradient';
 
 const getRelativeTime = (dateInput) => {
   if (!dateInput) return '';
@@ -98,6 +99,7 @@ export default function AdminMessages({ navigation }) {
   // Dynamic user profiles lookup
   const [userProfiles, setUserProfiles] = useState({});
   const listenersRef = useRef({});
+  const searchInputRef = useRef(null);
 
   useEffect(() => {
     const newUids = chatThreads
@@ -408,7 +410,11 @@ export default function AdminMessages({ navigation }) {
       {!loading && chatThreads.length > 0 && (
         <View style={styles.searchFilterContainer}>
           {/* Search Bar */}
-          <View style={[styles.searchBar, searchFocused && styles.searchBarFocused]}>
+          <TouchableOpacity 
+            style={[styles.searchBar, searchFocused && styles.searchBarFocused]}
+            activeOpacity={1}
+            onPress={() => searchInputRef.current?.focus()}
+          >
             <Feather 
               name="search" 
               size={18} 
@@ -416,6 +422,7 @@ export default function AdminMessages({ navigation }) {
               style={styles.searchIcon} 
             />
             <TextInput
+              ref={searchInputRef}
               style={styles.searchInput}
               placeholder="Search conversations..."
               placeholderTextColor="#9CA3AF"
@@ -430,7 +437,7 @@ export default function AdminMessages({ navigation }) {
                 <Feather name="x" size={16} color="#6B7280" />
               </TouchableOpacity>
             ) : null}
-          </View>
+          </TouchableOpacity>
 
           {/* Filter Pills */}
           <View style={styles.filterPills}>
@@ -490,18 +497,7 @@ export default function AdminMessages({ navigation }) {
       </Animated.View>
 
       {/* Bottom Smooth Gradient Background Fade */}
-      <View style={styles.bottomGradient} pointerEvents="none">
-        <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
-          <Defs>
-            <LinearGradient id="fadeGrad" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0" stopColor="#FFFFFF" stopOpacity="0" />
-              <Stop offset="0.6" stopColor="#FFFFFF" stopOpacity="0.85" />
-              <Stop offset="1" stopColor="#FFFFFF" stopOpacity="1" />
-            </LinearGradient>
-          </Defs>
-          <Rect width="100" height="100" fill="url(#fadeGrad)" />
-        </Svg>
-      </View>
+      <BottomGradient />
 
       {/* Floating Bottom Tab Nav Bar */}
       <AdminBottomTabNav />
@@ -697,14 +693,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     lineHeight: 22,
   },
-  bottomGradient: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 180,
-    zIndex: 5,
-  },
+
   searchFilterContainer: {
     paddingHorizontal: 24,
     marginBottom: 16,
@@ -712,17 +701,17 @@ const styles = StyleSheet.create({
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8FAFC',
+    backgroundColor: 'rgba(255, 255, 255, 0.65)',
     borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: '#E2E8F0',
+    borderColor: 'rgba(255, 255, 255, 0.5)',
     paddingHorizontal: 14,
     height: 48,
     marginBottom: 12,
   },
   searchBarFocused: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#0B2564',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderColor: 'rgba(11, 37, 100, 0.8)',
     shadowColor: '#0B2564',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,

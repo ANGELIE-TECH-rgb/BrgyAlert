@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -24,6 +24,7 @@ import RNDateTimePicker from '@react-native-community/datetimepicker';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services/firebaseConfig';
 import AdminBottomTabNav from '../../components/AdminBottomTabNav';
+import BottomGradient from '../../components/BottomGradient';
 import TutorialOverlay from '../../components/TutorialOverlay';
 import SkeletonLoader from '../../components/SkeletonLoader';
 import GestureModal from '../../components/GestureModal';
@@ -87,6 +88,7 @@ export default function AdminQueue({ route, navigation }) {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
+  const searchInputRef = useRef(null);
   const [statusFilter, setStatusFilter] = useState('all'); // all | submitted | under_review | dispatched | resolved | declined
   const [showTutorial, setShowTutorial] = useState(false);
 
@@ -528,7 +530,11 @@ export default function AdminQueue({ route, navigation }) {
 
       {/* Search & Actions Bar */}
       <View style={[styles.searchContainer, { flexDirection: 'row', alignItems: 'center' }]}>
-        <View style={[styles.searchBar, { flex: 1 }, searchFocused && styles.searchBarFocused]}>
+        <TouchableOpacity 
+          style={[styles.searchBar, { flex: 1 }, searchFocused && styles.searchBarFocused]}
+          activeOpacity={1}
+          onPress={() => searchInputRef.current?.focus()}
+        >
           <Feather 
             name="search" 
             size={18} 
@@ -536,6 +542,7 @@ export default function AdminQueue({ route, navigation }) {
             style={styles.searchIcon} 
           />
           <TextInput
+            ref={searchInputRef}
             style={styles.searchInput}
             placeholder="Search category, location..."
             placeholderTextColor="#9CA3AF"
@@ -549,7 +556,7 @@ export default function AdminQueue({ route, navigation }) {
               <Feather name="x" size={16} color="#6B7280" />
             </TouchableOpacity>
           )}
-        </View>
+        </TouchableOpacity>
         
         {/* Toggle Filter Panel */}
         <TouchableOpacity 
@@ -687,12 +694,12 @@ export default function AdminQueue({ route, navigation }) {
           icon={searchQuery.trim().length > 0 ? 'search' : 'check-square'}
           title={searchQuery.trim().length > 0 ? 'No Matches Found' : 'Queue is Clear'}
           subtitle={getEmptyStateText()}
-          actionLabel={searchQuery.trim().length > 0 || selectedCategory || selectedUrgency || selectedStatus !== 'all' ? 'Reset Filters' : undefined}
+          actionLabel={searchQuery.trim().length > 0 || categoryFilter !== 'all' || urgencyFilter !== 'all' || statusFilter !== 'all' ? 'Reset Filters' : undefined}
           onActionPress={() => {
             setSearchQuery('');
-            setSelectedCategory(null);
-            setSelectedUrgency(null);
-            setSelectedStatus('all');
+            setCategoryFilter('all');
+            setUrgencyFilter('all');
+            setStatusFilter('all');
           }}
           accentColor="#0B2564"
         />
@@ -707,18 +714,7 @@ export default function AdminQueue({ route, navigation }) {
       )}
 
       {/* Bottom Smooth Gradient Background Fade */}
-      <View style={styles.bottomGradient} pointerEvents="none">
-        <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
-          <Defs>
-            <LinearGradient id="fadeGrad" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0" stopColor="#FFFFFF" stopOpacity="0" />
-              <Stop offset="0.6" stopColor="#FFFFFF" stopOpacity="0.85" />
-              <Stop offset="1" stopColor="#FFFFFF" stopOpacity="1" />
-            </LinearGradient>
-          </Defs>
-          <Rect width="100" height="100" fill="url(#fadeGrad)" />
-        </Svg>
-      </View>
+      <BottomGradient />
 
       {/* MANUAL ENTRY BOTTOM SHEET MODAL */}
       <GestureModal
@@ -974,16 +970,16 @@ const styles = StyleSheet.create({
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8FAFC',
+    backgroundColor: 'rgba(255, 255, 255, 0.65)',
     borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: '#E2E8F0',
+    borderColor: 'rgba(255, 255, 255, 0.5)',
     paddingHorizontal: 14,
     height: 48,
   },
   searchBarFocused: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#0B2564',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderColor: 'rgba(11, 37, 100, 0.8)',
     shadowColor: '#0B2564',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
@@ -1223,14 +1219,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     lineHeight: 22,
-  },
-  bottomGradient: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 180,
-    zIndex: 5,
   },
   // Modal Styles
   addModalSheet: {

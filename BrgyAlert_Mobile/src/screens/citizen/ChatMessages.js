@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -24,19 +24,20 @@ import NetInfo from '@react-native-community/netinfo';
 import SkeletonLoader from '../../components/SkeletonLoader';
 import ConnectionBlocker from '../../components/ConnectionBlocker';
 import EmptyState from '../../components/EmptyState';
+import BottomGradient from '../../components/BottomGradient';
 
 const getRelativeTime = (dateInput) => {
   if (!dateInput) return '';
   const now = new Date();
   const date = new Date(dateInput);
   const diffMs = now - date;
-  
+
   if (diffMs < 0) return 'Just now';
-  
+
   const diffMins = Math.floor(diffMs / 60000);
   if (diffMins < 1) return 'Just now';
   if (diffMins < 60) return `${diffMins}m ago`;
-  
+
   const diffHours = Math.floor(diffMs / 3600000);
   if (diffHours < 24) {
     const isSameDay = now.getDate() === date.getDate() && now.getMonth() === date.getMonth() && now.getFullYear() === date.getFullYear();
@@ -93,6 +94,7 @@ export default function ChatMessages({ navigation }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const searchInputRef = useRef(null);
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -284,7 +286,7 @@ export default function ChatMessages({ navigation }) {
     return (
       <TouchableOpacity
         style={[
-          styles.card, 
+          styles.card,
           unreadCount > 0 && styles.cardUnreadAccent,
           isResolved && styles.cardResolvedMuted
         ]}
@@ -293,8 +295,8 @@ export default function ChatMessages({ navigation }) {
       >
         <View style={styles.cardLeft}>
           <View style={[
-            styles.iconWrapper, 
-            { 
+            styles.iconWrapper,
+            {
               backgroundColor: catStyle.bg,
               borderWidth: 2,
               borderColor: getStatusBorderColor(item.status)
@@ -312,12 +314,12 @@ export default function ChatMessages({ navigation }) {
                 </Text>
               </View>
             </View>
-            <Text 
+            <Text
               style={[
-                styles.messagePreview, 
+                styles.messagePreview,
                 unreadCount > 0 && styles.messagePreviewUnread,
                 isResolved && styles.messagePreviewItalic
-              ]} 
+              ]}
               numberOfLines={1}
             >
               {displayMessage}
@@ -365,103 +367,97 @@ export default function ChatMessages({ navigation }) {
           </Text>
         </View>
 
-      {/* Search and Filter Panel */}
-      {!loading && alerts.length > 0 && (
-        <View style={styles.searchFilterContainer}>
-          {/* Search Bar */}
-          <View style={[styles.searchBar, searchFocused && styles.searchBarFocused]}>
-            <Feather 
-              name="search" 
-              size={18} 
-              color={searchFocused ? '#0B2564' : '#9CA3AF'} 
-              style={styles.searchIcon} 
-            />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search conversations..."
-              placeholderTextColor="#9CA3AF"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              autoCorrect={false}
-              onFocus={() => setSearchFocused(true)}
-              onBlur={() => setSearchFocused(false)}
-            />
-            {searchQuery ? (
-              <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
-                <Feather name="x" size={16} color="#6B7280" />
-              </TouchableOpacity>
-            ) : null}
-          </View>
-
-          {/* Filter Pills */}
-          <View style={styles.filterPills}>
-            {['all', 'unread', 'read'].map((filter) => {
-              const isSelected = readFilter === filter;
-              const label = filter.charAt(0).toUpperCase() + filter.slice(1);
-              return (
-                <TouchableOpacity
-                  key={filter}
-                  style={[styles.filterPill, isSelected && styles.filterPillActive]}
-                  onPress={() => setReadFilter(filter)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.filterPillText, isSelected && styles.filterPillTextActive]}>
-                    {label}
-                  </Text>
+        {/* Search and Filter Panel */}
+        {!loading && alerts.length > 0 && (
+          <View style={styles.searchFilterContainer}>
+            {/* Search Bar */}
+            <TouchableOpacity
+              style={[styles.searchBar, searchFocused && styles.searchBarFocused]}
+              activeOpacity={1}
+              onPress={() => searchInputRef.current?.focus()}
+            >
+              <Feather
+                name="search"
+                size={18}
+                color={searchFocused ? '#0B2564' : '#9CA3AF'}
+                style={styles.searchIcon}
+              />
+              <TextInput
+                ref={searchInputRef}
+                style={styles.searchInput}
+                placeholder="Search conversations..."
+                placeholderTextColor="#9CA3AF"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoCorrect={false}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setSearchFocused(false)}
+              />
+              {searchQuery ? (
+                <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
+                  <Feather name="x" size={16} color="#6B7280" />
                 </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-      )}
+              ) : null}
+            </TouchableOpacity>
 
-      {/* List / Content */}
-      {loading ? (
-        <SkeletonLoader type="thread" count={4} />
-      ) : alerts.length === 0 ? (
-        <EmptyState
-          icon="message-square"
-          title="No Conversations Yet"
-          subtitle="Tapping the floating '+' button on the home screen allows you to report an incident and start chatting."
-          actionLabel="Go to Dashboard"
-          onActionPress={() => navigation.navigate('CitizenHome')}
-          accentColor="#0F2C59"
-        />
-      ) : filteredAlerts.length === 0 ? (
-        <EmptyState
-          icon="search"
-          title="No Matches Found"
-          subtitle="No conversations match your search or filter."
-          actionLabel="Clear Search"
-          onActionPress={() => setSearchQuery('')}
-          accentColor="#0F2C59"
-        />
-      ) : (
-        <FlatList
-          data={filteredAlerts}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          refreshing={refreshing}
-          onRefresh={handleRefresh}
-        />
-      )}
+            {/* Filter Pills */}
+            <View style={styles.filterPills}>
+              {['all', 'unread', 'read'].map((filter) => {
+                const isSelected = readFilter === filter;
+                const label = filter.charAt(0).toUpperCase() + filter.slice(1);
+                return (
+                  <TouchableOpacity
+                    key={filter}
+                    style={[styles.filterPill, isSelected && styles.filterPillActive]}
+                    onPress={() => setReadFilter(filter)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.filterPillText, isSelected && styles.filterPillTextActive]}>
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
+        {/* List / Content */}
+        {loading ? (
+          <SkeletonLoader type="thread" count={4} />
+        ) : alerts.length === 0 ? (
+          <EmptyState
+            icon="message-square"
+            title="No Conversations Yet"
+            subtitle="Tapping the floating '+' button on the home screen allows you to report an incident and start chatting."
+            actionLabel="Go to Dashboard"
+            onActionPress={() => navigation.navigate('CitizenHome')}
+            accentColor="#0F2C59"
+          />
+        ) : filteredAlerts.length === 0 ? (
+          <EmptyState
+            icon="search"
+            title="No Matches Found"
+            subtitle="No conversations match your search or filter."
+            actionLabel="Clear Search"
+            onActionPress={() => setSearchQuery('')}
+            accentColor="#0F2C59"
+          />
+        ) : (
+          <FlatList
+            data={filteredAlerts}
+            keyExtractor={(item) => item.id}
+            renderItem={renderItem}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+          />
+        )}
       </Animated.View>
 
       {/* Bottom Smooth Gradient Background Fade */}
-      <View style={styles.bottomGradient} pointerEvents="none">
-        <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
-          <Defs>
-            <LinearGradient id="fadeGrad" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0" stopColor="#FFFFFF" stopOpacity="0" />
-              <Stop offset="0.6" stopColor="#FFFFFF" stopOpacity="0.85" />
-              <Stop offset="1" stopColor="#FFFFFF" stopOpacity="1" />
-            </LinearGradient>
-          </Defs>
-          <Rect width="100" height="100" fill="url(#fadeGrad)" />
-        </Svg>
-      </View>
+      <BottomGradient />
 
       {/* Connection Loss Blocker for Citizens */}
       {!isOnline && <ConnectionBlocker navigation={navigation} />}
@@ -641,14 +637,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     lineHeight: 22,
   },
-  bottomGradient: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 180,
-    zIndex: 5,
-  },
+
   searchFilterContainer: {
     paddingHorizontal: 24,
     marginBottom: 16,
@@ -656,17 +645,17 @@ const styles = StyleSheet.create({
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8FAFC',
+    backgroundColor: 'rgba(255, 255, 255, 0.65)',
     borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: '#E2E8F0',
+    borderColor: 'rgba(255, 255, 255, 0.5)',
     paddingHorizontal: 14,
     height: 48,
     marginBottom: 12,
   },
   searchBarFocused: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#0B2564',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderColor: 'rgba(11, 37, 100, 0.8)',
     shadowColor: '#0B2564',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,

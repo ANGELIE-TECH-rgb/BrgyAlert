@@ -179,11 +179,11 @@ export default function AppNavigator() {
                 const locationText = data.location?.addressText || 'Unknown Location';
                 const isPanic = data.urgency === 'critical' || (data.details && data.details.includes('PANIC BUTTON'));
                 const notifType = isPanic ? 'emergency' : 'incident';
-                
+
                 sendAndSaveNotification(user.uid, {
                   title: isPanic ? `🚨 CRITICAL PANIC ALERT!` : `🚨 NEW INCIDENT: ${data.category || 'General'}`,
-                  body: isPanic 
-                    ? `Panic button triggered by ${data.reporterName || 'Citizen'} at ${locationText}.` 
+                  body: isPanic
+                    ? `Panic button triggered by ${data.reporterName || 'Citizen'} at ${locationText}.`
                     : `Reported at ${locationText}. Urgency: ${(data.urgency || 'medium').toUpperCase()}.`,
                   type: notifType,
                   relatedId: alertId

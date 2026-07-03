@@ -2,7 +2,7 @@ import * as Notifications from 'expo-notifications';
 import { Audio } from 'expo-av';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { collection, addDoc, updateDoc, doc, serverTimestamp, writeBatch, getDocs, query, where } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, doc, serverTimestamp, writeBatch, getDocs, query, where, getDoc, deleteDoc } from 'firebase/firestore';
 import { db } from './firebaseConfig';
 
 // Configure how notifications are handled when the app is in the foreground
@@ -202,5 +202,54 @@ export async function markAllAsRead(userId) {
     await batch.commit();
   } catch (error) {
     console.log('Error marking all notifications as read:', error);
+  }
+}
+
+/**
+ * Checks notifications list for any items referencing a deleted alert/incident,
+ * and automatically deletes those orphaned notifications from Firestore.
+ */
+export async function cleanupOrphanedNotifications(userId, notifications, verifiedCache = {}, onOrphanFound) {
+  if (!userId || !notifications || notifications.length === 0) return;
+
+  for (const notif of notifications) {
+    if (notif.relatedId) {
+      const alertId = notif.relatedId;
+
+      // If we verified it exists, skip
+      if (verifiedCache[alertId] === true) {
+        continue;
+      }
+
+      // If we already know it's deleted, delete the notification immediately
+      if (verifiedCache[alertId] === false) {
+        if (onOrphanFound) onOrphanFound(notif.id);
+        try {
+          const notifDocRef = doc(db, 'users', userId, 'notifications', notif.id);
+          await deleteDoc(notifDocRef);
+          console.log(`[NotificationService] Cleaned up orphaned notification ${notif.id} for deleted alert ${alertId}`);
+        } catch (err) {
+          console.log('Error deleting orphaned notification:', err);
+        }
+        continue;
+      }
+
+      // Check Firestore
+      try {
+        const alertDocRef = doc(db, 'alerts', alertId);
+        const alertSnap = await getDoc(alertDocRef);
+        if (!alertSnap.exists()) {
+          verifiedCache[alertId] = false;
+          if (onOrphanFound) onOrphanFound(notif.id);
+          const notifDocRef = doc(db, 'users', userId, 'notifications', notif.id);
+          await deleteDoc(notifDocRef);
+          console.log(`[NotificationService] Cleaned up orphaned notification ${notif.id} for deleted alert ${alertId}`);
+        } else {
+          verifiedCache[alertId] = true;
+        }
+      } catch (err) {
+        console.log(`Error checking alert ${alertId} existence:`, err);
+      }
+    }
   }
 }

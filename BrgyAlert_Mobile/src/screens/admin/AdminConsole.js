@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  StyleSheet, 
-  Text, 
-  View, 
-  TouchableOpacity, 
-  StatusBar, 
+import {
+  StyleSheet,
+  Text,
+  View,
+  TouchableOpacity,
+  StatusBar,
   ScrollView,
   ActivityIndicator,
   Modal,
@@ -15,12 +15,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { collection, query, orderBy, onSnapshot, where } from 'firebase/firestore';
 import { Feather } from '@expo/vector-icons';
-import { markAsRead, markAllAsRead } from '../../services/notificationService';
+import { markAsRead, markAllAsRead, cleanupOrphanedNotifications } from '../../services/notificationService';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services/firebaseConfig';
 import AdminBottomTabNav from '../../components/AdminBottomTabNav';
+import BottomGradient from '../../components/BottomGradient';
 import TutorialOverlay from '../../components/TutorialOverlay';
 import IncidentCard from '../../components/IncidentCard';
 import SkeletonLoader from '../../components/SkeletonLoader';
@@ -57,11 +58,11 @@ export default function AdminConsole({ navigation }) {
     });
     return unsubscribe;
   }, [navigation]);
-  
+
   const [allAlerts, setAllAlerts] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [dropdownNotifications, setDropdownNotifications] = useState([]);
-  const [showDropdown, setShowDropdown] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [hiddenNotificationIds, setHiddenNotificationIds] = useState(new Set());
+  const verifiedAlertsRef = React.useRef({});
   const [loading, setLoading] = useState(true);
   const [mapMode, setMapMode] = useState('Satellite'); // Satellite | Terrain
   const [showTutorial, setShowTutorial] = useState(false);
@@ -163,7 +164,7 @@ export default function AdminConsole({ navigation }) {
         if (data.status === 'dispatched') {
           active++;
         }
-        
+
         // Calculate resolved count
         if (data.status === 'done' || data.status === 'resolved') {
           let resolveDate = null;
@@ -199,14 +200,18 @@ export default function AdminConsole({ navigation }) {
     );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const list = [];
-      let unread = 0;
       snapshot.forEach((doc) => {
         const data = doc.data();
-        if (!data.read) unread++;
         list.push({ id: doc.id, ...data });
       });
-      setDropdownNotifications(list.slice(0, 5));
-      setUnreadCount(unread);
+      setNotifications(list);
+      cleanupOrphanedNotifications(user.uid, list, verifiedAlertsRef.current, (orphanId) => {
+        setHiddenNotificationIds(prev => {
+          const newSet = new Set(prev);
+          newSet.add(orphanId);
+          return newSet;
+        });
+      });
     }, (error) => {
       console.log('Error fetching admin notifications:', error);
     });
@@ -285,368 +290,271 @@ export default function AdminConsole({ navigation }) {
       <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
-        {/* Top Header (Styled like Citizen Dashboard) */}
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Text style={styles.greetingText}>{getGreeting()}</Text>
-            <Text style={styles.dateText}>{getFormattedDate()}</Text>
-            <View style={styles.statusContainer}>
-              <View style={[styles.statusDot, { backgroundColor: '#22C55E' }]} />
-              <Text style={styles.statusLabel}>Command Console Active</Text>
-            </View>
-          </View>
-          <TouchableOpacity
-            style={styles.bellButton}
-            onPress={() => setShowDropdown(true)}
-            activeOpacity={0.7}
-          >
-            <Feather name="bell" size={22} color="#1F2937" />
-            {unreadCount > 0 && (
-              <View style={styles.badgeDot}>
-                <Text style={styles.badgeDotText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {/* Urgent Action Banner or All Clear Status Card */}
-        {pendingReview > 0 ? (
-          <TouchableOpacity
-            style={styles.actionBanner}
-            onPress={() => navigation.navigate('AdminQueue', { initialFilter: 'submitted' })}
-            activeOpacity={0.9}
-          >
-            <View style={styles.actionBannerLeft}>
-              <View style={styles.alertIconWrapper}>
-                <Feather name="alert-triangle" size={18} color="#EF4444" />
-              </View>
-              <View style={styles.bannerTextContainer}>
-                <Text style={styles.bannerTitle}>Urgent Action Required</Text>
-                <Text style={styles.bannerSubTitle}>
-                  {pendingReview === 1
-                    ? '1 new incident report is awaiting triage.'
-                    : `${pendingReview} new incident reports are awaiting triage.`}
-                </Text>
+          {/* Top Header (Styled like Citizen Dashboard) */}
+          <View style={styles.header}>
+            <View style={styles.headerLeft}>
+              <Text style={styles.greetingText}>{getGreeting()}</Text>
+              <Text style={styles.dateText}>{getFormattedDate()}</Text>
+              <View style={styles.statusContainer}>
+                <View style={[styles.statusDot, { backgroundColor: '#22C55E' }]} />
+                <Text style={styles.statusLabel}>Command Console Active</Text>
               </View>
             </View>
-            <View style={styles.actionBannerRight}>
-              <Text style={styles.actionBannerLink}>Review</Text>
-              <Feather name="chevron-right" size={16} color="#EF4444" />
-            </View>
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.allClearCard}>
-            <View style={styles.allClearLeft}>
-              <View style={styles.allClearIconWrapper}>
-                <Feather name="check-circle" size={16} color="#10B981" />
-              </View>
-              <Text style={styles.allClearText}>All quiet. The incident records are fully up to date!</Text>
-            </View>
-          </View>
-        )}
-
-        {/* 2x2 Metrics Grid */}
-        <View style={styles.metricsGrid}>
-          
-          {/* Card 1: Total Reports */}
-          <TouchableOpacity 
-            style={styles.metricCard}
-            onPress={() => navigation.navigate('AdminQueue', { initialFilter: 'all' })}
-            activeOpacity={0.8}
-          >
-            <View style={styles.metricHeader}>
-              <Text style={styles.metricTitle}>Total Reports</Text>
-              <View style={[styles.metricIconWrapper, { backgroundColor: '#EFF6FF' }]}>
-                <Feather name="file-text" size={16} color="#2563EB" />
-              </View>
-            </View>
-            <Text style={styles.metricValue}>{totalReports}</Text>
-            <View style={styles.metricFooter}>
-              <Text style={[styles.metricFooterText, { color: '#2563EB' }]}>View all logs</Text>
-              <Feather name="arrow-right" size={12} color="#2563EB" />
-            </View>
-          </TouchableOpacity>
-
-          {/* Card 2: Pending Review */}
-          <TouchableOpacity 
-            style={styles.metricCard}
-            onPress={() => navigation.navigate('AdminQueue', { initialFilter: 'submitted' })}
-            activeOpacity={0.8}
-          >
-            <View style={styles.metricHeader}>
-              <Text style={styles.metricTitle}>Pending Review</Text>
-              <View style={[styles.metricIconWrapper, { backgroundColor: '#FFF7ED' }]}>
-                <Feather name="eye" size={16} color="#EA580C" />
-              </View>
-            </View>
-            <Text style={styles.metricValue}>{pendingReview}</Text>
-            <View style={styles.metricFooter}>
-              <Text style={[styles.metricFooterText, { color: '#EA580C' }]}>Triage now</Text>
-              <Feather name="arrow-right" size={12} color="#EA580C" />
-            </View>
-          </TouchableOpacity>
-
-          {/* Card 3: Active Incidents */}
-          <TouchableOpacity 
-            style={styles.metricCard}
-            onPress={() => navigation.navigate('AdminQueue', { initialFilter: 'dispatched' })}
-            activeOpacity={0.8}
-          >
-            <View style={styles.metricHeader}>
-              <Text style={styles.metricTitle}>Active Incidents</Text>
-              <View style={[styles.metricIconWrapper, { backgroundColor: '#FEF2F2' }]}>
-                <Feather name="alert-triangle" size={16} color="#EF4444" />
-              </View>
-            </View>
-            <Text style={styles.metricValue}>{activeIncidents}</Text>
-            <View style={styles.metricFooter}>
-              <Text style={[styles.metricFooterText, { color: '#EF4444' }]}>Monitor status</Text>
-              <Feather name="arrow-right" size={12} color="#EF4444" />
-            </View>
-          </TouchableOpacity>
-
-          {/* Card 4: Resolved Today */}
-          <TouchableOpacity 
-            style={styles.metricCard}
-            onPress={() => navigation.navigate('AdminQueue', { initialFilter: 'resolved' })}
-            activeOpacity={0.8}
-          >
-            <View style={styles.metricHeader}>
-              <Text style={styles.metricTitle}>Resolved Today</Text>
-              <View style={[styles.metricIconWrapper, { backgroundColor: '#ECFDF5' }]}>
-                <Feather name="check-circle" size={16} color="#10B981" />
-              </View>
-            </View>
-            <Text style={styles.metricValue}>{resolvedToday}</Text>
-            <View style={styles.metricFooter}>
-              <Text style={[styles.metricFooterText, { color: '#10B981' }]}>Check activity</Text>
-              <Feather name="arrow-right" size={12} color="#10B981" />
-            </View>
-          </TouchableOpacity>
-
-        </View>
-
-        {/* Live Incident Map Card */}
-        <View style={styles.mapCard}>
-          <View style={styles.mapHeaderRow}>
-            <View style={styles.mapTitleWrapper}>
-              <Feather name="map" size={18} color="#0B2564" style={{ marginRight: 8 }} />
-              <Text style={styles.mapTitle}>Live Incident Map</Text>
-            </View>
-            <View style={styles.mapToggles}>
-              {['Standard', 'Satellite', 'Terrain'].map((mode) => (
-                <TouchableOpacity
-                  key={mode}
-                  style={[styles.toggleBtn, mapMode === mode && styles.toggleBtnActive]}
-                  onPress={() => setMapMode(mode)}
-                >
-                  <Text style={[styles.toggleBtnText, mapMode === mode && styles.toggleBtnTextActive]}>
-                    {mode}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          {/* ── Real Google Maps Tile ─────────────────────────────────── */}
-          <View style={styles.realMapCanvas}>
-            <MapView
-              style={styles.mapView}
-              provider={PROVIDER_GOOGLE}
-              mapType={
-                mapMode === 'Satellite' ? 'satellite'
-                : mapMode === 'Terrain'  ? 'terrain'
-                : 'standard'
-              }
-              initialRegion={{
-                latitude: BRGY_CENTER.latitude,
-                longitude: BRGY_CENTER.longitude,
-                latitudeDelta: 0.025,
-                longitudeDelta: 0.025,
-              }}
-            >
-              {allAlerts
-                .filter(a => a.status !== 'done' && a.status !== 'resolved' && a.status !== 'declined')
-                .map((alert) => (
-                  <Marker
-                    key={alert.id}
-                    coordinate={{
-                      latitude:  alert.location?.latitude  ?? BRGY_CENTER.latitude,
-                      longitude: alert.location?.longitude ?? BRGY_CENTER.longitude,
-                    }}
-                    pinColor={getPinColor(alert.category)}
-                    title={alert.category || 'Incident'}
-                    description={alert.location?.addressText || 'Tap for details'}
-                    onCalloutPress={() => navigation.navigate('IncidentDetail', { alertId: alert.id })}
-                  />
-                ))
-              }
-            </MapView>
-
-            {/* Map Legend Overlay */}
-            <View style={styles.legendOverlay} pointerEvents="none">
-              <Text style={styles.legendTitle}>MAP LEGEND</Text>
-              <View style={styles.legendRow}>
-                <View style={[styles.legendDot, { backgroundColor: '#EF4444' }]} />
-                <Text style={styles.legendText}>Fire / Medical / Crime</Text>
-              </View>
-              <View style={styles.legendRow}>
-                <View style={[styles.legendDot, { backgroundColor: '#D97706' }]} />
-                <Text style={styles.legendText}>Flood / Accident / Traffic</Text>
-              </View>
-              <View style={styles.legendRow}>
-                <View style={[styles.legendDot, { backgroundColor: '#2563EB' }]} />
-                <Text style={styles.legendText}>General</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Expand to Full-Screen Map */}
-          <TouchableOpacity
-            style={styles.expandMapBtn}
-            onPress={() => navigation.navigate('AdminMapScreen')}
-            activeOpacity={0.8}
-          >
-            <Feather name="maximize-2" size={14} color="#0B2564" style={{ marginRight: 6 }} />
-            <Text style={styles.expandMapText}>Expand Full Map</Text>
-          </TouchableOpacity>
-
-        </View>
-
-        {/* Recent Logs Section */}
-        <View style={styles.logsSection}>
-          <View style={styles.logsHeaderRow}>
-            <Text style={styles.logsTitle}>Recent logs</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('AdminQueue')}>
-              <Text style={styles.seeAllText}>See all</Text>
-            </TouchableOpacity>
-          </View>
-
-          {loading ? (
-            <SkeletonLoader type="card" count={3} />
-          ) : allAlerts.length === 0 ? (
-            <EmptyState
-              icon="inbox"
-              title="No Incident Logs"
-              subtitle="All clear. No reports have been submitted to the system yet."
-              accentColor="#0B2564"
-            />
-          ) : (
-            allAlerts.slice(0, 3).map((alert) => (
-              <IncidentCard
-                key={alert.id}
-                incident={alert}
-                onPress={() => navigation.navigate('IncidentDetail', { alertId: alert.id })}
-              />
-            ))
-          )}
-        </View>
-
-      </ScrollView>
-    </Animated.View>
-
-      {/* Bottom Smooth Gradient Background Fade */}
-      <View style={styles.bottomGradient} pointerEvents="none">
-        <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
-          <Defs>
-            <LinearGradient id="fadeGrad" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0" stopColor="#FFFFFF" stopOpacity="0" />
-              <Stop offset="0.6" stopColor="#FFFFFF" stopOpacity="0.85" />
-              <Stop offset="1" stopColor="#FFFFFF" stopOpacity="1" />
-            </LinearGradient>
-          </Defs>
-          <Rect width="100" height="100" fill="url(#fadeGrad)" />
-        </Svg>
-      </View>
-
-      {/* Notifications Dropdown Modal */}
-      <Modal
-        visible={showDropdown}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowDropdown(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowDropdown(false)}
-        >
-          <View style={[styles.dropdownContainer, { top: insets.top + 72 }]}>
-            <View style={styles.dropdownHeader}>
-              <Text style={styles.dropdownTitle}>Recent Notifications</Text>
-              {unreadCount > 0 && (
-                <TouchableOpacity onPress={() => markAllAsRead(user.uid)}>
-                  <Text style={styles.dropdownMarkRead}>Mark all read</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-
-            {dropdownNotifications.length === 0 ? (
-              <View style={styles.dropdownEmpty}>
-                <Feather name="bell" size={24} color="#9CA3AF" />
-                <Text style={styles.dropdownEmptyText}>No notifications yet</Text>
-              </View>
-            ) : (
-              <ScrollView style={styles.dropdownScroll} bounces={false} showsVerticalScrollIndicator={false}>
-                {dropdownNotifications.map((item) => {
-                  const isMsg = item.type === 'message';
-                  const isInc = item.type === 'incident';
-                  const isStatus = item.type === 'status';
-                  const iconName = isInc ? 'alert-triangle' : isMsg ? 'message-square' : isStatus ? 'activity' : 'bell';
-                  const iconColor = isInc ? '#EF4444' : isMsg ? '#2563EB' : isStatus ? '#D97706' : '#6B7280';
-                  const iconBg = isInc ? '#FEF2F2' : isMsg ? '#EFF6FF' : isStatus ? '#FFF9E6' : '#F3F4F6';
-
-                  return (
-                    <TouchableOpacity
-                      key={item.id}
-                      style={[styles.dropdownItem, !item.read && styles.dropdownItemUnread]}
-                      onPress={async () => {
-                        setShowDropdown(false);
-                        if (!item.read) {
-                          await markAsRead(user.uid, item.id);
-                        }
-                        if (item.relatedId) {
-                          if (item.type === 'message') {
-                            navigation.navigate('ChatScreen', { alertId: item.relatedId });
-                          } else {
-                            navigation.navigate('IncidentDetail', { alertId: item.relatedId });
-                          }
-                        }
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <View style={[styles.itemIconWrapper, { backgroundColor: iconBg }]}>
-                        <Feather name={iconName} size={14} color={iconColor} />
-                      </View>
-                      <View style={styles.itemTextWrapper}>
-                        <Text style={[styles.itemTitle, !item.read && styles.itemTitleUnread]} numberOfLines={1}>
-                          {item.title}
-                        </Text>
-                        <Text style={styles.itemBody} numberOfLines={1}>
-                          {item.body}
-                        </Text>
-                      </View>
-                      {!item.read && <View style={styles.itemUnreadDot} />}
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            )}
-
             <TouchableOpacity
-              style={styles.seeAllButton}
-              onPress={() => {
-                setShowDropdown(false);
-                navigation.navigate('Notifications');
-              }}
+              style={styles.bellButton}
+              onPress={() => navigation.navigate('Notifications')}
               activeOpacity={0.7}
             >
-              <Text style={styles.seeAllButtonText}>See All Notifications</Text>
-              <Feather name="chevron-right" size={14} color="#2563EB" style={{ marginLeft: 4 }} />
+              <Feather name="bell" size={22} color="#1F2937" />
+              {(() => {
+                const visibleUnreadCount = notifications.filter(n => !n.read && !hiddenNotificationIds.has(n.id)).length;
+                return visibleUnreadCount > 0 ? (
+                  <View style={styles.badgeDot}>
+                    <Text style={styles.badgeDotText}>{visibleUnreadCount > 9 ? '9+' : visibleUnreadCount}</Text>
+                  </View>
+                ) : null;
+              })()}
             </TouchableOpacity>
           </View>
-        </TouchableOpacity>
-      </Modal>
+
+          {/* Urgent Action Banner or All Clear Status Card */}
+          {pendingReview > 0 ? (
+            <TouchableOpacity
+              style={styles.actionBanner}
+              onPress={() => navigation.navigate('AdminQueue', { initialFilter: 'submitted' })}
+              activeOpacity={0.9}
+            >
+              <View style={styles.actionBannerLeft}>
+                <View style={styles.alertIconWrapper}>
+                  <Feather name="alert-triangle" size={18} color="#EF4444" />
+                </View>
+                <View style={styles.bannerTextContainer}>
+                  <Text style={styles.bannerTitle}>Urgent Action Required</Text>
+                  <Text style={styles.bannerSubTitle}>
+                    {pendingReview === 1
+                      ? '1 new incident report is awaiting triage.'
+                      : `${pendingReview} new incident reports are awaiting triage.`}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.actionBannerRight}>
+                <Text style={styles.actionBannerLink}>Review</Text>
+                <Feather name="chevron-right" size={16} color="#EF4444" />
+              </View>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.allClearCard}>
+              <View style={styles.allClearLeft}>
+                <View style={styles.allClearIconWrapper}>
+                  <Feather name="check-circle" size={16} color="#10B981" />
+                </View>
+                <Text style={styles.allClearText}>All quiet. The incident records are fully up to date!</Text>
+              </View>
+            </View>
+          )}
+
+          {/* 2x2 Metrics Grid */}
+          <View style={styles.metricsGrid}>
+
+            {/* Card 1: Total Reports */}
+            <TouchableOpacity
+              style={styles.metricCard}
+              onPress={() => navigation.navigate('AdminQueue', { initialFilter: 'all' })}
+              activeOpacity={0.8}
+            >
+              <View style={styles.metricHeader}>
+                <Text style={styles.metricTitle}>Total Reports</Text>
+                <View style={[styles.metricIconWrapper, { backgroundColor: '#EFF6FF' }]}>
+                  <Feather name="file-text" size={16} color="#2563EB" />
+                </View>
+              </View>
+              <Text style={styles.metricValue}>{totalReports}</Text>
+              <View style={styles.metricFooter}>
+                <Text style={[styles.metricFooterText, { color: '#2563EB' }]}>View all logs</Text>
+                <Feather name="arrow-right" size={12} color="#2563EB" />
+              </View>
+            </TouchableOpacity>
+
+            {/* Card 2: Pending Review */}
+            <TouchableOpacity
+              style={styles.metricCard}
+              onPress={() => navigation.navigate('AdminQueue', { initialFilter: 'submitted' })}
+              activeOpacity={0.8}
+            >
+              <View style={styles.metricHeader}>
+                <Text style={styles.metricTitle}>Pending Review</Text>
+                <View style={[styles.metricIconWrapper, { backgroundColor: '#FFF7ED' }]}>
+                  <Feather name="eye" size={16} color="#EA580C" />
+                </View>
+              </View>
+              <Text style={styles.metricValue}>{pendingReview}</Text>
+              <View style={styles.metricFooter}>
+                <Text style={[styles.metricFooterText, { color: '#EA580C' }]}>Triage now</Text>
+                <Feather name="arrow-right" size={12} color="#EA580C" />
+              </View>
+            </TouchableOpacity>
+
+            {/* Card 3: Active Incidents */}
+            <TouchableOpacity
+              style={styles.metricCard}
+              onPress={() => navigation.navigate('AdminQueue', { initialFilter: 'dispatched' })}
+              activeOpacity={0.8}
+            >
+              <View style={styles.metricHeader}>
+                <Text style={styles.metricTitle}>Active Incidents</Text>
+                <View style={[styles.metricIconWrapper, { backgroundColor: '#FEF2F2' }]}>
+                  <Feather name="alert-triangle" size={16} color="#EF4444" />
+                </View>
+              </View>
+              <Text style={styles.metricValue}>{activeIncidents}</Text>
+              <View style={styles.metricFooter}>
+                <Text style={[styles.metricFooterText, { color: '#EF4444' }]}>Monitor status</Text>
+                <Feather name="arrow-right" size={12} color="#EF4444" />
+              </View>
+            </TouchableOpacity>
+
+            {/* Card 4: Resolved Today */}
+            <TouchableOpacity
+              style={styles.metricCard}
+              onPress={() => navigation.navigate('AdminQueue', { initialFilter: 'resolved' })}
+              activeOpacity={0.8}
+            >
+              <View style={styles.metricHeader}>
+                <Text style={styles.metricTitle}>Resolved Today</Text>
+                <View style={[styles.metricIconWrapper, { backgroundColor: '#ECFDF5' }]}>
+                  <Feather name="check-circle" size={16} color="#10B981" />
+                </View>
+              </View>
+              <Text style={styles.metricValue}>{resolvedToday}</Text>
+              <View style={styles.metricFooter}>
+                <Text style={[styles.metricFooterText, { color: '#10B981' }]}>Check activity</Text>
+                <Feather name="arrow-right" size={12} color="#10B981" />
+              </View>
+            </TouchableOpacity>
+
+          </View>
+
+          {/* Live Incident Map Card */}
+          <View style={styles.mapCard}>
+            <View style={styles.mapHeaderRow}>
+              <View style={styles.mapTitleWrapper}>
+                <Feather name="map" size={18} color="#0B2564" style={{ marginRight: 8 }} />
+                <Text style={styles.mapTitle}>Live Incident Map</Text>
+              </View>
+              <View style={styles.mapToggles}>
+                {['Standard', 'Satellite', 'Terrain'].map((mode) => (
+                  <TouchableOpacity
+                    key={mode}
+                    style={[styles.toggleBtn, mapMode === mode && styles.toggleBtnActive]}
+                    onPress={() => setMapMode(mode)}
+                  >
+                    <Text style={[styles.toggleBtnText, mapMode === mode && styles.toggleBtnTextActive]}>
+                      {mode}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* ── Real Google Maps Tile ─────────────────────────────────── */}
+            <View style={styles.realMapCanvas}>
+              <MapView
+                style={styles.mapView}
+                provider={PROVIDER_GOOGLE}
+                mapType={
+                  mapMode === 'Satellite' ? 'satellite'
+                    : mapMode === 'Terrain' ? 'terrain'
+                      : 'standard'
+                }
+                initialRegion={{
+                  latitude: BRGY_CENTER.latitude,
+                  longitude: BRGY_CENTER.longitude,
+                  latitudeDelta: 0.025,
+                  longitudeDelta: 0.025,
+                }}
+              >
+                {allAlerts
+                  .filter(a => a.status !== 'done' && a.status !== 'resolved' && a.status !== 'declined')
+                  .map((alert) => (
+                    <Marker
+                      key={alert.id}
+                      coordinate={{
+                        latitude: alert.location?.latitude ?? BRGY_CENTER.latitude,
+                        longitude: alert.location?.longitude ?? BRGY_CENTER.longitude,
+                      }}
+                      pinColor={getPinColor(alert.category)}
+                      title={alert.category || 'Incident'}
+                      description={alert.location?.addressText || 'Tap for details'}
+                      onCalloutPress={() => navigation.navigate('IncidentDetail', { alertId: alert.id })}
+                    />
+                  ))
+                }
+              </MapView>
+
+              {/* Map Legend Overlay */}
+              <View style={styles.legendOverlay} pointerEvents="none">
+                <Text style={styles.legendTitle}>MAP LEGEND</Text>
+                <View style={styles.legendRow}>
+                  <View style={[styles.legendDot, { backgroundColor: '#EF4444' }]} />
+                  <Text style={styles.legendText}>Fire / Medical / Crime</Text>
+                </View>
+                <View style={styles.legendRow}>
+                  <View style={[styles.legendDot, { backgroundColor: '#D97706' }]} />
+                  <Text style={styles.legendText}>Flood / Accident / Traffic</Text>
+                </View>
+                <View style={styles.legendRow}>
+                  <View style={[styles.legendDot, { backgroundColor: '#2563EB' }]} />
+                  <Text style={styles.legendText}>General</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Expand to Full-Screen Map */}
+            <TouchableOpacity
+              style={styles.expandMapBtn}
+              onPress={() => navigation.navigate('AdminMapScreen')}
+              activeOpacity={0.8}
+            >
+              <Feather name="maximize-2" size={14} color="#0B2564" style={{ marginRight: 6 }} />
+              <Text style={styles.expandMapText}>Expand Full Map</Text>
+            </TouchableOpacity>
+
+          </View>
+
+          {/* Recent Logs Section */}
+          <View style={styles.logsSection}>
+            <View style={styles.logsHeaderRow}>
+              <Text style={styles.logsTitle}>Recent logs</Text>
+              <TouchableOpacity onPress={() => navigation.navigate('AdminQueue')}>
+                <Text style={styles.seeAllText}>See all</Text>
+              </TouchableOpacity>
+            </View>
+
+            {loading ? (
+              <SkeletonLoader type="card" count={3} />
+            ) : allAlerts.length === 0 ? (
+              <EmptyState
+                icon="inbox"
+                title="No Incident Logs"
+                subtitle="All clear. No reports have been submitted to the system yet."
+                accentColor="#0B2564"
+              />
+            ) : (
+              allAlerts.slice(0, 3).map((alert) => (
+                <IncidentCard
+                  key={alert.id}
+                  incident={alert}
+                  onPress={() => navigation.navigate('IncidentDetail', { alertId: alert.id })}
+                />
+              ))
+            )}
+          </View>
+
+        </ScrollView>
+      </Animated.View>
+
+      {/* Bottom Smooth Gradient Background Fade */}
+      <BottomGradient />
 
       {/* Floating Bottom Tab Nav Bar */}
       <AdminBottomTabNav />
@@ -743,14 +651,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingTop: 16,
     paddingBottom: 150, // space for bottom nav
-  },
-  bottomGradient: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 180,
-    zIndex: 5,
   },
   metricsGrid: {
     flexDirection: 'row',

@@ -22,7 +22,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import NetInfo from '@react-native-community/netinfo';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { collection, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useAuth } from '../../context/AuthContext';
 import { db, storage } from '../../services/firebaseConfig';
@@ -77,6 +78,7 @@ export default function ReportWizard({ navigation }) {
   const [isOnline, setIsOnline] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [gatewaysList, setGatewaysList] = useState(['+639090000000']);
 
   // Form states
   const [incidentType, setIncidentType] = useState('');
@@ -199,8 +201,34 @@ export default function ReportWizard({ navigation }) {
       setCurrentTimeText(formatted);
     };
 
+    const fetchSMSGateways = async () => {
+      try {
+        const cached = await AsyncStorage.getItem('cached_sms_gateways');
+        if (cached) {
+          setGatewaysList(JSON.parse(cached));
+        }
+      } catch (e) {
+        console.log('Error reading cached gateways:', e);
+      }
+
+      try {
+        const docRef = doc(db, 'config', 'barangay');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.smsGateways && Array.isArray(data.smsGateways) && data.smsGateways.length > 0) {
+            setGatewaysList(data.smsGateways);
+            await AsyncStorage.setItem('cached_sms_gateways', JSON.stringify(data.smsGateways));
+          }
+        }
+      } catch (err) {
+        console.log('Error fetching gateways from firestore:', err);
+      }
+    };
+
     lockLocation();
     formatTime();
+    fetchSMSGateways();
     return () => unsubscribeNet();
   }, []);
 
@@ -338,48 +366,66 @@ export default function ReportWizard({ navigation }) {
     }
   };
 
-  const triggerSmsFallback = () => {
+  const triggerSmsFallback = async () => {
     try {
       const categoryCode = CATEGORY_SMS_CODES[incidentType] || 'GI';
       const rawLocation = (locationCoords?.addressText || '').replace(/[!]/g, '');
       const rawDetails = (description || '').replace(/[!]/g, '');
       
       const smsPayload = `BA!${categoryCode}!${rawLocation}!${rawDetails}`;
-      const gatewayNumber = '+639090000000';
-      const smsUrl = `sms:${gatewayNumber}${Platform.OS === 'ios' ? '&' : '?'}body=${encodeURIComponent(smsPayload)}`;
+      const gatewayRecipients = gatewaysList.join(',');
+      const smsUrl = `sms:${gatewayRecipients}${Platform.OS === 'ios' ? '&' : '?'}body=${encodeURIComponent(smsPayload)}`;
 
-      Alert.alert(
-        'Offline Mode Detected',
-        'No cellular internet connection. We will compile your report into a compressed SMS to the Barangay gateway. Please press send on the next screen.',
-        [
-          {
-            text: 'Open SMS Client',
-            onPress: async () => {
-              const supported = await Linking.canOpenURL(smsUrl);
-              if (supported) {
-                await recordReportSubmission();
-                await Linking.openURL(smsUrl);
-                
-                // Toggle isSubmitting to false first so beforeRemove doesn't block the redirect!
-                setIsSubmitting(false);
-                
-                navigation.replace('ReportSuccess', {
-                  reportId: 'OFFLINE_SMS',
-                  estimatedTime: 'Waiting for SMS transmission'
-                });
-              } else {
-                Alert.alert('SMS Error', 'Could not open native SMS client.');
-                setIsSubmitting(false);
-              }
-            }
+      const supported = await Linking.canOpenURL(smsUrl);
+      if (supported) {
+        await recordReportSubmission();
+
+        const localReport = {
+          id: `offline_${Date.now()}`,
+          userId: user ? user.uid : 'guest',
+          reporterName: userProfile?.fullName || 'Anonymous Citizen',
+          phoneNumber: userProfile?.phoneNumber || '',
+          category: incidentType,
+          details: description,
+          witnessName: witness || 'None',
+          location: {
+            addressText: locationCoords.addressText,
+            latitude: locationCoords.latitude,
+            longitude: locationCoords.longitude
           },
-          {
-            text: 'Cancel',
-            style: 'cancel',
-            onPress: () => setIsSubmitting(false)
+          source: 'offline_sms',
+          status: 'offline_pending',
+          urgency: urgency,
+          mediaUrls: [],
+          createdAt: new Date().toISOString(),
+          isOffline: true
+        };
+
+        const storeKey = `offline_reports_${user?.uid || 'guest'}`;
+        let localList = [];
+        try {
+          const rawLocalList = await AsyncStorage.getItem(storeKey);
+          if (rawLocalList) {
+            localList = JSON.parse(rawLocalList);
           }
-        ]
-      );
+        } catch (e) {
+          console.log('Error reading local offline reports list:', e);
+        }
+
+        localList.push(localReport);
+        await AsyncStorage.setItem(storeKey, JSON.stringify(localList));
+
+        await Linking.openURL(smsUrl);
+        setIsSubmitting(false);
+
+        navigation.replace('ReportSuccess', {
+          reportId: localReport.id,
+          estimatedTime: 'Waiting for SMS transmission'
+        });
+      } else {
+        Alert.alert('SMS Error', 'Could not open native SMS client.');
+        setIsSubmitting(false);
+      }
     } catch (smsErr) {
       console.log('Offline SMS trigger failed:', smsErr);
       setErrorMsg('Could not initialize offline SMS fallback.');

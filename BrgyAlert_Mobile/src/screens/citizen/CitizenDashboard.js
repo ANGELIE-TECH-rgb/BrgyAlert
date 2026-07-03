@@ -17,13 +17,13 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import Svg, { Defs, LinearGradient, Stop, Rect, Path, Circle } from 'react-native-svg';
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 import NetInfo from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services/firebaseConfig';
-import { markAsRead, markAllAsRead } from '../../services/notificationService';
+import BottomGradient from '../../components/BottomGradient';
+import { markAsRead, markAllAsRead, cleanupOrphanedNotifications } from '../../services/notificationService';
 import { notifyAllAdmins } from '../../services/adminNotifier';
 import { checkPanicStatus, recordPanicTrigger } from '../../services/rateLimiter';
 import { getCurrentLocation } from '../../services/locationService';
@@ -35,15 +35,20 @@ import ConnectionBlocker from '../../components/ConnectionBlocker';
 import EmptyState from '../../components/EmptyState';
 import GestureModal from '../../components/GestureModal';
 
+// Must be declared AFTER all imports — Hermes enforces strict ES module hoisting
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
+
+
 export default function CitizenDashboard({ navigation }) {
   const { user, userProfile, sendVerificationEmail } = useAuth();
   const insets = useSafeAreaInsets();
   const { height: H } = useWindowDimensions();
 
   const [isOnline, setIsOnline] = useState(true);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [dropdownNotifications, setDropdownNotifications] = useState([]);
-  const [showDropdown, setShowDropdown] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [hiddenNotificationIds, setHiddenNotificationIds] = useState(new Set());
+  const verifiedAlertsRef = useRef({});
   const [recentLogs, setRecentLogs] = useState([]);
   const [loadingLogs, setLoadingLogs] = useState(true);
   const [showTutorial, setShowTutorial] = useState(false);
@@ -124,14 +129,14 @@ export default function CitizenDashboard({ navigation }) {
   });
 
   // Panic Button hold-to-press states
-  const [holdTimer, setHoldTimer]         = useState(null);
+  const [holdTimer, setHoldTimer] = useState(null);
   const [secondsRemaining, setSecondsRemaining] = useState(3);
-  const [isHolding, setIsHolding]         = useState(false);
+  const [isHolding, setIsHolding] = useState(false);
   const secondsRef = useRef(3);
 
   // ─── Animations ────────────────────────────────────────────
-  const pulseAnim   = useRef(new Animated.Value(1)).current;  // idle breathing ring
-  const scaleAnim   = useRef(new Animated.Value(0.3)).current;  // button press & entrance scale
+  const pulseAnim = useRef(new Animated.Value(1)).current;  // idle breathing ring
+  const scaleAnim = useRef(new Animated.Value(0.3)).current;  // button press & entrance scale
   const arcProgress = useRef(new Animated.Value(0)).current;  // 0→1 countdown sweep
   const subtitleOpacity = useRef(new Animated.Value(1)).current;
   const pulseLoopRef = useRef(null);
@@ -247,24 +252,26 @@ export default function CitizenDashboard({ navigation }) {
     );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const list = [];
-      let unread = 0;
       snapshot.forEach((doc) => {
         const data = doc.data();
-        if (!data.read) unread++;
         list.push({ id: doc.id, ...data });
       });
-      setDropdownNotifications(list.slice(0, 5));
-      setUnreadCount(unread);
+      setNotifications(list);
+      cleanupOrphanedNotifications(user.uid, list, verifiedAlertsRef.current, (orphanId) => {
+        setHiddenNotificationIds(prev => {
+          const newSet = new Set(prev);
+          newSet.add(orphanId);
+          return newSet;
+        });
+      });
     }, (error) => {
       console.log('[CitizenDashboard] Notification query error:', error.code, error.message);
       // Fallback: unordered query with client-side sort
       const fallbackQ = query(collection(db, 'users', user.uid, 'notifications'));
       onSnapshot(fallbackQ, (snap) => {
         const list = [];
-        let unread = 0;
         snap.forEach((doc) => {
           const data = doc.data();
-          if (!data.read) unread++;
           list.push({ id: doc.id, ...data });
         });
         list.sort((a, b) => {
@@ -272,8 +279,14 @@ export default function CitizenDashboard({ navigation }) {
           const bTime = b.createdAt?.toDate?.()?.getTime?.() ?? 0;
           return bTime - aTime;
         });
-        setDropdownNotifications(list.slice(0, 5));
-        setUnreadCount(unread);
+        setNotifications(list);
+        cleanupOrphanedNotifications(user.uid, list, verifiedAlertsRef.current, (orphanId) => {
+          setHiddenNotificationIds(prev => {
+            const newSet = new Set(prev);
+            newSet.add(orphanId);
+            return newSet;
+          });
+        });
       }, (fallbackErr) => {
         console.log('[CitizenDashboard] Fallback notification query error:', fallbackErr.code);
       });
@@ -506,8 +519,8 @@ export default function CitizenDashboard({ navigation }) {
                 <Text style={styles.verificationBannerDesc}>
                   Please check your inbox. Verification is required to unlock coordinates / dispatch messaging.
                 </Text>
-                <TouchableOpacity 
-                  style={styles.resendVerifyLink} 
+                <TouchableOpacity
+                  style={styles.resendVerifyLink}
                   onPress={handleResendVerification}
                   disabled={sendingVerification}
                 >
@@ -540,15 +553,18 @@ export default function CitizenDashboard({ navigation }) {
 
             <TouchableOpacity
               style={styles.bellButton}
-              onPress={() => setShowDropdown(true)}
+              onPress={() => navigation.navigate('Notifications')}
               activeOpacity={0.7}
             >
               <Feather name="bell" size={22} color="#1F2937" />
-              {unreadCount > 0 && (
-                <View style={styles.badgeDot}>
-                  <Text style={styles.badgeDotText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
-                </View>
-              )}
+              {(() => {
+                const visibleUnreadCount = notifications.filter(n => !n.read && !hiddenNotificationIds.has(n.id)).length;
+                return visibleUnreadCount > 0 ? (
+                  <View style={styles.badgeDot}>
+                    <Text style={styles.badgeDotText}>{visibleUnreadCount > 9 ? '9+' : visibleUnreadCount}</Text>
+                  </View>
+                ) : null;
+              })()}
             </TouchableOpacity>
           </View>
         </View>
@@ -739,7 +755,7 @@ export default function CitizenDashboard({ navigation }) {
       <View style={styles.fabContainer}>
         <Animated.View style={[
           styles.fabTooltip,
-          { transform: [{ translateY: tooltipY }] }
+          { transform: [{ translateX: tooltipY }] }
         ]}>
           <Text style={styles.fabTooltipText}>Add a new report</Text>
           <View style={styles.fabTooltipPointer} />
@@ -754,107 +770,7 @@ export default function CitizenDashboard({ navigation }) {
       </View>
 
       {/* Bottom Smooth Gradient Background Fade (Image 4 & 5) */}
-      <View style={styles.bottomGradient} pointerEvents="none">
-        <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
-          <Defs>
-            <LinearGradient id="fadeGrad" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0" stopColor="#FFFFFF" stopOpacity="0" />
-              <Stop offset="0.6" stopColor="#FFFFFF" stopOpacity="0.85" />
-              <Stop offset="1" stopColor="#FFFFFF" stopOpacity="1" />
-            </LinearGradient>
-          </Defs>
-          <Rect width="100" height="100" fill="url(#fadeGrad)" />
-        </Svg>
-      </View>
-
-      {/* Notifications Dropdown Modal */}
-      <Modal
-        visible={showDropdown}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowDropdown(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowDropdown(false)}
-        >
-          <View style={[styles.dropdownContainer, { top: insets.top + 72 }]}>
-            <View style={styles.dropdownHeader}>
-              <Text style={styles.dropdownTitle}>Recent Notifications</Text>
-              {unreadCount > 0 && (
-                <TouchableOpacity onPress={() => markAllAsRead(user.uid)}>
-                  <Text style={styles.dropdownMarkRead}>Mark all read</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-
-            {dropdownNotifications.length === 0 ? (
-              <View style={styles.dropdownEmpty}>
-                <Feather name="bell" size={24} color="#9CA3AF" />
-                <Text style={styles.dropdownEmptyText}>No notifications yet</Text>
-              </View>
-            ) : (
-              <ScrollView style={styles.dropdownScroll} bounces={false} showsVerticalScrollIndicator={false}>
-                {dropdownNotifications.map((item) => {
-                  const isMsg = item.type === 'message';
-                  const isInc = item.type === 'incident';
-                  const isStatus = item.type === 'status';
-                  const iconName = isInc ? 'alert-triangle' : isMsg ? 'message-square' : isStatus ? 'activity' : 'bell';
-                  const iconColor = isInc ? '#EF4444' : isMsg ? '#2563EB' : isStatus ? '#D97706' : '#6B7280';
-                  const iconBg = isInc ? '#FEF2F2' : isMsg ? '#EFF6FF' : isStatus ? '#FFF9E6' : '#F3F4F6';
-
-                  return (
-                    <TouchableOpacity
-                      key={item.id}
-                      style={[styles.dropdownItem, !item.read && styles.dropdownItemUnread]}
-                      onPress={async () => {
-                        setShowDropdown(false);
-                        if (!item.read) {
-                          await markAsRead(user.uid, item.id);
-                        }
-                        if (item.relatedId) {
-                          if (item.type === 'message') {
-                            navigation.navigate('ChatScreen', { alertId: item.relatedId });
-                          } else {
-                            navigation.navigate('StatusTracker', { alertId: item.relatedId });
-                          }
-                        }
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <View style={[styles.itemIconWrapper, { backgroundColor: iconBg }]}>
-                        <Feather name={iconName} size={14} color={iconColor} />
-                      </View>
-                      <View style={styles.itemTextWrapper}>
-                        <Text style={[styles.itemTitle, !item.read && styles.itemTitleUnread]} numberOfLines={1}>
-                          {item.title}
-                        </Text>
-                        <Text style={styles.itemBody} numberOfLines={1}>
-                          {item.body}
-                        </Text>
-                      </View>
-                      {!item.read && <View style={styles.itemUnreadDot} />}
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            )}
-
-            <TouchableOpacity
-              style={styles.seeAllButton}
-              onPress={() => {
-                setShowDropdown(false);
-                navigation.navigate('Notifications');
-              }}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.seeAllButtonText}>See All Notifications</Text>
-              <Feather name="chevron-right" size={14} color="#2563EB" style={{ marginLeft: 4 }} />
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
+      <BottomGradient />
 
       {/* Emergency Hotlines Bottom Sheet Modal */}
       <GestureModal
@@ -869,7 +785,7 @@ export default function CitizenDashboard({ navigation }) {
 
           {/* List of Hotlines */}
           <View style={styles.hotlinesList}>
-            
+
             {/* Police */}
             <TouchableOpacity
               style={styles.hotlineItem}
@@ -896,7 +812,7 @@ export default function CitizenDashboard({ navigation }) {
             >
               <View style={styles.hotlineLeft}>
                 <View style={[styles.hotlineIconWrapper, { backgroundColor: '#FEF2F2' }]}>
-                  <Feather name="flame" size={20} color="#EF4444" />
+                  <Ionicons name="flame" size={20} color="#EF4444" />
                 </View>
                 <View>
                   <Text style={styles.hotlineName}>Fire Station</Text>
@@ -1098,7 +1014,7 @@ const styles = StyleSheet.create({
   serviceCard: {
     flex: 1,
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 26,
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
@@ -1106,7 +1022,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E5E7EB',
     // Premium soft card shadow
-    shadowColor: '#0F2C59',
+    shadowColor: '#0f2d5939',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.015,
     shadowRadius: 16,
@@ -1181,7 +1097,7 @@ const styles = StyleSheet.create({
     marginRight: 10,
     position: 'relative',
     // Smooth soft shadow for label bubble
-    shadowColor: '#000000',
+    shadowColor: '#0000005e',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.04, // Faint low opacity shadow
     shadowRadius: 16,
@@ -1214,20 +1130,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     // Smooth soft shadow for FAB button
-    shadowColor: '#0F2C59',
+    shadowColor: '#0f2d5965',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.1, // Low opacity smooth blue shadow
     shadowRadius: 20,
     elevation: 5,
   },
-  bottomGradient: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 180,
-    zIndex: 5,
-  },
+
   badgeDot: {
     position: 'absolute',
     top: -4,

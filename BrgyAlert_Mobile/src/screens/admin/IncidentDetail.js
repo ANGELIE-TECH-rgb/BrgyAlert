@@ -23,6 +23,7 @@ import { doc, onSnapshot, updateDoc, serverTimestamp, query, collection, where, 
 import { db } from '../../services/firebaseConfig';
 import { useAuth } from '../../context/AuthContext';
 import GestureModal from '../../components/GestureModal';
+import BottomGradient from '../../components/BottomGradient';
 import SkeletonLoader from '../../components/SkeletonLoader';
 import { processIncidentSubmissionAI, isAiRateLimited } from '../../services/aiService';
 
@@ -286,10 +287,20 @@ export default function IncidentDetail({ route, navigation }) {
     setUpdating(true);
     try {
       const docRef = doc(db, 'alerts', alertId);
-      await updateDoc(docRef, {
+      const updateData = {
         status: newStatus,
         updatedAt: serverTimestamp()
-      });
+      };
+      
+      if (newStatus === 'under_review') {
+        updateData.underReviewAt = serverTimestamp();
+      } else if (newStatus === 'dispatched') {
+        updateData.dispatchedAt = serverTimestamp();
+      } else if (newStatus === 'done' || newStatus === 'resolved') {
+        updateData.resolvedAt = serverTimestamp();
+      }
+      
+      await updateDoc(docRef, updateData);
       Alert.alert('Success', `Incident status updated to "${newStatus.replace('_', ' ').toUpperCase()}".`);
     } catch (error) {
       console.log('Error updating status:', error);
@@ -319,6 +330,7 @@ export default function IncidentDetail({ route, navigation }) {
               await updateDoc(docRef, {
                 status: 'declined',
                 declineReason: declineReason.trim(),
+                resolvedAt: serverTimestamp(),
                 updatedAt: serverTimestamp()
               });
               setDeclineModalVisible(false);
@@ -703,9 +715,14 @@ export default function IncidentDetail({ route, navigation }) {
                         </Text>
                         {isCompleted && (
                           <Text style={styles.stepTime}>
-                            {idx === 0
-                              ? formatStepTime(incident.createdAt)
-                              : formatStepTime(incident.updatedAt || incident.createdAt)}
+                            {idx === 0 
+                              ? formatStepTime(incident.createdAt) 
+                              : idx === 1 
+                              ? formatStepTime(incident.underReviewAt || incident.updatedAt || incident.createdAt)
+                              : idx === 2
+                              ? formatStepTime(incident.dispatchedAt || incident.updatedAt || incident.createdAt)
+                              : formatStepTime(incident.resolvedAt || incident.updatedAt || incident.createdAt)
+                            }
                           </Text>
                         )}
                         <Text style={styles.stepDesc}>{step.desc}</Text>
@@ -719,18 +736,7 @@ export default function IncidentDetail({ route, navigation }) {
           </ScrollView>
 
           {/* Bottom gradient fade */}
-          <View style={styles.bottomGradient} pointerEvents="none">
-            <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
-              <Defs>
-                <LinearGradient id="fadeGrad" x1="0" y1="0" x2="0" y2="1">
-                  <Stop offset="0"   stopColor="#FFFFFF" stopOpacity="0"    />
-                  <Stop offset="0.6" stopColor="#FFFFFF" stopOpacity="0.85" />
-                  <Stop offset="1"   stopColor="#FFFFFF" stopOpacity="1"    />
-                </LinearGradient>
-              </Defs>
-              <Rect width="100" height="100" fill="url(#fadeGrad)" />
-            </Svg>
-          </View>
+          <BottomGradient height={120} />
 
           {/* Sticky Message Reporter Footer Button */}
           <View style={styles.footerContainer}>
@@ -1142,9 +1148,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
-
-  // ── Bottom gradient ───────────────────────────────────────────────────
-  bottomGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 120, zIndex: 5 },
 
   // ── Decline reason modal ──────────────────────────────────────────────
   modalOverlay: { flex: 1, justifyContent: 'flex-end' },

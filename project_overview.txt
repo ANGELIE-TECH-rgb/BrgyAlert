@@ -13,9 +13,9 @@ communication resilience during severe weather and network collapses.
 Rather than maintaining separate web and mobile codebases, BrgyAlert provides a 
 unified, cross-platform mobile application (React Native / Expo) that dynamically 
 routes users based on role-based access control (RBAC):
-* Mobile Citizen Client: Fast incident reporting with smart offline SMS fallback.
+* Mobile Citizen Client: Fast incident reporting with smart offline SMS fallback (automatically addressed to up to 5 admin-configured gateway numbers), local offline report tracking, and automatic background synchronization with race-condition locking to prevent duplicates.
 * Mobile Admin/Responder Client: On-the-scene dashboard for dispatch triage, 
-  priority queuing, status tracking, evacuation tracking, and real-time citizen chat.
+  priority queuing, status tracking, evacuation tracking, real-time citizen chat, and custom configurations (hotlines, gateways, response times) managed through an edit-toggle card view.
 
 Key Value Propositions:
 - ₱0 Infrastructure Cost: Leverages Firebase free-tiers (Auth, Firestore NoSQL, 
@@ -36,8 +36,8 @@ Key Value Propositions:
   prone to physical damage. BrgyAlert provides a secure, digital, role-restricted 
   ledger accessible right from responders' mobile devices.
 * Responder Resource Drain (Spam/Pranks): Clutter from fake reports wastes local 
-  rescue resources. Automated validation filters filter Tagalog profanities and 
-  character gibberish prior to dispatch alerts.
+  rescue resources. Automated AI validation filters out Tagalog/Taglish spam, 
+  joke reports, keyboard mashing, and mismatched photo evidence prior to dispatch alerts.
 * Financial Constraints: Small municipalities lack funding for high server costs 
   and proprietary APIs. BrgyAlert runs serverless, using free-tier databases and 
   client-side device capabilities.
@@ -77,13 +77,19 @@ A. Citizen Mobile Client Features (Mobile User)
 - Media Compression: Automatically compresses photos locally from 5MB to 200KB 
   before streaming them to Cloud Storage, conserving data.
 - Offline SMS Handshake: Detects connection drops and opens the native device SMS 
-  pre-filled with a delimiter payload (e.g. `BA!Cat!Landmark!Details`).
+  pre-filled with a delimiter payload (e.g. `BA!Cat!Landmark!Details`) and addressed dynamically to configured gateways.
+- Offline Report Tracking: Displays local reports awaiting sync with an "OFFLINE (SMS)" badge and serial code prefix "#SMS-" directly in their My Reports feed.
+- Background Sync with Duplicate Prevention: Automatically uploads queued offline reports to Firestore on network restoration, utilizing an active synchronization lock and immediate queue purge to prevent duplicate entries.
 - Real-Time status Timeline: Visual progress tracker (Submitted -> Under Review -> 
   Dispatched -> Resolved).
 - Privacy Settings: Optional toggle for submitting anonymous reports.
 - Community Safety Directory: Quick lookup of active Evacuation Centers and click-to-dial 
   hotlines (Police, Fire, Barangay Hall).
 - Real-Time Incident Chat: Text thread with active responders assigned to their case.
+- Auto-Cleaning Notifications: Instantly filters out and deletes notifications associated with reports that have been deleted on Firestore to prevent outdated records from being displayed.
+- AI-Powered Incident Triage Suggestion: Analyzes incident descriptions in real-time as the citizen types, recommending the optimal category and urgency level via a debounced tap-to-apply chip.
+- Multimodal AI Submission Validation: Evaluates text details for spam/gibberish and validates attached photo evidence for category relevance via Gemini 2.5 Flash on report submission to mitigate spam.
+- Client-Side AI Rate Limiting: Safeguards developer API limits using AsyncStorage-backed sliding-window queues, restricting citizens to 3 AI requests/hour.
 
 B. Mobile Admin Console Features (Mobile Admin)
 - Admin Metrics Dashboard: Real-time counter tiles showing active, critical, and 
@@ -100,9 +106,16 @@ B. Mobile Admin Console Features (Mobile Admin)
   to fire push notifications and SMS broadcasts to local zone registries.
 - Real-Time Responder Chat: Two-way chat interface with citizen reporters to direct on-site 
   actions (e.g., first aid guidance, navigation details).
+- Toggled Barangay Configuration Card: Protects hotlines, response times, and SMS gateways behind a secure edit-toggle interface that prevents accidental modifications, prompting confirmation, backup caching, and easy reverts.
+- Direct Notification Routing: Clicking the notification bell navigates directly to the dedicated notifications screen, instantly updating unread counts in real-time.
+- AI-Generated Active-Voice Summary: Converts long incident descriptions into a concise, 10-word Tagalog overview on the dashboard queue to streamline operator analysis, cached in Firestore to prevent repeat runs.
+- AI Spam & Image Mismatch Alerting: Labels suspicious inputs (e.g. keyboard mash or joke text) and displays image mismatch alerts (e.g. meme uploaded for a medical emergency) with detailed, AI-generated reasons in the triage queue.
+- AI-Powered Smart Chat Co-Pilot: Reads active chat history inside report-specific threads and suggests up to 3 quick-reply options to optimize responder reaction time.
+- Admin AI Rate Limiting: Capped at 15 AI requests/hour per administrator account.
 
 
 5. TECHNICAL STACK SPECIFICATION
+* Programming Language: JavaScript (ES6+)
 * Mobile Client App: React Native (Expo SDK), React Navigation, Hermes Engine
 * Native Device API Hooks: Expo Location, NetInfo, Expo Image Picker, Native Linking API
 * Authentication & RBAC: Firebase Authentication
@@ -110,6 +123,8 @@ B. Mobile Admin Console Features (Mobile Admin)
 * Cloud Storage: Firebase Cloud Storage (Photo evidence)
 * Push Messaging: Firebase Cloud Messaging (FCM) & Expo Notification Service
 * External SMS Integrations: Semaphore.co SMS API (gateway intake/outbound status updates)
+* AI Integration: Google Generative AI (Gemini 2.5 Flash API)
+* Rate Limiting: Client-side AsyncStorage-backed sliding-window queue controller
 
 
 6. DEVELOPMENT METHODOLOGY

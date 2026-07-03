@@ -253,179 +253,179 @@ export default function LoginScreen({ navigation }) {
         <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
           <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
 
-          {/* Header Title with Branding Logo */}
-          <View style={styles.headerContainer}>
-            <Image
-              source={require('../../../assets/logo.png')}
-              style={styles.logoImage}
-              resizeMode="contain"
-            />
-            <Text style={styles.title}>Welcome Back</Text>
-            <Text style={styles.subtitle}>Enter your credentials to access your secure Barangay command console.</Text>
-          </View>
-
-          {/* Offline Mode Alert Banner */}
-          {!isOnline && (
-            <TouchableOpacity
-              style={styles.offlineBanner}
-              onPress={() => navigation.navigate('ReportWizard')}
-              activeOpacity={0.8}
-            >
-              <View style={styles.offlineBannerContent}>
-                <Feather name="wifi-off" size={20} color="#D97706" />
-                <View style={{ marginLeft: 10, flex: 1 }}>
-                  <Text style={styles.offlineBannerTitle}>No Connection Detected</Text>
-                  <Text style={styles.offlineBannerSubtitle}>
-                    Tap here to submit an <Text style={styles.offlineBannerBold}>Offline Report via SMS</Text>
-                  </Text>
-                </View>
-                <Feather name="chevron-right" size={20} color="#D97706" />
-              </View>
-            </TouchableOpacity>
-          )}
-
-          {/* Form */}
-          <View style={styles.formContainer}>
-            {errorMsg ? (
-              <View style={styles.errorBanner}>
-                <Feather name="alert-circle" size={16} color="#DC3545" style={{ marginRight: 8, marginTop: 1 }} />
-                <Text style={styles.errorText}>{errorMsg}</Text>
-              </View>
-            ) : null}
-
-            {/* Email Field */}
-            <Text style={[styles.label, focusedField === 'email' && styles.labelActive]}>Email Address</Text>
-            <View style={[styles.inputContainer, focusedField === 'email' && styles.inputContainerActive]}>
-              <Feather 
-                name="mail" 
-                size={18} 
-                color={focusedField === 'email' ? '#0B2564' : '#A0AEC0'} 
-                style={styles.inputIcon} 
+            {/* Header Title with Branding Logo */}
+            <View style={styles.headerContainer}>
+              <Image
+                source={require('../../../assets/logo.png')}
+                style={styles.logoImage}
+                resizeMode="contain"
               />
-              <TextInput
-                style={styles.input}
-                placeholder="name@gmail.com"
-                placeholderTextColor="#A0AEC0"
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoComplete="email"
-                textContentType="emailAddress"
-                editable={!isSubmitting}
-                onFocus={() => setFocusedField('email')}
-                onBlur={() => setFocusedField(null)}
-              />
+              <Text style={styles.title}>Welcome Back</Text>
+              <Text style={styles.subtitle}>Enter your credentials to access your secure Barangay command console.</Text>
             </View>
-            {rememberMe && email.trim().length > 0 && (
-              <View style={styles.rememberedEmailChip}>
-                <Ionicons name="save-outline" size={13} color="#0B2564" style={{ marginRight: 4 }} />
-                <Text style={styles.rememberedEmailText}>Email pre-filled from your last session</Text>
-              </View>
+
+            {/* Offline Mode Alert Banner */}
+            {!isOnline && (
+              <TouchableOpacity
+                style={styles.offlineBanner}
+                onPress={() => navigation.navigate('ReportWizard')}
+                activeOpacity={0.8}
+              >
+                <View style={styles.offlineBannerContent}>
+                  <Feather name="wifi-off" size={20} color="#D97706" />
+                  <View style={{ marginLeft: 10, flex: 1 }}>
+                    <Text style={styles.offlineBannerTitle}>No Connection Detected</Text>
+                    <Text style={styles.offlineBannerSubtitle}>
+                      Tap here to submit an <Text style={styles.offlineBannerBold}>Offline Report via SMS</Text>
+                    </Text>
+                  </View>
+                  <Feather name="chevron-right" size={20} color="#D97706" />
+                </View>
+              </TouchableOpacity>
             )}
 
-            {/* Password Field */}
-            <Text style={[styles.label, focusedField === 'password' && styles.labelActive]}>Password</Text>
-            <View style={[styles.passwordContainer, focusedField === 'password' && styles.passwordContainerActive]}>
-              <Feather 
-                name="lock" 
-                size={18} 
-                color={focusedField === 'password' ? '#0B2564' : '#A0AEC0'} 
-                style={styles.inputIcon} 
-              />
-              <TextInput
-                style={styles.passwordInput}
-                placeholder="••••••••"
-                placeholderTextColor="#A0AEC0"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoComplete="password"
-                textContentType="password"
-                editable={!isSubmitting}
-                onFocus={() => setFocusedField('password')}
-                onBlur={() => setFocusedField(null)}
-              />
-              <TouchableOpacity
-                style={styles.eyeButton}
-                onPress={() => setShowPassword(!showPassword)}
-                disabled={isSubmitting}
-              >
-                <Feather
-                  name={showPassword ? "eye" : "eye-off"}
-                  size={20}
-                  color="#A0AEC0"
-                />
-              </TouchableOpacity>
-            </View>
-
-            {/* Options Row (Remember Me & Forgot Password) */}
-            <View style={styles.optionsRow}>
-              <TouchableOpacity
-                style={styles.rememberMeContainer}
-                onPress={() => setRememberMe(!rememberMe)}
-                disabled={isSubmitting}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.customCheckbox, rememberMe && styles.customCheckboxActive]}>
-                  {rememberMe && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
+            {/* Form */}
+            <View style={styles.formContainer}>
+              {errorMsg ? (
+                <View style={styles.errorBanner}>
+                  <Feather name="alert-circle" size={16} color="#DC3545" style={{ marginRight: 8, marginTop: 1 }} />
+                  <Text style={styles.errorText}>{errorMsg}</Text>
                 </View>
-                <Text style={styles.rememberMeText}>Remember me</Text>
-              </TouchableOpacity>
+              ) : null}
 
+              {/* Email Field */}
+              <Text style={[styles.label, focusedField === 'email' && styles.labelActive]}>Email Address</Text>
+              <View style={[styles.inputContainer, focusedField === 'email' && styles.inputContainerActive]}>
+                <Feather
+                  name="mail"
+                  size={18}
+                  color={focusedField === 'email' ? '#0B2564' : '#A0AEC0'}
+                  style={styles.inputIcon}
+                />
+                <TextInput
+                  style={styles.input}
+                  placeholder="name@gmail.com"
+                  placeholderTextColor="#A0AEC0"
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete="email"
+                  textContentType="emailAddress"
+                  editable={!isSubmitting}
+                  onFocus={() => setFocusedField('email')}
+                  onBlur={() => setFocusedField(null)}
+                />
+              </View>
+              {rememberMe && email.trim().length > 0 && (
+                <View style={styles.rememberedEmailChip}>
+                  <Ionicons name="save-outline" size={13} color="#0B2564" style={{ marginRight: 4 }} />
+                  <Text style={styles.rememberedEmailText}>Email pre-filled from your last session</Text>
+                </View>
+              )}
+
+              {/* Password Field */}
+              <Text style={[styles.label, focusedField === 'password' && styles.labelActive]}>Password</Text>
+              <View style={[styles.passwordContainer, focusedField === 'password' && styles.passwordContainerActive]}>
+                <Feather
+                  name="lock"
+                  size={18}
+                  color={focusedField === 'password' ? '#0B2564' : '#A0AEC0'}
+                  style={styles.inputIcon}
+                />
+                <TextInput
+                  style={styles.passwordInput}
+                  placeholder="••••••••"
+                  placeholderTextColor="#A0AEC0"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete="password"
+                  textContentType="password"
+                  editable={!isSubmitting}
+                  onFocus={() => setFocusedField('password')}
+                  onBlur={() => setFocusedField(null)}
+                />
+                <TouchableOpacity
+                  style={styles.eyeButton}
+                  onPress={() => setShowPassword(!showPassword)}
+                  disabled={isSubmitting}
+                >
+                  <Feather
+                    name={showPassword ? "eye" : "eye-off"}
+                    size={20}
+                    color="#A0AEC0"
+                  />
+                </TouchableOpacity>
+              </View>
+
+              {/* Options Row (Remember Me & Forgot Password) */}
+              <View style={styles.optionsRow}>
+                <TouchableOpacity
+                  style={styles.rememberMeContainer}
+                  onPress={() => setRememberMe(!rememberMe)}
+                  disabled={isSubmitting}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.customCheckbox, rememberMe && styles.customCheckboxActive]}>
+                    {rememberMe && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
+                  </View>
+                  <Text style={styles.rememberMeText}>Remember me</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => navigation.navigate('ForgotPassword')}
+                  disabled={isSubmitting}
+                >
+                  <Text style={styles.forgotPasswordText}>Forgot password?</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Login Button */}
               <TouchableOpacity
-                onPress={() => navigation.navigate('ForgotPassword')}
-                disabled={isSubmitting}
+                style={[
+                  styles.loginButton,
+                  (isSubmitting || lockoutTime > 0) && styles.loginButtonDisabled
+                ]}
+                onPress={handleLogin}
+                disabled={isSubmitting || lockoutTime > 0}
               >
-                <Text style={styles.forgotPasswordText}>Forgot password?</Text>
+                <Text style={styles.loginButtonText}>
+                  {lockoutTime > 0 ? `Locked (${lockoutTime}s)` : 'Login'}
+                </Text>
               </TouchableOpacity>
             </View>
 
-            {/* Login Button */}
+            {/* Divider */}
+            <View style={styles.dividerContainer}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}> or </Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            {/* Google Button */}
             <TouchableOpacity
               style={[
-                styles.loginButton,
-                (isSubmitting || lockoutTime > 0) && styles.loginButtonDisabled
+                styles.googleButton,
+                (isSubmitting || lockoutTime > 0) && styles.googleButtonDisabled
               ]}
-              onPress={handleLogin}
+              onPress={handleGoogleLogin}
               disabled={isSubmitting || lockoutTime > 0}
             >
-              <Text style={styles.loginButtonText}>
-                {lockoutTime > 0 ? `Locked (${lockoutTime}s)` : 'Login'}
-              </Text>
+              <GoogleIcon size={20} style={styles.googleIcon} />
+              <Text style={styles.googleButtonText}>Continue with Google</Text>
             </TouchableOpacity>
-          </View>
 
-          {/* Divider */}
-          <View style={styles.dividerContainer}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}> or </Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          {/* Google Button */}
-          <TouchableOpacity
-            style={[
-              styles.googleButton,
-              (isSubmitting || lockoutTime > 0) && styles.googleButtonDisabled
-            ]}
-            onPress={handleGoogleLogin}
-            disabled={isSubmitting || lockoutTime > 0}
-          >
-            <GoogleIcon size={20} style={styles.googleIcon} />
-            <Text style={styles.googleButtonText}>Continue with Google</Text>
-          </TouchableOpacity>
-
-          {/* Footer Navigation */}
-          <View style={styles.footerContainer}>
-            <Text style={styles.footerText}>Don’t have an account? </Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Register')} disabled={isSubmitting}>
-              <Text style={styles.signUpText}>Sign Up</Text>
-            </TouchableOpacity>
-          </View>
+            {/* Footer Navigation */}
+            <View style={styles.footerContainer}>
+              <Text style={styles.footerText}>Don’t have an account? </Text>
+              <TouchableOpacity onPress={() => navigation.navigate('Register')} disabled={isSubmitting}>
+                <Text style={styles.signUpText}>Sign Up</Text>
+              </TouchableOpacity>
+            </View>
 
           </ScrollView>
         </Animated.View>

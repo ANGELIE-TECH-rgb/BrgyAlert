@@ -23,13 +23,14 @@ BrgyAlert is an AI-prioritized, disaster-resilient incident reporting and dispat
 
 | Client Profile | Target User | Platform | Purpose |
 |---|---|---|---|
-| **Citizen (Mobile User)** | Residents / Witnesses | iOS & Android (React Native) | Rapid incident reporting with offline SMS gateway fallback and status tracking |
-| **Admin (Mobile Responder)** | Barangay Officials / Tanods | iOS & Android (React Native) | On-the-go triage queue, responder dispatching, shelter updates, and real-time chat |
+| **Citizen (Mobile User)** | Residents / Witnesses | iOS & Android (React Native) | Rapid incident reporting with offline SMS gateway fallback, local offline reports feed, automatic background synchronization, and race-condition duplication locking |
+| **Admin (Mobile Responder)** | Barangay Officials / Tanods | iOS & Android (React Native) | On-the-go triage queue, responder dispatching, shelter updates, real-time chat, and toggled configuration console |
 
 ### Core Value Propositions
 
 - **₱0 Operational Infrastructure** — Fully built on Firebase's free-tier serverless services (Auth, Firestore, Storage, Cloud Functions), eliminating ongoing server lease costs.
-- **Disaster-Resilient Offline Fallback** — A Smart SMS Handshake protocol intercepts submissions when citizen devices lose internet/data connectivity, formatting reports into compressed SMS payloads routed to the gateway.
+- **Disaster-Resilient Offline Fallback** — A Smart SMS Handshake protocol intercepts submissions when citizen devices lose internet/data connectivity, formatting reports into compressed SMS payloads dynamically routed to up to 5 admin-configured gateway numbers, tracked locally in `AsyncStorage` with an `OFFLINE (SMS)` badge, and synchronized automatically once connection recovers (safeguarded by lock guards to prevent duplicates).
+- **Orphan Notification Auto-Cleanup** — A background validation system immediately detects deleted Firestore incident alerts, automatically removing orphaned notification items to maintain database integrity and correct unread counts in real-time.
 - **Unified App Binary** — A single React Native codebase utilizing Role-Based Access Control (RBAC) simplifies deployment, cross-platform compilation, and field operations.
 - **Direct Citizen-Responder Coordination** — Real-time chat channels built into each active report enable responders to provide instruction and gather exact details directly in the field.
 
@@ -129,10 +130,13 @@ BrgyAlert/
 - **Touch-Optimized Reporting Wizard** — Multi-step screen wizard with clear UI controls for selecting incident categories (Fire, Flood, Medical, Crime, Accident, General).
 - **GPS Coordinate Acquisition** — Leverages native geolocation hooks to lock onto exact latitude/longitude targets.
 - **Asynchronous Photo Pipeline** — Compresses device images locally down to 200KB before uploading to optimize data transfers.
-- **Smart SMS Fallback Handshake** — Intercepts offline submissions and formats report metrics into a single 160-character delimiter string (`BA![Cat]![Landmark]![Details]`) passed directly to the native SMS app.
+- **Smart SMS Fallback Handshake** — Intercepts offline submissions and formats report metrics into a single 160-character delimiter string (`BA![Cat]![Landmark]![Details]`) passed dynamically to the native SMS app, addressed to all configured gateways.
+- **Offline Incident Tracking Feed** — Displays queued offline reports locally with a grey `OFFLINE (SMS)` badge and `#SMS-` prefixed serial codes in the citizen's reports list.
+- **Concurrency Locked Background Sync** — Detects network recovery and automatically syncs local reports using a React `useRef` lock (`isSyncingRef`) and immediate queue purging to prevent duplicate writes on Firestore.
 - **Live Status Tracker** — Chronological progress timeline representing report states: **Submitted ➔ Under Review ➔ Dispatched ➔ Resolved**.
 - **Community Safety Directory** - Lookup lists of local evacuation shelters showing real-time occupant counts and direct-dial emergency hotlines.
 - **Incident Chat** - Real-time text communications connected directly to individual reports, allowing reports to send instant updates to assigned responders.
+- **Automated Orphan Notification Cleanup** — Background cleaner that validates notification documents and deletes orphaned notifications corresponding to deleted Firestore reports, updating counts in real-time.
 
 ### Module 2: Mobile Admin/Responder Portal (Mobile Admin)
 
@@ -143,6 +147,8 @@ BrgyAlert/
 - **Evacuation Shelter Controls** — Real-time tools for shelter supervisors to modify operational states (Open, Full, Closed) and update active occupant lists.
 - **Broadcast Composer** — Form interface enabling administrators to type broadcast alerts that push notifications to citizen devices and broadcast SMS texts to registered numbers.
 - **Incident Chat Console** — Two-way chat screen enabling responders to message citizen reporters directly.
+- **Toggled Barangay Configuration Card** — Displays configurations (name, hotlines, gateways, response times) as read-only labels by default, with an "Edit Config" button that prompts confirmation and enables interactive inputs with simple cancel/save hooks.
+- **Direct Notification Routing** — Replaces dropdown modals with direct navigation link to the dedicated notifications screen, instantly updating unread counts in real-time.
 
 ---
 

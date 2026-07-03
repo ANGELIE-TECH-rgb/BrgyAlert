@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  StyleSheet, 
-  Text, 
-  View, 
-  TextInput, 
-  TouchableOpacity, 
-  SafeAreaView, 
-  KeyboardAvoidingView, 
-  Platform, 
+import {
+  StyleSheet,
+  Text,
+  View,
+  TextInput,
+  TouchableOpacity,
+  SafeAreaView,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   ActivityIndicator,
   Alert,
@@ -137,8 +137,8 @@ export default function ForgotPasswordScreen({ navigation }) {
 
       {/* Back Button Header */}
       <View style={styles.navHeader}>
-        <TouchableOpacity 
-          style={styles.backButton} 
+        <TouchableOpacity
+          style={styles.backButton}
           onPress={() => {
             if (step === 2) {
               setStep(1);
@@ -151,123 +151,123 @@ export default function ForgotPasswordScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
         <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
           <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-          
-          {step === 1 ? (
-            <>
-              {/* Step 1: Request Reset */}
-              <View style={styles.titleContainer}>
-                <Text style={styles.title}>Forgot Password</Text>
-                <Text style={styles.subtitle}>Enter your email to reset your password quickly</Text>
-              </View>
 
-              {/* Form */}
-              <View style={styles.formContainer}>
-                {errorMsg ? (
-                  <View style={styles.errorBanner}>
-                    <Text style={styles.errorText}>{errorMsg}</Text>
-                  </View>
-                ) : null}
-
-                {/* Email Field */}
-                <Text style={[styles.label, focusedField === 'email' && styles.labelActive]}>Email</Text>
-                <View style={[styles.inputContainer, focusedField === 'email' && styles.inputContainerActive]}>
-                  <Feather 
-                    name="mail" 
-                    size={18} 
-                    color={focusedField === 'email' ? '#0B2564' : '#A0AEC0'} 
-                    style={styles.inputIcon} 
-                  />
-                  <TextInput 
-                    style={styles.input}
-                    placeholder="johndoe@gmail.com"
-                    placeholderTextColor="#A0AEC0"
-                    value={email}
-                    onChangeText={setEmail}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    autoComplete="email"
-                    textContentType="emailAddress"
-                    editable={!isSubmitting}
-                    onFocus={() => setFocusedField('email')}
-                    onBlur={() => setFocusedField(null)}
-                  />
+            {step === 1 ? (
+              <>
+                {/* Step 1: Request Reset */}
+                <View style={styles.titleContainer}>
+                  <Text style={styles.title}>Forgot Password</Text>
+                  <Text style={styles.subtitle}>Enter your email to reset your password quickly</Text>
                 </View>
 
-                {/* Send Code / Reset Button */}
-                <TouchableOpacity 
-                  style={[styles.primaryButton, isSubmitting && styles.primaryButtonDisabled]} 
-                  onPress={handleReset}
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? (
-                    <ActivityIndicator color="#FFFFFF" />
-                  ) : (
-                    <Text style={styles.primaryButtonText}>Send Link</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </>
-          ) : (
-            <View style={styles.secureCard}>
-              {/* Step 2: Email Dispatched Notice */}
-              <View style={styles.successIconContainer}>
-                <View style={styles.successIconOuter}>
-                  <Feather name="mail" size={44} color="#0B2564" />
-                </View>
-              </View>
+                {/* Form */}
+                <View style={styles.formContainer}>
+                  {errorMsg ? (
+                    <View style={styles.errorBanner}>
+                      <Text style={styles.errorText}>{errorMsg}</Text>
+                    </View>
+                  ) : null}
 
-              <View style={styles.titleContainerCentred}>
-                <Text style={styles.titleCentered}>Verify Your Email</Text>
-                <Text style={styles.subtitleCentered}>
-                  We sent a secure password reset link to:
-                </Text>
-                <Text style={styles.maskedEmailText}>
-                  {maskEmail(sentToEmail)}
-                </Text>
-                <Text style={styles.subtitleCentered}>
-                  Please check your inbox and tap the link to complete resetting your password.
-                </Text>
-              </View>
-
-              <View style={styles.formContainer}>
-                {errorMsg ? (
-                  <View style={styles.errorBanner}>
-                    <Text style={styles.errorText}>{errorMsg}</Text>
+                  {/* Email Field */}
+                  <Text style={[styles.label, focusedField === 'email' && styles.labelActive]}>Email</Text>
+                  <View style={[styles.inputContainer, focusedField === 'email' && styles.inputContainerActive]}>
+                    <Feather
+                      name="mail"
+                      size={18}
+                      color={focusedField === 'email' ? '#0B2564' : '#A0AEC0'}
+                      style={styles.inputIcon}
+                    />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="johndoe@gmail.com"
+                      placeholderTextColor="#A0AEC0"
+                      value={email}
+                      onChangeText={setEmail}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      autoComplete="email"
+                      textContentType="emailAddress"
+                      editable={!isSubmitting}
+                      onFocus={() => setFocusedField('email')}
+                      onBlur={() => setFocusedField(null)}
+                    />
                   </View>
-                ) : null}
 
-                <TouchableOpacity 
-                  style={[
-                    styles.resendButton, 
-                    cooldown > 0 && styles.resendButtonDisabled
-                  ]} 
-                  onPress={handleResend}
-                  disabled={cooldown > 0 || isSubmitting}
-                >
-                  <Text style={[
-                    styles.resendButtonText,
-                    cooldown > 0 && styles.resendButtonTextDisabled
-                  ]}>
-                    {cooldown > 0 ? `Resend Link in ${cooldown}s` : 'Resend Link'}
+                  {/* Send Code / Reset Button */}
+                  <TouchableOpacity
+                    style={[styles.primaryButton, isSubmitting && styles.primaryButtonDisabled]}
+                    onPress={handleReset}
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? (
+                      <ActivityIndicator color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.primaryButtonText}>Send Link</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <View style={styles.secureCard}>
+                {/* Step 2: Email Dispatched Notice */}
+                <View style={styles.successIconContainer}>
+                  <View style={styles.successIconOuter}>
+                    <Feather name="mail" size={44} color="#0B2564" />
+                  </View>
+                </View>
+
+                <View style={styles.titleContainerCentred}>
+                  <Text style={styles.titleCentered}>Verify Your Email</Text>
+                  <Text style={styles.subtitleCentered}>
+                    We sent a secure password reset link to:
                   </Text>
-                </TouchableOpacity>
+                  <Text style={styles.maskedEmailText}>
+                    {maskEmail(sentToEmail)}
+                  </Text>
+                  <Text style={styles.subtitleCentered}>
+                    Please check your inbox and tap the link to complete resetting your password.
+                  </Text>
+                </View>
 
-                <TouchableOpacity 
-                  style={styles.backToLoginButton}
-                  onPress={() => navigation.navigate('Login')}
-                >
-                  <Text style={styles.backToLoginButtonText}>Back to Login</Text>
-                </TouchableOpacity>
+                <View style={styles.formContainer}>
+                  {errorMsg ? (
+                    <View style={styles.errorBanner}>
+                      <Text style={styles.errorText}>{errorMsg}</Text>
+                    </View>
+                  ) : null}
+
+                  <TouchableOpacity
+                    style={[
+                      styles.resendButton,
+                      cooldown > 0 && styles.resendButtonDisabled
+                    ]}
+                    onPress={handleResend}
+                    disabled={cooldown > 0 || isSubmitting}
+                  >
+                    <Text style={[
+                      styles.resendButtonText,
+                      cooldown > 0 && styles.resendButtonTextDisabled
+                    ]}>
+                      {cooldown > 0 ? `Resend Link in ${cooldown}s` : 'Resend Link'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.backToLoginButton}
+                    onPress={() => navigation.navigate('Login')}
+                  >
+                    <Text style={styles.backToLoginButtonText}>Back to Login</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
-          )}
+            )}
 
           </ScrollView>
         </Animated.View>

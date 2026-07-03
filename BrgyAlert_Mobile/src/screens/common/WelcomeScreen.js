@@ -55,19 +55,19 @@ export default function WelcomeScreen({ onFinish }) {
       key: '1',
       title: 'Instant Panic Dispatch',
       desc: 'Trigger immediate responders and alert the Barangay Command Center in real-time during emergencies.',
-      image: require('../../../assets/onboarding_panic.png'),
+      image: require('../../../assets/onboarding_panic.jpg'),
     },
     {
       key: '2',
       title: 'Interactive Tracking',
       desc: 'Browse local directories, view emergency hotlines, and track report status timelines dynamically.',
-      image: require('../../../assets/onboarding_track.png'),
+      image: require('../../../assets/onboarding_track.jpg'),
     },
     {
       key: '3',
       title: 'Direct Chat Support',
       desc: 'Exchange real-time text logs, coordinates, and media attachments directly with active emergency responders.',
-      image: require('../../../assets/onboarding_chat.png'),
+      image: require('../../../assets/onboarding_chat.jpg'),
     },
   ];
 

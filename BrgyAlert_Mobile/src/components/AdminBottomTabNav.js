@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, TouchableOpacity, Animated } from 'react-native
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { BlurView } from 'expo-blur';
 import { db } from '../services/firebaseConfig';
 import { useAuth } from '../context/AuthContext';
 
@@ -13,7 +14,7 @@ export default function AdminBottomTabNav() {
 
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
   const [hasUnreadQueue, setHasUnreadQueue] = useState(false);
-  
+
   const activeTab = route.name;
 
   const activeScale = useRef(new Animated.Value(0.75)).current;
@@ -89,47 +90,49 @@ export default function AdminBottomTabNav() {
 
   return (
     <View style={styles.outerContainer}>
-      <View style={styles.container}>
-        {tabs.map((tab) => {
-          const isSelected = activeTab === tab.name;
-          
-          return (
-            <TouchableOpacity 
-              key={tab.name}
-              onPress={() => handlePress(tab.name)}
-              activeOpacity={0.8}
-            >
-              <Animated.View
-                style={[
-                  styles.tabButton,
-                  isSelected && styles.tabButtonSelected,
-                  isSelected && { transform: [{ scale: activeScale }] }
-                ]}
+      <View style={styles.shadowWrapper}>
+        <BlurView intensity={85} tint="light" style={styles.container}>
+          {tabs.map((tab) => {
+            const isSelected = activeTab === tab.name;
+
+            return (
+              <TouchableOpacity
+                key={tab.name}
+                onPress={() => handlePress(tab.name)}
+                activeOpacity={0.8}
               >
-                <View style={styles.iconContainer}>
-                  <Feather 
-                    name={tab.icon} 
-                    size={22} 
-                    color={isSelected ? '#0F2C59' : '#6C757D'} 
-                    style={styles.tabIcon}
-                  />
-                  {tab.name === 'AdminMessages' && hasUnreadMessages && (
-                    <View style={styles.redDot} />
-                  )}
-                  {tab.name === 'AdminQueue' && hasUnreadQueue && (
-                    <View style={styles.redDot} />
-                  )}
-                </View>
-                <View style={styles.labelWrapper}>
-                  <Text style={[styles.labelText, isSelected && styles.labelTextSelected]}>
-                    {tab.label}
-                  </Text>
-                  {isSelected && <View style={styles.underline} />}
-                </View>
-              </Animated.View>
-            </TouchableOpacity>
-          );
-        })}
+                <Animated.View
+                  style={[
+                    styles.tabButton,
+                    isSelected && styles.tabButtonSelected,
+                    isSelected && { transform: [{ scale: activeScale }] }
+                  ]}
+                >
+                  <View style={styles.iconContainer}>
+                    <Feather
+                      name={tab.icon}
+                      size={22}
+                      color={isSelected ? '#0F2C59' : '#6C757D'}
+                      style={styles.tabIcon}
+                    />
+                    {tab.name === 'AdminMessages' && hasUnreadMessages && (
+                      <View style={styles.redDot} />
+                    )}
+                    {tab.name === 'AdminQueue' && hasUnreadQueue && (
+                      <View style={styles.redDot} />
+                    )}
+                  </View>
+                  <View style={styles.labelWrapper}>
+                    <Text style={[styles.labelText, isSelected && styles.labelTextSelected]}>
+                      {tab.label}
+                    </Text>
+                    {isSelected && <View style={styles.underline} />}
+                  </View>
+                </Animated.View>
+              </TouchableOpacity>
+            );
+          })}
+        </BlurView>
       </View>
     </View>
   );
@@ -146,22 +149,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     zIndex: 20, // Ensure bottom tab is on top of linear gradient
   },
+  shadowWrapper: {
+    borderRadius: 40,
+    backgroundColor: 'transparent',
+    shadowColor: '#0f2d598c',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 6,
+  },
   container: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(255, 255, 255, 0.65)',
     borderRadius: 40,
     paddingVertical: 5,
     paddingHorizontal: 2,
     justifyContent: 'center', // Cluster items
     alignItems: 'center',
-    // Smooth, premium soft shadow
-    shadowColor: '#00000040',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.03, // Low opacity smooth shadow
-    shadowRadius: 24,
-    elevation: 3,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.03)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+    overflow: 'hidden',
   },
   tabButton: {
     flexDirection: 'column',
@@ -174,7 +181,7 @@ const styles = StyleSheet.create({
     minWidth: 58,
   },
   tabButtonSelected: {
-    backgroundColor: '#E8F0FE', // Light blue selected pill highlight
+    backgroundColor: 'rgba(232, 240, 254, 0.7)', // Light blue selected pill highlight
   },
   tabIcon: {
     marginBottom: 2,

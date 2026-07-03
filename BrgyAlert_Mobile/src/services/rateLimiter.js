@@ -292,3 +292,45 @@ export async function recordChatMessageSent() {
     console.log('Error recording chat message timestamp:', err);
   }
 }
+
+// Chat edit / delete rate limiting (5 seconds)
+const CHAT_EDIT_LIMIT_MS = 5 * 1000;
+const CHAT_EDIT_LAST_TIME_KEY = '@brgyalert_last_chat_edit_time';
+
+/**
+ * Checks if the device is currently rate-limited for editing or deleting chat messages.
+ * @returns {Promise<{locked: boolean, secondsRemaining: number}>}
+ */
+export async function checkChatEditStatus() {
+  try {
+    const lastTimeStr = await AsyncStorage.getItem(CHAT_EDIT_LAST_TIME_KEY);
+    if (!lastTimeStr) {
+      return { locked: false, secondsRemaining: 0 };
+    }
+    const lastTime = parseInt(lastTimeStr, 10);
+    const now = Date.now();
+    const diff = now - lastTime;
+    if (diff < CHAT_EDIT_LIMIT_MS) {
+      return {
+        locked: true,
+        secondsRemaining: Math.ceil((CHAT_EDIT_LIMIT_MS - diff) / 1000),
+      };
+    }
+    await AsyncStorage.removeItem(CHAT_EDIT_LAST_TIME_KEY);
+    return { locked: false, secondsRemaining: 0 };
+  } catch (err) {
+    console.log('Error checking chat edit rate limit status:', err);
+    return { locked: false, secondsRemaining: 0 };
+  }
+}
+
+/**
+ * Records a message edit or deletion operation.
+ */
+export async function recordChatEditPerformed() {
+  try {
+    await AsyncStorage.setItem(CHAT_EDIT_LAST_TIME_KEY, String(Date.now()));
+  } catch (err) {
+    console.log('Error recording chat edit timestamp:', err);
+  }
+}

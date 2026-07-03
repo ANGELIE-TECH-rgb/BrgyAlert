@@ -7,13 +7,14 @@ import {
   sendPasswordResetEmail,
   sendEmailVerification,
   onAuthStateChanged,
-  setPersistence,
-  getReactNativePersistence,
   GoogleAuthProvider,
   signInWithCredential
 } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { doc, getDoc, setDoc, updateDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, onSnapshot, serverTimestamp, collection, addDoc } from 'firebase/firestore';
+import NetInfo from '@react-native-community/netinfo';
+import { sendAndSaveNotification } from '../services/notificationService';
+import { notifyAllAdmins } from '../services/adminNotifier';
 import { auth, db } from '../services/firebaseConfig';
 let GoogleSignin = null;
 let statusCodes = {
@@ -43,6 +44,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const isSyncingRef = useRef(false);
 
   // ─── Native Google Sign-In ──────────────────────────────────────────────────
   const loginWithGoogle = async () => {
@@ -102,7 +104,7 @@ export const AuthProvider = ({ children }) => {
       }
 
       setUser(firebaseUser);
-      
+
       // Wait for the profile snapshot listener to complete loading the profile
       await new Promise((resolve) => {
         subscribeToUserProfile(uid, () => {
@@ -228,12 +230,115 @@ export const AuthProvider = ({ children }) => {
     return () => subscription.remove();
   }, [user]);
 
-  // ─── Auth state monitor ────────────────────────────────────────────────────
+  // ─── Offline Reports Automatic Synchronization ─────────────────────────────
   useEffect(() => {
-    // Set up AsyncStorage persistence NON-BLOCKING (avoids startup freeze)
-    setPersistence(auth, getReactNativePersistence(AsyncStorage))
-      .then(() => console.log('[AuthContext] AsyncStorage persistence ready.'))
-      .catch(e => console.warn('[AuthContext] Persistence setup error:', e.message));
+    if (!user) return;
+
+    const syncOfflineReports = async () => {
+      if (isSyncingRef.current) return;
+      isSyncingRef.current = true;
+
+      try {
+        const storeKey = `offline_reports_${user.uid}`;
+        const rawList = await AsyncStorage.getItem(storeKey);
+        if (!rawList) {
+          isSyncingRef.current = false;
+          return;
+        }
+
+        const localList = JSON.parse(rawList);
+        if (localList.length === 0) {
+          isSyncingRef.current = false;
+          return;
+        }
+
+        // Immediately clear AsyncStorage queue to prevent concurrent runs from duplicating syncs
+        await AsyncStorage.removeItem(storeKey);
+
+        console.log(`[AuthContext] Syncing ${localList.length} offline reports...`);
+        const failedReports = [];
+        let syncedCount = 0;
+
+        for (const report of localList) {
+          try {
+            const payload = {
+              userId: report.userId,
+              reporterName: report.reporterName,
+              phoneNumber: report.phoneNumber,
+              category: report.category,
+              details: report.details,
+              witnessName: report.witnessName || 'None',
+              location: report.location,
+              source: 'offline_sms_synced',
+              status: 'submitted',
+              urgency: report.urgency || 'medium',
+              mediaUrls: [],
+              assignedResponders: [],
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp()
+            };
+
+            const docRef = await addDoc(collection(db, 'alerts'), payload);
+            syncedCount++;
+
+            sendAndSaveNotification(user.uid, {
+              title: `✅ Report Synced`,
+              body: `Your offline ${report.category} report has been synced with the Barangay server.`,
+              type: 'incident',
+              relatedId: docRef.id,
+            }).catch((e) => console.log('[AuthContext] Sync confirmation notification error:', e));
+
+            const locationText = payload.location?.addressText || 'Unknown Location';
+            notifyAllAdmins(user.uid, {
+              title: payload.urgency === 'critical' ? `🚨 CRITICAL PANIC ALERT!` : `🚨 NEW INCIDENT: ${payload.category || 'General'}`,
+              body: `${payload.reporterName} reported at ${locationText} (Offline Sync).`,
+              type: payload.urgency === 'critical' ? 'emergency' : 'incident',
+              relatedId: docRef.id,
+            }).catch((e) => console.log('[AuthContext] Sync admin notification error:', e));
+          } catch (uploadErr) {
+            console.log('[AuthContext] Error uploading offline report:', uploadErr);
+            failedReports.push(report);
+          }
+        }
+
+        // Re-queue failed reports if any
+        if (failedReports.length > 0) {
+          const currentRaw = await AsyncStorage.getItem(storeKey);
+          let currentList = [];
+          if (currentRaw) {
+            currentList = JSON.parse(currentRaw);
+          }
+          await AsyncStorage.setItem(storeKey, JSON.stringify([...failedReports, ...currentList]));
+        }
+
+        if (syncedCount > 0) {
+          Alert.alert(
+            'Offline Reports Synced',
+            `${syncedCount} offline report(s) successfully synchronized with the Barangay server.`
+          );
+        }
+      } catch (err) {
+        console.log('[AuthContext] Error in syncOfflineReports handler:', err);
+      } finally {
+        isSyncingRef.current = false;
+      }
+    };
+
+    const unsubscribeNet = NetInfo.addEventListener((state) => {
+      if (state.isConnected && state.isInternetReachable !== false) {
+        syncOfflineReports();
+      }
+    });
+
+    syncOfflineReports();
+
+    return () => unsubscribeNet();
+  }, [user]);
+
+  // ─── Auth state monitor ────────────────────────────────────────────────────
+  // NOTE: AsyncStorage persistence is configured at Firebase init time
+  // in firebaseConfig.js using initializeAuth() — no setup needed here.
+  useEffect(() => {
 
     // Safety net: if onAuthStateChanged never fires within 10s, unblock the UI
     const safetyTimeout = setTimeout(() => {
@@ -310,14 +415,14 @@ export const AuthProvider = ({ children }) => {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       setUser(userCredential.user);
-      
+
       // Wait for the profile snapshot listener to complete loading the profile
       await new Promise((resolve) => {
         subscribeToUserProfile(userCredential.user.uid, () => {
           resolve();
         });
       });
-      
+
       return userCredential.user;
     } catch (error) {
       console.log('Login error:', error.code, error.message);
