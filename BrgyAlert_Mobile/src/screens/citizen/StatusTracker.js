@@ -212,6 +212,14 @@ export default function StatusTracker({ route, navigation }) {
     return { statusText, tagBg, tagColor };
   };
 
+  const getUrgencyBadgeColor = (urgency = 'medium') => {
+    const u = urgency.toLowerCase();
+    if (u === 'low') return { bg: '#ECFDF5', color: '#10B981' };
+    if (u === 'high') return { bg: '#FEF2F2', color: '#EF4444' };
+    if (u === 'critical') return { bg: '#FEE2E2', color: '#7F1D1D' };
+    return { bg: '#FFF7ED', color: '#F59E0B' }; // medium
+  };
+
   // Format Date and Time
   const formatStepTime = (createdAt) => {
     if (!createdAt) return '';
@@ -334,6 +342,26 @@ export default function StatusTracker({ route, navigation }) {
               <View style={styles.reviewRow}>
                 <Text style={styles.reviewLabel}>Incident Type</Text>
                 <Text style={styles.reviewValue}>{incident.category}</Text>
+              </View>
+
+              <View style={styles.reviewRow}>
+                <Text style={styles.reviewLabel}>Urgency / Priority</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                  <View style={{
+                    backgroundColor: getUrgencyBadgeColor(incident.urgency).bg,
+                    paddingVertical: 4,
+                    paddingHorizontal: 10,
+                    borderRadius: 8
+                  }}>
+                    <Text style={{
+                      fontSize: 12,
+                      fontWeight: '700',
+                      color: getUrgencyBadgeColor(incident.urgency).color
+                    }}>
+                      {(incident.urgency || 'medium').toUpperCase()}
+                    </Text>
+                  </View>
+                </View>
               </View>
               
               <View style={styles.reviewRow}>

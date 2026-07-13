@@ -92,7 +92,7 @@ export default function BottomTabNav() {
   return (
     <View style={styles.outerContainer}>
       <View style={styles.shadowWrapper}>
-        <BlurView intensity={85} tint="light" style={styles.container}>
+        <View style={styles.container}>
           {tabs.map((tab) => {
             const isSelected = activeTab === tab.name;
 
@@ -133,7 +133,7 @@ export default function BottomTabNav() {
               </TouchableOpacity>
             );
           })}
-        </BlurView>
+        </View>
       </View>
     </View>
   );

@@ -98,20 +98,7 @@ export default function AdminQueue({ route, navigation }) {
   const [sortOption, setSortOption] = useState('newest'); // newest | oldest | urgency_high | urgency_low
   const [showFiltersSection, setShowFiltersSection] = useState(false);
 
-  // Manual entry modal states
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [adding, setAdding] = useState(false);
-  const [formCategory, setFormCategory] = useState('General');
-  const [formReporterName, setFormReporterName] = useState('');
-  const [formPhoneNumber, setFormPhoneNumber] = useState('');
-  const [formDetails, setFormDetails] = useState('');
-  const [formAddress, setFormAddress] = useState('');
-  const [formUrgency, setFormUrgency] = useState('medium');
-  const [formStatus, setFormStatus] = useState('submitted');
-  const [formAdminNotes, setFormAdminNotes] = useState('');
-  const [formIncidentDate, setFormIncidentDate] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showTimePicker, setShowTimePicker] = useState(false);
+  // No modal state variables needed (relocated to dedicated screen)
 
   // Apply deep-linked filter or search from dashboard/analytics
   useEffect(() => {
@@ -425,72 +412,7 @@ export default function AdminQueue({ route, navigation }) {
     return 'No incidents found in this list.';
   };
 
-  // Submit manual report entry
-  const handleAddSubmit = async () => {
-    if (!formCategory) {
-      Alert.alert('Required Field', 'Please select an incident type.');
-      return;
-    }
-    if (!formDetails.trim()) {
-      Alert.alert('Required Field', 'Please provide description details.');
-      return;
-    }
-    if (!formAddress.trim()) {
-      Alert.alert('Required Field', 'Please enter a location/address.');
-      return;
-    }
-
-    setAdding(true);
-    try {
-      const payload = {
-        userId: 'walk_in',
-        source: 'admin_manual',
-        addedBy: user?.uid || 'unknown',
-        reporterName: formReporterName.trim() || 'Offline Reporter',
-        phoneNumber: formPhoneNumber.trim() || '',
-        category: formCategory,
-        details: formDetails.trim(),
-        adminNotes: formAdminNotes.trim(),
-        location: {
-          latitude: null,
-          longitude: null,
-          addressText: formAddress.trim(),
-        },
-        urgency: formUrgency,
-        status: formStatus,
-        mediaUrls: [],
-        assignedResponders: [],
-        aiSummary: '',
-        aiFlaggedFake: false,
-        aiFakeReason: '',
-        aiValidityConfidence: 'High',
-        incidentAt: formIncidentDate || new Date(),
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      };
-
-      await addDoc(collection(db, 'alerts'), payload);
-
-      Alert.alert('Success', 'Incident record has been manually logged successfully.');
-      
-      // Reset form
-      setFormCategory('General');
-      setFormReporterName('');
-      setFormPhoneNumber('');
-      setFormDetails('');
-      setFormAddress('');
-      setFormUrgency('medium');
-      setFormStatus('submitted');
-      setFormAdminNotes('');
-      setFormIncidentDate(new Date());
-      setShowAddModal(false);
-    } catch (err) {
-      console.log('Error adding manual alert:', err);
-      Alert.alert('Error', 'Failed to save incident record. Please try again.');
-    } finally {
-      setAdding(false);
-    }
-  };
+  // Submission logic moved to AdminAddRecord.js
 
   return (
     <View style={styles.container}>
@@ -512,21 +434,13 @@ export default function AdminQueue({ route, navigation }) {
       <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
         {/* Header */}
         <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
-        <View>
-          <Text style={styles.headerTitle}>Incident Records</Text>
-          <Text style={styles.headerSubtitle}>
-            {loading ? 'Loading incidents...' : `${filteredAlerts.length} report${filteredAlerts.length !== 1 ? 's' : ''}`}
-          </Text>
+          <View>
+            <Text style={styles.headerTitle}>Incident Records</Text>
+            <Text style={styles.headerSubtitle}>
+              {loading ? 'Loading incidents...' : `${filteredAlerts.length} report${filteredAlerts.length !== 1 ? 's' : ''}`}
+            </Text>
+          </View>
         </View>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => setShowAddModal(true)}
-          activeOpacity={0.8}
-        >
-          <Feather name="plus" size={20} color="#FFFFFF" style={{ marginRight: 4 }} />
-          <Text style={styles.addButtonText}>Add Record</Text>
-        </TouchableOpacity>
-      </View>
 
       {/* Search & Actions Bar */}
       <View style={[styles.searchContainer, { flexDirection: 'row', alignItems: 'center' }]}>
@@ -716,209 +630,20 @@ export default function AdminQueue({ route, navigation }) {
       {/* Bottom Smooth Gradient Background Fade */}
       <BottomGradient />
 
-      {/* MANUAL ENTRY BOTTOM SHEET MODAL */}
-      <GestureModal
-        visible={showAddModal}
-        onClose={() => setShowAddModal(false)}
-        contentStyle={styles.addModalSheet}
-        keyboardAvoiding
-      >
-        <ScrollView contentContainerStyle={styles.modalScroll} showsVerticalScrollIndicator={false}>
-          <Text style={styles.modalTitle}>Manual Incident Record</Text>
-          <Text style={styles.modalSubtitle}>Add offline walk-ins, phone calls, or texts to records database.</Text>
-
-          {/* Incident Type Chips */}
-          <Text style={styles.fieldLabel}>Incident Type / Category *</Text>
-          <View style={styles.categoryChipsRow}>
-            {INCIDENT_TYPES.map((cat) => {
-              const active = formCategory === cat;
-              return (
-                <TouchableOpacity
-                  key={cat}
-                  style={[styles.categoryChip, active && styles.categoryChipActive]}
-                  onPress={() => setFormCategory(cat)}
-                >
-                  <Text style={[styles.categoryChipText, active && styles.categoryChipTextActive]}>{cat}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          {/* Reporter Name */}
-          <Text style={styles.fieldLabel}>Reporter Name</Text>
-          <TextInput
-            style={styles.formInput}
-            placeholder="e.g. Juan dela Cruz (Walk-in)"
-            placeholderTextColor="#9CA3AF"
-            value={formReporterName}
-            onChangeText={setFormReporterName}
-          />
-
-          {/* Phone Number */}
-          <Text style={styles.fieldLabel}>Contact Number</Text>
-          <TextInput
-            style={styles.formInput}
-            placeholder="e.g. 09171234567"
-            placeholderTextColor="#9CA3AF"
-            value={formPhoneNumber}
-            onChangeText={setFormPhoneNumber}
-            keyboardType="phone-pad"
-          />
-
-          {/* Incident Description */}
-          <Text style={styles.fieldLabel}>Incident Details / Description *</Text>
-          <TextInput
-            style={[styles.formInput, styles.multilineInput]}
-            placeholder="Describe the incident (what happened, witness statements, etc.)"
-            placeholderTextColor="#9CA3AF"
-            value={formDetails}
-            onChangeText={setFormDetails}
-            multiline
-            numberOfLines={4}
-            textAlignVertical="top"
-          />
-
-          {/* Location / Address */}
-          <Text style={styles.fieldLabel}>Incident Location Address *</Text>
-          <TextInput
-            style={styles.formInput}
-            placeholder="e.g. Zone 4, Corner Lepa St."
-            placeholderTextColor="#9CA3AF"
-            value={formAddress}
-            onChangeText={setFormAddress}
-          />
-
-          {/* Urgency Level */}
-          <Text style={styles.fieldLabel}>Urgency Level *</Text>
-          <View style={styles.urgencyRow}>
-            {URGENCY_LEVELS.map((level) => {
-              const active = formUrgency === level.key;
-              return (
-                <TouchableOpacity
-                  key={level.key}
-                  style={[
-                    styles.urgencyChip,
-                    active && { backgroundColor: level.bg, borderColor: level.color, borderWidth: 1.5 },
-                  ]}
-                  onPress={() => setFormUrgency(level.key)}
-                >
-                  <Text style={[styles.urgencyChipText, { color: level.color, fontWeight: active ? '700' : '500' }]}>
-                    {level.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          {/* Date & Time Reported */}
-          <Text style={styles.fieldLabel}>Incident Date & Time *</Text>
-          <TouchableOpacity
-            style={styles.datePickerTrigger}
-            onPress={() => setShowDatePicker(true)}
-            activeOpacity={0.7}
-          >
-            <Feather name="calendar" size={16} color="#0F2C59" style={{ marginRight: 8 }} />
-            <Text style={styles.datePickerTriggerText}>
-              {formIncidentDate.toLocaleString('en-US', {
-                month: 'long',
-                day: 'numeric',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: true,
-              })}
-            </Text>
-          </TouchableOpacity>
-
-          {showDatePicker && (
-            <RNDateTimePicker
-              value={formIncidentDate}
-              mode="date"
-              display="default"
-              onChange={(event, selectedDate) => {
-                setShowDatePicker(false);
-                if (selectedDate) {
-                  setFormIncidentDate(selectedDate);
-                  // Automatically trigger time picker after selecting date
-                  setTimeout(() => setShowTimePicker(true), 200);
-                }
-              }}
-            />
-          )}
-
-          {showTimePicker && (
-            <RNDateTimePicker
-              value={formIncidentDate}
-              mode="time"
-              display="default"
-              onChange={(event, selectedTime) => {
-                setShowTimePicker(false);
-                if (selectedTime) {
-                  const combinedDate = new Date(formIncidentDate);
-                  combinedDate.setHours(selectedTime.getHours());
-                  combinedDate.setMinutes(selectedTime.getMinutes());
-                  setFormIncidentDate(combinedDate);
-                }
-              }}
-            />
-          )}
-
-          {/* Initial Status */}
-          <Text style={styles.fieldLabel}>Initial Status *</Text>
-          <View style={styles.statusChipsRow}>
-            {STATUS_OPTS.map((opt) => {
-              const active = formStatus === opt.key;
-              return (
-                <TouchableOpacity
-                  key={opt.key}
-                  style={[styles.statusChip, active && styles.statusChipActive]}
-                  onPress={() => setFormStatus(opt.key)}
-                >
-                  <Text style={[styles.statusChipText, active && styles.statusChipTextActive]}>{opt.label}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          {/* Admin Notes */}
-          <Text style={styles.fieldLabel}>Internal Admin Notes (Only visible to admins)</Text>
-          <TextInput
-            style={[styles.formInput, styles.multilineInput]}
-            placeholder="Add internal notes, responder dispatches, follow-up instructions..."
-            placeholderTextColor="#9CA3AF"
-            value={formAdminNotes}
-            onChangeText={setFormAdminNotes}
-            multiline
-            numberOfLines={3}
-            textAlignVertical="top"
-          />
-
-          {/* Buttons */}
-          <View style={styles.modalButtons}>
-            <TouchableOpacity
-              style={styles.modalCancelBtn}
-              onPress={() => setShowAddModal(false)}
-              disabled={adding}
-            >
-              <Text style={styles.modalCancelBtnText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.modalSaveBtn}
-              onPress={handleAddSubmit}
-              disabled={adding}
-            >
-              {adding ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <Text style={styles.modalSaveBtnText}>Save Record</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
-      </GestureModal>
       </Animated.View>
       {/* Floating Bottom Tab Nav Bar */}
       <AdminBottomTabNav />
+
+      {/* Floating Action Button (FAB) for manual entry */}
+      <View style={styles.fabContainer}>
+        <TouchableOpacity
+          style={styles.fabCircleButton}
+          onPress={() => navigation.navigate('AdminAddRecord')}
+          activeOpacity={0.8}
+        >
+          <Feather name="plus" size={28} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -927,6 +652,27 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: 'transparent',
+  },
+  fabContainer: {
+    position: 'absolute',
+    bottom: 124, // Clear bottom tab bar height to prevent overflow
+    right: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    zIndex: 20,
+  },
+  fabCircleButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#0F2C59',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#0f2d5965',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 5,
   },
   header: {
     flexDirection: 'row',

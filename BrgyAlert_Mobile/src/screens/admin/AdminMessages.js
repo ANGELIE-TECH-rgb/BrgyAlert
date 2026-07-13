@@ -163,7 +163,7 @@ export default function AdminMessages({ navigation }) {
 
         snapshot.forEach((doc) => {
           const data = doc.data();
-          if (data.status === 'declined') {
+          if (data.status === 'declined' || data.source === 'admin_manual' || data.userId === 'walk_in') {
             return;
           }
           const alertId = doc.id;

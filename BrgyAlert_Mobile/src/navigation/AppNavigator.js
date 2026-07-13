@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Text, Linking, Alert, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -7,6 +7,9 @@ import { collection, doc, query, where, onSnapshot, getDocs, writeBatch, limit }
 import { db } from '../services/firebaseConfig';
 import { registerForNotificationsAsync, sendAndSaveNotification, getActiveChat } from '../services/notificationService';
 import { useAuth } from '../context/AuthContext';
+import NetInfo from '@react-native-community/netinfo';
+import { Feather } from '@expo/vector-icons';
+import { getCurrentLocation } from '../services/locationService';
 
 // Import Splash & Welcome Screens
 import SplashScreen from '../screens/common/SplashScreen';
@@ -33,6 +36,7 @@ import NotificationsScreen from '../screens/common/NotificationsScreen';
 import CitizenSettings from '../screens/citizen/CitizenSettings';
 import AdminSettings from '../screens/admin/AdminSettings';
 import LocationRequiredModal from '../components/LocationRequiredModal';
+import AdminAddRecord from '../screens/admin/AdminAddRecord';
 
 const Stack = createNativeStackNavigator();
 
@@ -40,6 +44,115 @@ export default function AppNavigator() {
   const { user, userProfile, loading } = useAuth();
 
   const [showSplash, setShowSplash] = useState(true);
+  const [isOnline, setIsOnline] = useState(true);
+
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      setIsOnline(state.isConnected ?? true);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const triggerGlobalOfflinePanicSms = async () => {
+    try {
+      let lat = 0;
+      let lng = 0;
+      let addr = 'Barangay Lepa (Offline SOS)';
+      try {
+        const location = await getCurrentLocation();
+        lat = location.latitude;
+        lng = location.longitude;
+        addr = location.addressText;
+      } catch (locErr) {
+        console.log('[Global SOS] Could not retrieve coordinates offline:', locErr);
+      }
+
+      let gateways = ['+639090000000'];
+      try {
+        const cached = await AsyncStorage.getItem('cached_sms_gateways');
+        if (cached) {
+          gateways = JSON.parse(cached);
+        }
+      } catch (e) {
+        console.log('[Global SOS] Error reading cached gateways:', e);
+      }
+
+      // Format location: 15.92604,120.43501 (https://maps.google.com/?q=15.92604,120.43501)
+      const coordStr = `${lat.toFixed(5)},${lng.toFixed(5)}`;
+      const mapsUrl = `https://maps.google.com/?q=${coordStr}`;
+      const cleanedLoc = `${coordStr} (${mapsUrl})`;
+      const details = 'EMERGENCY PANIC DISPATCH TRIGGERED OFFLINE';
+      const smsPayload = `BA!G!${cleanedLoc}!${details}`;
+
+      const gatewayRecipients = gateways.join(',');
+      const smsUrl = `sms:${gatewayRecipients}${Platform.OS === 'ios' ? '&' : '?'}body=${encodeURIComponent(smsPayload)}`;
+
+      const supported = await Linking.canOpenURL(smsUrl);
+      if (supported) {
+        const localReport = {
+          id: `offline_${Date.now()}`,
+          userId: user ? user.uid : 'guest',
+          reporterName: userProfile?.fullName || 'Anonymous Citizen',
+          phoneNumber: userProfile?.phoneNumber || '',
+          category: 'General',
+          details: 'EMERGENCY PANIC DISPATCH TRIGGERED OFFLINE',
+          witnessName: 'None',
+          location: {
+            addressText: addr,
+            latitude: lat,
+            longitude: lng
+          },
+          source: 'offline_sms',
+          status: 'offline_pending',
+          urgency: 'critical',
+          mediaUrls: [],
+          createdAt: new Date().toISOString(),
+          isOffline: true
+        };
+
+        const storeKey = `offline_reports_${user?.uid || 'guest'}`;
+        let localList = [];
+        try {
+          const rawLocalList = await AsyncStorage.getItem(storeKey);
+          if (rawLocalList) {
+            localList = JSON.parse(rawLocalList);
+          }
+        } catch (e) {
+          console.log('[Global SOS] Error reading local offline reports:', e);
+        }
+
+        localList.push(localReport);
+        await AsyncStorage.setItem(storeKey, JSON.stringify(localList));
+
+        await Linking.openURL(smsUrl);
+      } else {
+        Alert.alert('SMS Error', 'Could not open native SMS client.');
+      }
+    } catch (err) {
+      console.log('[Global SOS] Offline panic SMS dispatch failed:', err);
+      Alert.alert('Error', 'Could not compile and launch SMS dispatch.');
+    }
+  };
+
+  const handleGlobalSosPress = () => {
+    Alert.alert(
+      'Offline Emergency SOS',
+      'You are currently offline. Would you like to compile and send a direct Emergency Panic SMS, or call Emergency Hotlines directly?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Call Hotlines', 
+          onPress: () => {
+            Linking.openURL('tel:911').catch((err) => {
+              console.log('Error launching dialer:', err);
+              Alert.alert('Error', 'Could not dial emergency hotlines.');
+            });
+          } 
+        },
+        { text: 'Send via SMS', onPress: () => triggerGlobalOfflinePanicSms() }
+      ]
+    );
+  };
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState(null);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
 
@@ -305,54 +418,68 @@ export default function AppNavigator() {
   }
 
   return (
-    <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {!user ? (
-          // Auth Stack (Unauthenticated) — no protected routes
-          <>
-            <Stack.Screen name="Login" component={LoginScreen} />
-            <Stack.Screen name="Register" component={RegisterScreen} />
-            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-            <Stack.Screen name="ReportWizard" component={ReportWizard} />
-            <Stack.Screen name="ReportSuccess" component={ReportSuccess} />
-          </>
-        ) : userProfile?.role === 'responder' || userProfile?.role === 'admin' ? (
-          // ── Admin / Responder stack ─────────────────────────────────────────
-          // SECURITY: Only renders when the Firestore-verified role is 'admin'
-          // or 'responder'. Citizens cannot access these screens because their
-          // routes are simply not registered in the navigator for their session.
-          // This stack-based isolation is the client-side navigation guard.
-          <>
-            <Stack.Screen name="AdminHome" component={AdminConsole} />
-            <Stack.Screen name="AdminQueue" component={AdminQueue} />
-            <Stack.Screen name="AdminMessages" component={AdminMessages} />
-            <Stack.Screen name="AdminAnalytics" component={AdminAnalytics} />
-            <Stack.Screen name="IncidentDetail" component={IncidentDetail} />
-            <Stack.Screen name="AdminMapScreen" component={AdminMapScreen} />
-            <Stack.Screen name="ChatScreen" component={ChatScreen} />
-            <Stack.Screen name="Notifications" component={NotificationsScreen} />
-            <Stack.Screen name="AdminSettings" component={AdminSettings} />
-          </>
-        ) : (
-          // ── Citizen Stack ───────────────────────────────────────────────────
-          // SECURITY: Admin screens are not registered here — citizens have no
-          // route to navigate to any admin screen even via deep links or state
-          // manipulation. Firestore rules provide the server-side enforcement.
-          <>
-            <Stack.Screen name="CitizenHome" component={CitizenDashboard} />
-            <Stack.Screen name="CitizenReports" component={CitizenReports} />
-            <Stack.Screen name="ChatMessages" component={ChatMessages} />
-            <Stack.Screen name="ReportWizard" component={ReportWizard} />
-            <Stack.Screen name="ReportSuccess" component={ReportSuccess} />
-            <Stack.Screen name="StatusTracker" component={StatusTracker} />
-            <Stack.Screen name="ChatScreen" component={ChatScreen} />
-            <Stack.Screen name="Notifications" component={NotificationsScreen} />
-            <Stack.Screen name="SettingsTab" component={CitizenSettings} />
-          </>
-        )}
-      </Stack.Navigator>
-      <LocationRequiredModal />
-    </NavigationContainer>
+    <View style={{ flex: 1 }}>
+      <NavigationContainer>
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          {!user ? (
+            // Auth Stack (Unauthenticated) — no protected routes
+            <>
+              <Stack.Screen name="Login" component={LoginScreen} />
+              <Stack.Screen name="Register" component={RegisterScreen} />
+              <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+              <Stack.Screen name="ReportWizard" component={ReportWizard} />
+              <Stack.Screen name="ReportSuccess" component={ReportSuccess} />
+            </>
+          ) : userProfile?.role === 'responder' || userProfile?.role === 'admin' ? (
+            // ── Admin / Responder stack ─────────────────────────────────────────
+            // SECURITY: Only renders when the Firestore-verified role is 'admin'
+            // or 'responder'. Citizens cannot access these screens because their
+            // routes are simply not registered in the navigator for their session.
+            // This stack-based isolation is the client-side navigation guard.
+            <>
+              <Stack.Screen name="AdminHome" component={AdminConsole} />
+              <Stack.Screen name="AdminQueue" component={AdminQueue} />
+              <Stack.Screen name="AdminMessages" component={AdminMessages} />
+              <Stack.Screen name="AdminAnalytics" component={AdminAnalytics} />
+              <Stack.Screen name="IncidentDetail" component={IncidentDetail} />
+              <Stack.Screen name="AdminMapScreen" component={AdminMapScreen} />
+              <Stack.Screen name="ChatScreen" component={ChatScreen} />
+              <Stack.Screen name="Notifications" component={NotificationsScreen} />
+              <Stack.Screen name="AdminSettings" component={AdminSettings} />
+              <Stack.Screen name="AdminAddRecord" component={AdminAddRecord} />
+            </>
+          ) : (
+            // ── Citizen Stack ───────────────────────────────────────────────────
+            // SECURITY: Admin screens are not registered here — citizens have no
+            // route to navigate to any admin screen even via deep links or state
+            // manipulation. Firestore rules provide the server-side enforcement.
+            <>
+              <Stack.Screen name="CitizenHome" component={CitizenDashboard} />
+              <Stack.Screen name="CitizenReports" component={CitizenReports} />
+              <Stack.Screen name="ChatMessages" component={ChatMessages} />
+              <Stack.Screen name="ReportWizard" component={ReportWizard} />
+              <Stack.Screen name="ReportSuccess" component={ReportSuccess} />
+              <Stack.Screen name="StatusTracker" component={StatusTracker} />
+              <Stack.Screen name="ChatScreen" component={ChatScreen} />
+              <Stack.Screen name="Notifications" component={NotificationsScreen} />
+              <Stack.Screen name="SettingsTab" component={CitizenSettings} />
+            </>
+          )}
+        </Stack.Navigator>
+        <LocationRequiredModal />
+      </NavigationContainer>
+
+      {!isOnline && (
+        <TouchableOpacity 
+          style={styles.globalSosButton}
+          onPress={handleGlobalSosPress}
+          activeOpacity={0.8}
+        >
+          <Feather name="alert-octagon" size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
+          <Text style={styles.globalSosText}>OFFLINE SOS</Text>
+        </TouchableOpacity>
+      )}
+    </View>
   );
 }
 
@@ -362,5 +489,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#F8F9FA',
+  },
+  globalSosButton: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 55 : 45,
+    right: 16,
+    backgroundColor: '#EF4444',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 9999,
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  globalSosText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 });

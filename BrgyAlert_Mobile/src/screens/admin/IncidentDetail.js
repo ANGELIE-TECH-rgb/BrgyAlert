@@ -25,7 +25,7 @@ import { useAuth } from '../../context/AuthContext';
 import GestureModal from '../../components/GestureModal';
 import BottomGradient from '../../components/BottomGradient';
 import SkeletonLoader from '../../components/SkeletonLoader';
-import { processIncidentSubmissionAI, isAiRateLimited } from '../../services/aiService';
+import { processIncidentSubmissionAI, isAiRateLimited, predictIncidentAttributes } from '../../services/aiService';
 
 const STATUS_STEPS = [
   { key: 'submitted', label: 'Report Submitted', desc: 'Report has been successfully recorded in the system.' },
@@ -82,6 +82,61 @@ export default function IncidentDetail({ route, navigation }) {
 
   // Safety ref to prevent duplicate background AI runs
   const generatingSummaryRef = useRef(false);
+
+  // Edit Urgency states
+  const [editUrgencyModalVisible, setEditUrgencyModalVisible] = useState(false);
+  const [selectedUrgency, setSelectedUrgency] = useState('medium');
+  const [urgencySubmitting, setUrgencySubmitting] = useState(false);
+  
+  // AI Suggestion states
+  const [aiUrgencyLoading, setAiUrgencyLoading] = useState(false);
+  const [aiUrgencySuggestion, setAiUrgencySuggestion] = useState(null);
+
+  const getUrgencyBadgeColor = (urgency = 'medium') => {
+    const u = urgency.toLowerCase();
+    if (u === 'low') return { bg: '#ECFDF5', color: '#10B981' };
+    if (u === 'high') return { bg: '#FEF2F2', color: '#EF4444' };
+    if (u === 'critical') return { bg: '#FEE2E2', color: '#7F1D1D' };
+    return { bg: '#FFF7ED', color: '#F59E0B' }; // medium
+  };
+
+  const handleAiSuggestUrgency = async () => {
+    if (!incident?.details) return;
+    setAiUrgencyLoading(true);
+    setAiUrgencySuggestion(null);
+    try {
+      const result = await predictIncidentAttributes(incident.details, 'admin');
+      if (result && result.urgency) {
+        setAiUrgencySuggestion({
+          urgency: result.urgency.toLowerCase(),
+          reasoning: result.reasoning || 'No explanation provided.'
+        });
+      } else {
+        Alert.alert('AI Rate Limited / Offline', 'Gemini AI service is currently offline or rate-limited.');
+      }
+    } catch (err) {
+      console.log('AI Suggestion failed:', err);
+      Alert.alert('Error', 'Failed to get AI recommendation.');
+    } finally {
+      setAiUrgencyLoading(false);
+    }
+  };
+
+  const handleSaveUrgency = async () => {
+    if (!alertId) return;
+    setUrgencySubmitting(true);
+    try {
+      const docRef = doc(db, 'alerts', alertId);
+      await updateDoc(docRef, { urgency: selectedUrgency });
+      setEditUrgencyModalVisible(false);
+      Alert.alert('Success', 'Urgency level updated successfully.');
+    } catch (err) {
+      console.log('Save urgency failed:', err);
+      Alert.alert('Error', 'Failed to update urgency.');
+    } finally {
+      setUrgencySubmitting(false);
+    }
+  };
 
   // Subscribe to real-time updates for this alert
   useEffect(() => {
@@ -556,6 +611,38 @@ export default function IncidentDetail({ route, navigation }) {
                 <Text style={styles.reviewLabel}>Incident Type</Text>
                 <Text style={styles.reviewValue}>{incident.category}</Text>
               </View>
+              <View style={styles.reviewRow}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={styles.reviewLabel}>Urgency / Priority</Text>
+                  <TouchableOpacity 
+                    onPress={() => {
+                      setSelectedUrgency(incident.urgency || 'medium');
+                      setAiUrgencySuggestion(null);
+                      setEditUrgencyModalVisible(true);
+                    }}
+                    style={{ flexDirection: 'row', alignItems: 'center' }}
+                  >
+                    <Feather name="edit-2" size={12} color="#0B2564" style={{ marginRight: 4 }} />
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#0B2564' }}>Edit</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                  <View style={{
+                    backgroundColor: getUrgencyBadgeColor(incident.urgency).bg,
+                    paddingVertical: 4,
+                    paddingHorizontal: 10,
+                    borderRadius: 8
+                  }}>
+                    <Text style={{
+                      fontSize: 12,
+                      fontWeight: '700',
+                      color: getUrgencyBadgeColor(incident.urgency).color
+                    }}>
+                      {(incident.urgency || 'medium').toUpperCase()}
+                    </Text>
+                  </View>
+                </View>
+              </View>
               {incident.source === 'admin_manual' && (
                 <View style={styles.reviewRow}>
                   <Text style={styles.reviewLabel}>Report Source</Text>
@@ -739,23 +826,25 @@ export default function IncidentDetail({ route, navigation }) {
           <BottomGradient height={120} />
 
           {/* Sticky Message Reporter Footer Button */}
-          <View style={styles.footerContainer}>
-            <TouchableOpacity 
-              style={[styles.messageButton, isDeclined && styles.disabledMessageButton]}
-              onPress={() => navigation.navigate('ChatScreen', { alertId })}
-              disabled={isDeclined}
-              activeOpacity={isDeclined ? 1 : 0.8}
-            >
-              {isDeclined ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-                  <Feather name="lock" size={16} color="#FFFFFF" style={{ marginRight: 8 }} />
-                  <Text style={styles.messageButtonText}>Chat Locked (Report Declined)</Text>
-                </View>
-              ) : (
-                <Text style={styles.messageButtonText}>Message Reporter</Text>
-              )}
-            </TouchableOpacity>
-          </View>
+          {incident.source !== 'admin_manual' && incident.userId !== 'walk_in' && (
+            <View style={styles.footerContainer}>
+              <TouchableOpacity 
+                style={[styles.messageButton, isDeclined && styles.disabledMessageButton]}
+                onPress={() => navigation.navigate('ChatScreen', { alertId })}
+                disabled={isDeclined}
+                activeOpacity={isDeclined ? 1 : 0.8}
+              >
+                {isDeclined ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                    <Feather name="lock" size={16} color="#FFFFFF" style={{ marginRight: 8 }} />
+                    <Text style={styles.messageButtonText}>Chat Locked (Report Declined)</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.messageButtonText}>Message Reporter</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
         </>
       )}
 
@@ -910,6 +999,116 @@ export default function IncidentDetail({ route, navigation }) {
             {editNotesSubmitting
               ? <ActivityIndicator size="small" color="#FFFFFF" />
               : <Text style={styles.confirmDeclineButtonText}>Save Notes</Text>
+            }
+          </TouchableOpacity>
+        </View>
+      </GestureModal>
+
+      {/* ─── EDIT URGENCY MODAL ────────────────────────────────────────── */}
+      <GestureModal
+        visible={editUrgencyModalVisible}
+        onClose={() => setEditUrgencyModalVisible(false)}
+        contentStyle={styles.declineModalSheet}
+      >
+        <View style={styles.declineModalHeader}>
+          <View style={[styles.declineIconCircle, { backgroundColor: '#FEE2E2' }]}>
+            <Feather name="alert-triangle" size={20} color="#7F1D1D" />
+          </View>
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={styles.declineModalTitle}>Edit Urgency / Priority</Text>
+            <Text style={styles.declineModalSubtitle}>
+              Update the urgency level of this incident (excluding 'critical' panic mode).
+            </Text>
+          </View>
+        </View>
+
+        {/* Option Selection List */}
+        <View style={{ marginBottom: 16, marginTop: 12 }}>
+          {['low', 'medium', 'high'].map((level) => {
+            const isSelected = selectedUrgency === level;
+            const theme = getUrgencyBadgeColor(level);
+
+            return (
+              <TouchableOpacity
+                key={level}
+                style={[
+                  styles.statusSelectRow,
+                  isSelected && { backgroundColor: theme.bg, borderColor: theme.color, borderWidth: 1.5 }
+                ]}
+                onPress={() => setSelectedUrgency(level)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.statusSelectLeft}>
+                  <View style={[styles.statusOptionDot, { backgroundColor: theme.color }]} />
+                  <Text style={[
+                    styles.statusSelectLabel,
+                    isSelected && { color: theme.color, fontWeight: '700' }
+                  ]}>
+                    {level.toUpperCase()}
+                  </Text>
+                </View>
+                {isSelected && <Feather name="check" size={18} color={theme.color} />}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* AI Suggest Section */}
+        <View style={styles.aiSuggestContainer}>
+          <View style={styles.aiSuggestHeaderRow}>
+            <Ionicons name="sparkles" size={16} color="#2563EB" style={{ marginRight: 6 }} />
+            <Text style={styles.aiSuggestHeaderTitle}>AI Urgency Recommendation</Text>
+          </View>
+
+          {aiUrgencyLoading ? (
+            <View style={{ paddingVertical: 12, alignItems: 'center' }}>
+              <ActivityIndicator size="small" color="#2563EB" />
+              <Text style={styles.aiSuggestLoaderText}>Analyzing report details with Gemini...</Text>
+            </View>
+          ) : aiUrgencySuggestion ? (
+            <View style={styles.aiSuggestionBox}>
+              <View style={styles.aiSuggestionInnerRow}>
+                <Text style={styles.aiSuggestionLevelLabel}>
+                  Recommended Level: <Text style={styles.aiSuggestionLevelVal}>{aiUrgencySuggestion.urgency.toUpperCase()}</Text>
+                </Text>
+                <TouchableOpacity
+                  style={styles.applyAiButton}
+                  onPress={() => setSelectedUrgency(aiUrgencySuggestion.urgency)}
+                >
+                  <Text style={styles.applyAiButtonText}>Apply</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.aiSuggestionReason}>
+                {aiUrgencySuggestion.reasoning}
+              </Text>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.aiSuggestTriggerButton}
+              onPress={handleAiSuggestUrgency}
+            >
+              <Ionicons name="sparkles" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Text style={styles.aiSuggestTriggerText}>AI Urgency Suggestion</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Save & Cancel buttons */}
+        <View style={styles.declineModalButtons}>
+          <TouchableOpacity
+            style={styles.cancelModalButton}
+            onPress={() => setEditUrgencyModalVisible(false)}
+          >
+            <Text style={styles.cancelModalButtonText}>Cancel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.confirmDeclineButton, { backgroundColor: '#0B2564', shadowColor: '#0B2564' }, urgencySubmitting && { opacity: 0.6 }]}
+            onPress={handleSaveUrgency}
+            disabled={urgencySubmitting}
+          >
+            {urgencySubmitting
+              ? <ActivityIndicator size="small" color="#FFFFFF" />
+              : <Text style={styles.confirmDeclineButtonText}>Save Urgency</Text>
             }
           </TouchableOpacity>
         </View>
@@ -1402,4 +1601,83 @@ const styles = StyleSheet.create({
   aiLimitBannerHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   aiLimitBannerTitle: { fontSize: 15, fontWeight: '700', color: '#B45309' },
   aiLimitBannerSubtitle: { fontSize: 13, color: '#B45309', lineHeight: 18, fontWeight: '500' },
+  aiSuggestContainer: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 14,
+    marginBottom: 16,
+  },
+  aiSuggestHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  aiSuggestHeaderTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  aiSuggestLoaderText: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 6,
+    fontWeight: '500',
+  },
+  aiSuggestionBox: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 10,
+  },
+  aiSuggestionInnerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  aiSuggestionLevelLabel: {
+    fontSize: 12,
+    color: '#475569',
+    fontWeight: '600',
+  },
+  aiSuggestionLevelVal: {
+    color: '#2563EB',
+    fontWeight: '800',
+  },
+  applyAiButton: {
+    backgroundColor: '#EFF6FF',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  applyAiButtonText: {
+    fontSize: 11,
+    color: '#2563EB',
+    fontWeight: '700',
+  },
+  aiSuggestionReason: {
+    fontSize: 12,
+    color: '#334155',
+    lineHeight: 18,
+    fontStyle: 'italic',
+  },
+  aiSuggestTriggerButton: {
+    backgroundColor: '#2563EB',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  aiSuggestTriggerText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
 });

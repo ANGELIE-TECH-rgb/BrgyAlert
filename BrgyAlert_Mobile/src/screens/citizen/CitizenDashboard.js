@@ -13,6 +13,7 @@ import {
   Animated,
   Easing,
   useWindowDimensions,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -422,6 +423,92 @@ export default function CitizenDashboard({ navigation }) {
     secondsRef.current = 3;
   };
 
+  // Trigger Emergency Panic Fallback via SMS when Offline
+  const triggerOfflinePanicSms = async () => {
+    try {
+      let lat = 0;
+      let lng = 0;
+      let addr = 'Barangay Lepa (Offline Panic)';
+      try {
+        const location = await getCurrentLocation();
+        lat = location.latitude;
+        lng = location.longitude;
+        addr = location.addressText;
+      } catch (locErr) {
+        console.log('Could not retrieve current location offline:', locErr);
+      }
+
+      let gateways = ['+639090000000'];
+      try {
+        const cached = await AsyncStorage.getItem('cached_sms_gateways');
+        if (cached) {
+          gateways = JSON.parse(cached);
+        }
+      } catch (e) {
+        console.log('Error reading cached SMS gateways:', e);
+      }
+
+      const coordStr = `${lat.toFixed(5)},${lng.toFixed(5)}`;
+      const mapsUrl = `https://maps.google.com/?q=${coordStr}`;
+      const cleanedLoc = `${coordStr} (${mapsUrl})`;
+      const details = 'CRITICAL PANIC TRIGGERED - IMMEDIATE THREAT';
+      const smsPayload = `BA!G!${cleanedLoc}!${details}`;
+
+      const gatewayRecipients = gateways.join(',');
+      const smsUrl = `sms:${gatewayRecipients}${Platform.OS === 'ios' ? '&' : '?'}body=${encodeURIComponent(smsPayload)}`;
+
+      const supported = await Linking.canOpenURL(smsUrl);
+      if (supported) {
+        const localReport = {
+          id: `offline_${Date.now()}`,
+          userId: user ? user.uid : 'guest',
+          reporterName: userProfile?.fullName || 'Anonymous Citizen',
+          phoneNumber: userProfile?.phoneNumber || '',
+          category: 'General',
+          details: 'CRITICAL PANIC TRIGGERED - IMMEDIATE THREAT',
+          witnessName: 'None',
+          location: {
+            addressText: addr,
+            latitude: lat,
+            longitude: lng
+          },
+          source: 'offline_sms',
+          status: 'offline_pending',
+          urgency: 'critical',
+          mediaUrls: [],
+          createdAt: new Date().toISOString(),
+          isOffline: true
+        };
+
+        const storeKey = `offline_reports_${user?.uid || 'guest'}`;
+        let localList = [];
+        try {
+          const rawLocalList = await AsyncStorage.getItem(storeKey);
+          if (rawLocalList) {
+            localList = JSON.parse(rawLocalList);
+          }
+        } catch (e) {
+          console.log('Error reading local offline reports:', e);
+        }
+
+        localList.push(localReport);
+        await AsyncStorage.setItem(storeKey, JSON.stringify(localList));
+
+        await Linking.openURL(smsUrl);
+
+        navigation.replace('ReportSuccess', {
+          reportId: 'OFFLINE_SMS',
+          estimatedTime: 'Waiting for SMS transmission'
+        });
+      } else {
+        Alert.alert('SMS Error', 'Could not open native SMS client.');
+      }
+    } catch (err) {
+      console.log('Offline panic SMS failed:', err);
+      Alert.alert('Error', 'Could not compile and launch SMS dispatch.');
+    }
+  };
+
   // Trigger Panic Alert to Firestore
   const triggerPanicAlert = async () => {
     handlePanicPressOut(); // Reset button UI state
@@ -429,7 +516,20 @@ export default function CitizenDashboard({ navigation }) {
     if (!isOnline) {
       Alert.alert(
         'Offline Mode',
-        'You are offline. To trigger an emergency panic dispatch, please proceed to the Report Wizard and use the SMS fallback link.'
+        'You are offline. Would you like to compile and send a direct Emergency Panic SMS, or call Emergency Hotlines directly?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Call Hotlines', 
+            onPress: () => {
+              Linking.openURL('tel:911').catch((err) => {
+                console.log('Error launching dialer:', err);
+                Alert.alert('Error', 'Could not dial emergency hotlines.');
+              });
+            } 
+          },
+          { text: 'Send via SMS', onPress: () => triggerOfflinePanicSms() }
+        ]
       );
       return;
     }

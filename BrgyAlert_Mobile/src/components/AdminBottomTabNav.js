@@ -91,7 +91,7 @@ export default function AdminBottomTabNav() {
   return (
     <View style={styles.outerContainer}>
       <View style={styles.shadowWrapper}>
-        <BlurView intensity={85} tint="light" style={styles.container}>
+        <View style={styles.container}>
           {tabs.map((tab) => {
             const isSelected = activeTab === tab.name;
 
@@ -132,7 +132,7 @@ export default function AdminBottomTabNav() {
               </TouchableOpacity>
             );
           })}
-        </BlurView>
+        </View>
       </View>
     </View>
   );
